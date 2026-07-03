@@ -47,12 +47,16 @@ tr:hover td { background: #f8fafc; }
 .replrow td{background:#eff6ff;}
 .warn { display:inline-block; font-size:10px; font-weight:700; color:#c2410c; background:#ffedd5; border-radius:6px; padding:0 6px; margin-left:6px; white-space:nowrap; }
 .sku { font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: #64748b; white-space: nowrap; }
-.qty { font-weight: 800; font-size: 15px; color: #0f172a; white-space: nowrap; }
 .um { font-size: 11px; color: #64748b; }
 .empty { padding: 30px; text-align: center; color: #94a3b8; font-size: 13px; }
 .legend { font-size:11px; color:#94a3b8; margin:2px 2px 12px; }
 .last { font-size: 11px; color: #b0bac8; text-align: center; margin-top: 6px; }
-@media print { body{background:#fff;padding:0;font-size:12px;} .toolbar,.btn,.chart-card,.weeknav button,.btn-now{display:none!important;} .header{-webkit-print-color-adjust:exact;print-color-adjust:exact;} }
+.qty-input { width:56px; text-align:center; font-weight:800; font-size:15px; color:#0f172a; border:1px solid transparent; border-radius:6px; padding:3px 4px; background:transparent; -moz-appearance:textfield; cursor:text; }
+.qty-input::-webkit-outer-spin-button, .qty-input::-webkit-inner-spin-button { -webkit-appearance:none; }
+.qty-input:hover { border-color:#cbd5e1; background:#f8fafc; }
+.qty-input:focus { border-color:#2563eb; background:#fff; outline:none; box-shadow:0 0 0 2px #2563eb22; }
+.qty-input.modified { background:#fef9c3; border-color:#f59e0b; }
+@media print { body{background:#fff;padding:0;font-size:12px;} .toolbar,.btn,.chart-card,.weeknav button,.btn-now{display:none!important;} .header{-webkit-print-color-adjust:exact;print-color-adjust:exact;} .qty-input{border:none!important;background:transparent!important;box-shadow:none!important;width:auto;} }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.js" integrity="sha384-iU8HYtnGQ8Cy4zl7gbNMOhsDTTKX02BTXptVP/vqAWIaTfM7isw76iyZCsjL2eVi" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -137,7 +141,8 @@ function render(){
     Object.keys(byG).sort().forEach(g=>{
       html+='<tr class="grp-row"><td colspan="5">'+g+' · '+byG[g].length+'</td></tr>';
       byG[g].forEach(x=>{
-        const qcell = x.sem>=1 ? ('<span class="qty">'+x.sem+'</span>') : '<span class="qty">1</span>';
+        const defaultQty = x.sem>=1 ? x.sem : 1;
+        const qcell = '<input type="number" class="qty-input" data-sku="'+x.sku+'" data-default="'+defaultQty+'" value="'+defaultQty+'" min="0" step="1" oninput="this.classList.toggle(\'modified\',+this.value!==+this.dataset.default)">';
         const ucell = x.um + ((x.sem<1&&x.cada)?(' · c/'+x.cada+' sem'):'');
         const warn = x.old ? ' <span class="repl">↔ auto: reemplaza a '+x.old+'</span>' : (x.nuevo ? ' <span class="nuevo">🆕 nuevo 2026</span>' : '');
         html+='<tr'+(x.old?' class="replrow"':(x.nuevo?' class="newrow"':''))+'><td class="sku">'+x.sku+'</td><td>'+x.desc+warn+'</td><td class="r" style="color:#94a3b8;font-size:12px">'+x.m2025+'</td><td class="r">'+qcell+'</td><td class="um">'+ucell+'</td></tr>';
@@ -154,6 +159,11 @@ function render(){
     '</tbody></table></div>') : '';
   document.getElementById('last').textContent='Semana '+fmtD(weekMonday)+'–'+fmtD(sun)+' · base '+MESES[weekMonday.getMonth()+1]+' 2025 +10% · factor ×'+fac;
 }
+function getQtyMap(){
+  const m={};
+  document.querySelectorAll('.qty-input').forEach(inp=>{ m[inp.dataset.sku]=Math.max(0,parseInt(inp.value)||0); });
+  return m;
+}
 function downloadExcel(btn){
   const it=window._ord||[];
   if(!it.length){ btn.textContent="Nada"; setTimeout(()=>btn.textContent="⬇ Excel",1400); return; }
@@ -161,8 +171,9 @@ function downloadExcel(btn){
   const loc=document.getElementById("loc").value;
   const sun=new Date(weekMonday); sun.setDate(sun.getDate()+6);
   const wl=fmtD(weekMonday)+" al "+fmtD(sun);
+  const qtyMap=getQtyMap();
   const rows=[["Pedido Larrs -> Grecka"],["Local:",loc],["Semana:",wl],["Entrega:","Lunes "+fmtD(weekMonday)],[],["Codigo","Descripcion","Cantidad","Unidad","Grupo"]];
-  it.forEach(x=> rows.push([x.sku, x.desc, (x.sem>=1?x.sem:1), x.um, x.grupo]));
+  it.forEach(x=> rows.push([x.sku, x.desc, qtyMap[x.sku]??( x.sem>=1?x.sem:1), x.um, x.grupo]));
   const ws=XLSX.utils.aoa_to_sheet(rows);
   ws["!cols"]=[{wch:16},{wch:46},{wch:10},{wch:12},{wch:16}];
   const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"Pedido");
@@ -173,7 +184,8 @@ function copyCol(btn,type){
   const it=window._ord||[];
   const label = type==='sku'?'📋 Códigos':'🔢 Cantidades';
   if(!it.length){ btn.textContent='Nada'; setTimeout(()=>btn.textContent=label,1400); return; }
-  const txt=it.map(x=> type==='sku' ? x.sku : (x.sem>=1?x.sem:1)).join('\n');
+  const qtyMap=getQtyMap();
+  const txt=it.map(x=> type==='sku' ? x.sku : (qtyMap[x.sku]??(x.sem>=1?x.sem:1))).join('\n');
   const done=()=>{ btn.textContent='✓ '+it.length; setTimeout(()=>btn.textContent=label,1600); };
   if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(txt).then(done).catch(()=>fallback(txt,done)); } else fallback(txt,done);
 }

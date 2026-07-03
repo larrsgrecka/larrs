@@ -149,6 +149,31 @@ const VENTAS_CAT_2025 = {
   },
 };
 
+// Ventas reales 2026 por categoría por tienda (CLP) — Fuente: Real_2026_D/T/C
+const VENTAS_CAT_2026 = {
+  Costanera: {
+    '2026-01': { Heladeria:35531859, Cafeteria:8153118, Bolleria:705896, Panaderia:2642012, Bebidas:1954141, Galleteria:678600, Pasteleria:2477555 },
+    '2026-02': { Heladeria:33034297, Cafeteria:7679760, Bolleria:750588, Panaderia:2060396, Bebidas:1669540, Galleteria:660947, Pasteleria:2280383 },
+    '2026-03': { Heladeria:32057043, Cafeteria:8275089, Bolleria:867948, Panaderia:2790333, Bebidas:1699441, Galleteria:945112, Pasteleria:2863170 },
+    '2026-04': { Heladeria:27010299, Cafeteria:7175199, Bolleria:915498, Panaderia:2386237, Bebidas:1564057, Galleteria:1071098, Pasteleria:2554948 },
+    '2026-05': { Heladeria:27643010, Cafeteria:8135494, Bolleria:1377312, Panaderia:2913014, Bebidas:1618300, Galleteria:1082913, Pasteleria:3356739 },
+  },
+  Dominicos: {
+    '2026-01': { Heladeria:30263267, Cafeteria:11888394, Bolleria:784064, Panaderia:2547005, Bebidas:2503827, Galleteria:1225323, Pasteleria:3835053 },
+    '2026-02': { Heladeria:23749403, Cafeteria:9793279, Bolleria:583111, Panaderia:1918651, Bebidas:2075666, Galleteria:1087171, Pasteleria:3268365 },
+    '2026-03': { Heladeria:30085018, Cafeteria:14923423, Bolleria:1179312, Panaderia:3022641, Bebidas:2586468, Galleteria:1898147, Pasteleria:4986731 },
+    '2026-04': { Heladeria:19756274, Cafeteria:12897387, Bolleria:1034543, Panaderia:2748515, Bebidas:2064529, Galleteria:2000183, Pasteleria:4889894 },
+    '2026-05': { Heladeria:18918456, Cafeteria:11248983, Bolleria:1131035, Panaderia:2372113, Bebidas:1677895, Galleteria:1938149, Pasteleria:5129410 },
+  },
+  Trapenses: {
+    '2026-01': { Heladeria:18608699, Cafeteria:7048548, Bolleria:334785, Panaderia:1472700, Bebidas:1734041, Galleteria:599208, Pasteleria:1602813 },
+    '2026-02': { Heladeria:13773808, Cafeteria:5685900, Bolleria:211097, Panaderia:1220991, Bebidas:1356376, Galleteria:389100, Pasteleria:1226086 },
+    '2026-03': { Heladeria:21169128, Cafeteria:11380535, Bolleria:542394, Panaderia:2237670, Bebidas:2597197, Galleteria:943295, Pasteleria:2447091 },
+    '2026-04': { Heladeria:14416057, Cafeteria:10311193, Bolleria:491315, Panaderia:2046006, Bebidas:1978860, Galleteria:976245, Pasteleria:1809101 },
+    '2026-05': { Heladeria:14469941, Cafeteria:9529969, Bolleria:1208678, Panaderia:2104117, Bebidas:1430026, Galleteria:966194, Pasteleria:2234584 },
+  },
+};
+
 // Mix por categoría por tienda (% de ventas — YTD a mayo 2026)
 // Fuente: Real_PPTO Cristiano, hoja Real_Ppto_Com_Detalle
 const MIX_CAT = {
@@ -265,6 +290,8 @@ function buildByMonth() {
     '2026-01':{ Costanera:52143181, Dominicos:53046933, Trapenses:31400794 },
     '2026-02':{ Costanera:48135911, Dominicos:42475646, Trapenses:23863358 },
     '2026-03':{ Costanera:49498136, Dominicos:58681740, Trapenses:41317310 },
+    '2026-04':{ Costanera:42677336, Dominicos:45391325, Trapenses:32028777 },
+    '2026-05':{ Costanera:46126782, Dominicos:42416041, Trapenses:31943509 },
   };
   const byM = {};
   (salesData||[]).forEach(d => {
@@ -360,14 +387,16 @@ function renderMes() {
   const ventasPrevMes = byM[ymPrevMes]?.[tienda] || null;
   const deltaMoM = ventasMes && ventasPrevMes ? (ventasMes / ventasPrevMes - 1) * 100 : null;
 
-  // Categorías — ventas estimadas con mix YTD; vs 2025 usa dato real por categoría
+  // Categorías — usa datos reales 2026 si existen, si no estima con mix YTD; vs 2025 usa dato real
+  const cat2026 = VENTAS_CAT_2026[tienda]?.[ym] || null;
   const cat2025 = VENTAS_CAT_2025[tienda]?.[ymPrev] || null;
   const cats = ventasMes ? CAT_ORDEN.map(cat => {
-    const venta = ventasMes * (mix[cat] || 0);
+    const venta = cat2026 ? (cat2026[cat] || 0) : ventasMes * (mix[cat] || 0);
+    const pct = ventasMes ? venta / ventasMes : (mix[cat] || 0);
     const margen = venta * (MARGEN_CAT[cat] || 0);
     const venta25 = cat2025?.[cat] || null;
     const delta25 = venta25 ? (venta / venta25 - 1) * 100 : null;
-    return { cat, venta, margen, pct: mix[cat]||0, margenPct: MARGEN_CAT[cat]||0, venta25, delta25 };
+    return { cat, venta, margen, pct, margenPct: MARGEN_CAT[cat]||0, venta25, delta25 };
   }) : [];
 
   const totalMargen = cats.reduce((s,c) => s+c.margen, 0);
@@ -403,7 +432,7 @@ function renderMes() {
         </div>
       </div>
 
-      <div class="section-title">Ventas por categoría <span class="badge badge-est">est. mix YTD · vs ${+y-1} real</span></div>
+      <div class="section-title">Ventas por categoría <span class="badge ${cat2026?'badge-ok':'badge-est'}">${cat2026?'datos reales':'est. mix YTD'} · vs ${+y-1} real</span></div>
       <div class="card" style="margin-bottom:12px">
         <table>
           <colgroup><col style="width:auto"><col style="width:72px"><col style="width:44px"><col style="width:72px"><col style="width:44px"><col style="width:58px"></colgroup>

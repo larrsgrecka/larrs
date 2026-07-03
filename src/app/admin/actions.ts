@@ -42,6 +42,7 @@ export async function createUser(formData: FormData) {
 
 export async function updateUser(formData: FormData) {
   const { redirect } = await import("next/navigation");
+  const { isRedirectError } = await import("next/dist/client/components/redirect-error");
   const actor = await assertAdmin();
   const supabase = await createClient();
   const admin = createAdminClient();
@@ -66,6 +67,7 @@ export async function updateUser(formData: FormData) {
     revalidatePath("/admin");
     redirect("/admin?ok=" + encodeURIComponent(name));
   } catch (e: unknown) {
+    if (isRedirectError(e)) throw e;
     const msg = e instanceof Error ? e.message : "Error desconocido";
     redirect("/admin?err=" + encodeURIComponent(msg));
   }

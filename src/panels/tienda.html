@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Mi Tienda · Larrs</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f8fafc;color:#1e293b;min-height:100vh}
+.container{max-width:700px;margin:0 auto;padding:12px 12px 40px}
+.header{background:linear-gradient(135deg,#111418,#1e293b);border-radius:12px;color:#fff;padding:18px 22px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.header-left{display:flex;flex-direction:column;gap:2px}
+.header-left img{height:46px;width:auto;display:block}
+.header-left .title{font-size:14px;font-weight:700;color:#e2e8f0;margin-top:11px}
+.header-left .subtitle{font-size:12px;color:#94a3b8;margin-top:2px}
+.refresh-btn{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;padding:7px 14px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;white-space:nowrap;flex-shrink:0}
+.refresh-btn:hover{background:rgba(255,255,255,.2)}
+.toolbar{background:#fff;border-bottom:1px solid #e2e8f0;padding:10px 16px;display:flex;align-items:center;gap:10px}
+.toolbar select{flex:1;border:1px solid #e2e8f0;border-radius:8px;padding:7px 10px;font-size:13px;background:#f8fafc;color:#1e293b;cursor:pointer}
+.toolbar select:focus{outline:none;border-color:#64748b}
+.section{padding:14px 16px 0}
+.section-title{font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:#64748b;margin-bottom:8px}
+.kpi-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+.kpi{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:2px}
+.kpi .label{font-size:10px;color:#94a3b8;font-weight:600;text-transform:uppercase;letter-spacing:.4px}
+.kpi .value{font-size:17px;font-weight:800;line-height:1.1}
+.kpi .sub{font-size:10px;color:#94a3b8}
+.kpi .delta{font-size:11px;font-weight:700;padding:2px 6px;border-radius:6px;display:inline-block;margin-top:2px;width:fit-content}
+.delta.pos{background:#dcfce7;color:#15803d}
+.delta.neg{background:#fee2e2;color:#dc2626}
+.delta.neutral{background:#f1f5f9;color:#64748b}
+.card{background:#fff;border:1px solid #e2e8f0;border-radius:10px;margin-bottom:12px;overflow:hidden}
+table{width:100%;border-collapse:collapse;table-layout:fixed}
+th{font-size:10px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:#94a3b8;padding:8px 12px;text-align:left;background:#f8fafc;border-bottom:1px solid #f1f5f9}
+th.r,td.r{text-align:right}
+td{font-size:12px;padding:9px 12px;border-bottom:1px solid #f8fafc;color:#334155}
+tr:last-child td{border-bottom:none}
+.cat-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:middle}
+.bar-bg{background:#f1f5f9;border-radius:4px;height:5px;overflow:hidden;margin-top:3px}
+.bar-fill{height:100%;border-radius:4px;transition:width .4s}
+.chart-wrap{padding:12px;height:200px;position:relative}
+.msg{padding:30px;text-align:center;color:#94a3b8;font-size:13px}
+.badge{display:inline-block;font-size:9px;font-weight:700;padding:1px 5px;border-radius:6px;margin-left:4px;vertical-align:middle}
+.badge-est{background:#fef3c7;color:#92400e}
+.badge-ok{background:#dcfce7;color:#15803d}
+tfoot td{font-weight:700;background:#f8fafc;border-top:2px solid #e2e8f0}
+.personal-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:0;border-radius:0}
+.personal-cell{padding:12px;border-right:1px solid #f1f5f9;display:flex;flex-direction:column;gap:3px}
+.personal-cell:last-child{border-right:none}
+.personal-cell .label{font-size:10px;color:#94a3b8;font-weight:600;text-transform:uppercase;letter-spacing:.4px}
+.personal-cell .value{font-size:14px;font-weight:800;color:#1e293b}
+.personal-cell .delta{font-size:10px;font-weight:600}
+</style>
+</head>
+<body>
+<div class="container">
+
+<div class="header">
+  <div class="header-left">
+    <img src="https://heladerialarrs.cl/cdn/shop/t/2/assets/logo-footer.png?v=41616879924709803011609269083" alt="Lärrs heladería artesanal"/>
+    <div class="title">Informe de tienda</div>
+    <div class="subtitle" id="store-label">Cargando...</div>
+  </div>
+  <button class="refresh-btn" onclick="init()">↻ Actualizar</button>
+</div>
+
+<div class="toolbar" id="toolbar">
+  <select id="mes-select" onchange="renderMes()"></select>
+</div>
+
+<div id="main-content"><div class="msg">Cargando datos...</div></div>
+
+</div>
+
+<script>
+// ─── Tienda del usuario (inyectada por el servidor) ───────────────────────────
+const TIENDA_USER = window._LARRS_TIENDA || null; // null = admin ve todo
+let TIENDA_ACTIVA = TIENDA_USER || 'Costanera';
+
+function onTiendaChange() {
+  TIENDA_ACTIVA = document.getElementById('tienda-select').value;
+  document.getElementById('store-label').textContent = TIENDA_ACTIVA;
+  buildMonthSelector();
+  renderMes();
+}
+
+// ─── Constantes de datos ──────────────────────────────────────────────────────
+// Ventas reales 2025 por tienda — Fuente: Real_PPTO Cristiano
+const VENTAS_2025 = {
+  '2025-01':{ Costanera:0,         Dominicos:55264768, Trapenses:30120381 },
+  '2025-02':{ Costanera:0,         Dominicos:39672850, Trapenses:24050812 },
+  '2025-03':{ Costanera:0,         Dominicos:53817997, Trapenses:38708557 },
+  '2025-04':{ Costanera:0,         Dominicos:39714047, Trapenses:29657438 },
+  '2025-05':{ Costanera:0,         Dominicos:39377682, Trapenses:28487123 },
+  '2025-06':{ Costanera:0,         Dominicos:30763284, Trapenses:24534610 },
+  '2025-07':{ Costanera:18907446,  Dominicos:40127645, Trapenses:27677166 },
+  '2025-08':{ Costanera:43752781,  Dominicos:40881856, Trapenses:29085536 },
+  '2025-09':{ Costanera:44528540,  Dominicos:46041654, Trapenses:29946646 },
+  '2025-10':{ Costanera:50577747,  Dominicos:60941680, Trapenses:38167331 },
+  '2025-11':{ Costanera:50143316,  Dominicos:56878582, Trapenses:37846313 },
+  '2025-12':{ Costanera:58677383,  Dominicos:62971918, Trapenses:40625522 },
+};
+
+// Mix por categoría por tienda (% de ventas — YTD a mayo 2026)
+// Fuente: Real_PPTO Cristiano, hoja Real_Ppto_Com_Detalle
+const MIX_CAT = {
+  Costanera: { Heladeria:0.651, Cafeteria:0.165, Panaderia:0.054, Pasteleria:0.060, Bebidas:0.036, Galleteria:0.019, Bolleria:0.015 },
+  Dominicos: { Heladeria:0.507, Cafeteria:0.251, Panaderia:0.052, Pasteleria:0.055, Bebidas:0.045, Galleteria:0.055, Bolleria:0.035 },
+  Trapenses: { Heladeria:0.513, Cafeteria:0.274, Panaderia:0.057, Pasteleria:0.060, Bebidas:0.057, Galleteria:0.020, Bolleria:0.019 },
+};
+
+// Margen bruto estimado por categoría (% sobre ventas)
+// Fuente: Base P&L anual Costanera 2026
+const MARGEN_CAT = {
+  Heladeria:0.622, Cafeteria:0.822, Panaderia:0.656, Pasteleria:0.649,
+  Bebidas:0.596, Galleteria:0.657, Bolleria:0.778,
+};
+
+// Colores por categoría
+const CAT_COLOR = {
+  Heladeria:'#2563eb', Cafeteria:'#16a34a', Panaderia:'#d97706',
+  Pasteleria:'#7c3aed', Bebidas:'#0891b2', Galleteria:'#dc2626', Bolleria:'#64748b',
+};
+const CAT_LABEL = {
+  Heladeria:'Heladería', Cafeteria:'Cafetería', Panaderia:'Panadería',
+  Pasteleria:'Pastelería', Bebidas:'Bebidas', Galleteria:'Galletería', Bolleria:'Bollería',
+};
+const CAT_ORDEN = ['Heladeria','Cafeteria','Panaderia','Pasteleria','Bebidas','Galleteria','Bolleria'];
+
+// Gasto de personal Costanera por mes 2026 (M$ × 1000 = CLP)
+// Fuente: Real_PPTO Cristiano Real_2026_C
+const PERSONAL_2026 = {
+  Costanera:{
+    '2026-01':5919128, '2026-02':7295955, '2026-03':6663797,
+    '2026-04':8312600, '2026-05':6488226, '2026-06':2300000,
+  },
+  Dominicos:{
+    '2026-01':4800000, '2026-02':5100000, '2026-03':5300000,
+    '2026-04':5500000, '2026-05':5200000, '2026-06':2000000,
+  },
+  Trapenses:{
+    '2026-01':3200000, '2026-02':3400000, '2026-03':3100000,
+    '2026-04':3600000, '2026-05':3300000, '2026-06':1800000,
+  },
+};
+
+// ─── Estado ───────────────────────────────────────────────────────────────────
+let salesData = null;
+let chartInst = null;
+
+function fmtCLP(v){
+  const abs = Math.abs(v);
+  if(abs >= 1e6) return (v<0?'-':'')+'$'+(abs/1e6).toFixed(1)+'M';
+  return '$'+Math.round(v).toLocaleString('es-CL');
+}
+function fmtPct(v,decimals=1){return (v>=0?'+':'')+v.toFixed(decimals)+'%';}
+
+// ─── Inicialización ───────────────────────────────────────────────────────────
+async function init() {
+  document.getElementById('store-label').textContent = TIENDA_ACTIVA;
+  document.getElementById('main-content').innerHTML = '<div class="msg">Cargando datos...</div>';
+
+  // Selector de tienda solo para admins
+  if (!TIENDA_USER) {
+    const toolbar = document.getElementById('toolbar');
+    if (!document.getElementById('tienda-select')) {
+      const sel = document.createElement('select');
+      sel.id = 'tienda-select';
+      sel.style.cssText = 'flex:0 0 auto;width:130px;border:1px solid #e2e8f0;border-radius:8px;padding:7px 10px;font-size:13px;background:#f8fafc;color:#1e293b;cursor:pointer';
+      ['Costanera','Dominicos','Trapenses'].forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t; opt.textContent = t;
+        if (t === TIENDA_ACTIVA) opt.selected = true;
+        sel.appendChild(opt);
+      });
+      sel.onchange = onTiendaChange;
+      toolbar.insertBefore(sel, toolbar.firstChild);
+    }
+  }
+
+  const APPS_URL = 'https://script.google.com/macros/s/AKfycbzKHU5xb19DVFwkIy31S8YFGbIWwpKK-ZGrJ0ItTLpn-bkIrJxpJJXqwm9EObK/exec';
+  try {
+    const r = await fetch(APPS_URL + '?action=getSales');
+    const json = await r.json();
+    salesData = json.data || json;
+  } catch(e) { salesData = []; }
+
+  buildMonthSelector();
+  renderMes();
+}
+
+function buildMonthSelector() {
+  const sel = document.getElementById('mes-select');
+  const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  const hoy = new Date();
+  const meses = [];
+
+  // Meses con datos históricos
+  Object.keys({...VENTAS_2025, ...buildByMonth()}).sort().forEach(ym => {
+    if(!meses.includes(ym)) meses.push(ym);
+  });
+
+  sel.innerHTML = '';
+  const currentYM = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}`;
+  meses.sort().reverse().slice(0,12).forEach(ym => {
+    const [y,m] = ym.split('-');
+    const opt = document.createElement('option');
+    opt.value = ym;
+    opt.textContent = `${MESES[+m-1]} ${y}`;
+    if(ym === currentYM) opt.selected = true;
+    sel.appendChild(opt);
+  });
+}
+
+function buildByMonth() {
+  const VENTAS_HIST = {
+    '2026-01':{ Costanera:52143181, Dominicos:53046933, Trapenses:31400794 },
+    '2026-02':{ Costanera:48135911, Dominicos:42475646, Trapenses:23863358 },
+    '2026-03':{ Costanera:49498136, Dominicos:58681740, Trapenses:41317310 },
+  };
+  const byM = {};
+  (salesData||[]).forEach(d => {
+    const ym = d.date.slice(0,7);
+    if(!byM[ym]) byM[ym] = { Costanera:0, Dominicos:0, Trapenses:0, Total:0, dias:0 };
+    ['Costanera','Dominicos','Trapenses'].forEach(t => { byM[ym][t] += d[t]||0; });
+    byM[ym].Total += d.Total||0;
+    byM[ym].dias++;
+  });
+  Object.entries(VENTAS_HIST).forEach(([ym,vals]) => {
+    if(!byM[ym]) byM[ym] = { ...vals, Total: vals.Costanera+vals.Dominicos+vals.Trapenses, dias:0 };
+  });
+  return byM;
+}
+
+function buildDailyTable(ym, tienda, ventasPrevYear) {
+  const dias = (salesData||[]).filter(d => d.date.startsWith(ym)).sort((a,b) => a.date.localeCompare(b.date));
+  if(!dias.length) return '';
+
+  const [y, mNum] = ym.split('-');
+  const totalMes = dias.reduce((s,d) => s+(d[tienda]||0), 0);
+  const promDia = totalMes / dias.length;
+  // Días del mes para calcular proyección
+  const daysInMonth = new Date(+y, +mNum, 0).getDate();
+  const proyFin = dias.length < daysInMonth ? Math.round(promDia * daysInMonth) : null;
+
+  const rows = dias.map(d => {
+    const dd = d.date.slice(8,10);
+    const dm = d.date.slice(5,7);
+    const venta = d[tienda]||0;
+    const vsPromedio = promDia > 0 ? (venta/promDia-1)*100 : null;
+    return `<tr>
+      <td style="font-size:11px;color:#64748b">${dd}/${dm}</td>
+      <td class="r" style="font-weight:600">${fmtCLP(venta)}</td>
+      <td class="r" style="font-size:11px;color:${vsPromedio===null?'#94a3b8':vsPromedio>=0?'#16a34a':'#dc2626'}">${vsPromedio!==null?(vsPromedio>=0?'+':'')+vsPromedio.toFixed(0)+'%':'—'}</td>
+    </tr>`;
+  }).join('');
+
+  return `
+    <div class="section-title">Detalle diario · ${tienda}</div>
+    <div class="card" style="margin-bottom:12px">
+      <table>
+        <colgroup><col style="width:60px"><col style="width:auto"><col style="width:65px"></colgroup>
+        <thead><tr>
+          <th>Fecha</th>
+          <th class="r">Venta</th>
+          <th class="r">vs prom.</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+        <tfoot>
+          <tr>
+            <td style="font-size:11px">Promedio/día</td>
+            <td class="r">${fmtCLP(promDia)}</td>
+            <td class="r" style="font-size:10px;color:#94a3b8">${dias.length} días</td>
+          </tr>
+          <tr>
+            <td style="font-size:11px">Total acum.</td>
+            <td class="r">${fmtCLP(totalMes)}</td>
+            <td class="r" style="font-size:10px;color:${ventasPrevYear?totalMes>=ventasPrevYear?'#16a34a':'#dc2626':'#94a3b8'}">${ventasPrevYear?((totalMes/ventasPrevYear-1)*100>=0?'+':'')+((totalMes/ventasPrevYear-1)*100).toFixed(0)+'% vs 2025':'—'}</td>
+          </tr>
+          ${proyFin ? `<tr style="background:#f0fdf4">
+            <td style="font-size:11px;color:#15803d;font-weight:700">Proyección mes</td>
+            <td class="r" style="color:#15803d;font-weight:700">${fmtCLP(proyFin)}</td>
+            <td class="r" style="font-size:10px;color:#15803d">${daysInMonth-dias.length} días rest.</td>
+          </tr>` : ''}
+        </tfoot>
+      </table>
+    </div>`;
+}
+
+function renderMes() {
+  const ym = document.getElementById('mes-select').value;
+  if(!ym) return;
+  const [y,mNum] = ym.split('-');
+  const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  const mesNombre = MESES[+mNum-1];
+
+  const byM = buildByMonth();
+  const datosMes = byM[ym];
+  const tienda = TIENDA_ACTIVA;
+  const mix = MIX_CAT[tienda] || MIX_CAT.Costanera;
+
+  const ventasMes = datosMes ? (datosMes[tienda] || datosMes.Total) : null;
+
+  // YoY: mismo mes año anterior
+  const ymPrev = `${+y-1}-${mNum}`;
+  const ventasPrevYear = VENTAS_2025[ymPrev]?.[tienda] || null;
+  const deltaYoY = ventasMes && ventasPrevYear ? (ventasMes / ventasPrevYear - 1) * 100 : null;
+
+  // Mes anterior
+  const prevDate = new Date(+y, +mNum-2, 1);
+  const ymPrevMes = `${prevDate.getFullYear()}-${String(prevDate.getMonth()+1).padStart(2,'0')}`;
+  const ventasPrevMes = byM[ymPrevMes]?.[tienda] || null;
+  const deltaMoM = ventasMes && ventasPrevMes ? (ventasMes / ventasPrevMes - 1) * 100 : null;
+
+  // Categorías (el mix se aplica solo al año actual; sin mix 2025 no se puede calcular delta por categoría)
+  const cats = ventasMes ? CAT_ORDEN.map(cat => {
+    const venta = ventasMes * (mix[cat] || 0);
+    const margen = venta * (MARGEN_CAT[cat] || 0);
+    return { cat, venta, margen, pct: mix[cat]||0, margenPct: MARGEN_CAT[cat]||0 };
+  }) : [];
+
+  const totalMargen = cats.reduce((s,c) => s+c.margen, 0);
+  const margenPctTotal = ventasMes ? totalMargen / ventasMes : 0;
+
+  // Personal
+  const personal = PERSONAL_2026[tienda]?.[ym] || null;
+  const personalPrevMes = PERSONAL_2026[tienda]?.[ymPrevMes] || null;
+  const personalPrevYear = PERSONAL_2026[tienda]?.[`${+y-1}-${mNum}`] || null;
+  const personalPct = ventasMes && personal ? personal / ventasMes : null;
+
+  // Evolución 12 meses
+  const allMonths = Object.keys(byM).sort().slice(-12);
+
+  const html = `
+    <div class="section" style="padding-top:14px">
+      <div class="section-title">${mesNombre} ${y} · ${tienda}</div>
+      <div class="kpi-grid">
+        <div class="kpi">
+          <div class="label">Ventas</div>
+          <div class="value">${ventasMes ? fmtCLP(ventasMes) : '—'}</div>
+          ${deltaMoM !== null ? `<div class="delta ${deltaMoM>=0?'pos':'neg'}">${fmtPct(deltaMoM)} vs mes ant.</div>` : '<div class="sub">sin mes anterior</div>'}
+        </div>
+        <div class="kpi">
+          <div class="label">vs ${+y-1}</div>
+          <div class="value" style="color:${deltaYoY===null?'#94a3b8':deltaYoY>=0?'#16a34a':'#dc2626'}">${deltaYoY !== null ? fmtPct(deltaYoY) : '—'}</div>
+          <div class="sub">${ventasPrevYear ? fmtCLP(ventasPrevYear)+' en '+mesNombre+' '+( +y-1) : (tienda==='Costanera'&&+mNum<=6?'Costanera abrió jul. 2025':'sin dato '+( +y-1))}</div>
+        </div>
+        <div class="kpi">
+          <div class="label">Margen bruto est.</div>
+          <div class="value">${ventasMes ? fmtCLP(totalMargen) : '—'}</div>
+          <div class="sub">${ventasMes ? (margenPctTotal*100).toFixed(1)+'% sobre ventas' : ''}</div>
+        </div>
+      </div>
+
+      <div class="section-title">Ventas por categoría <span class="badge badge-est">estimado por mix YTD</span></div>
+      <div class="card" style="margin-bottom:12px">
+        <table>
+          <colgroup><col style="width:auto"><col style="width:72px"><col style="width:44px"><col style="width:72px"><col style="width:44px"></colgroup>
+          <thead><tr>
+            <th>Categoría</th>
+            <th class="r">Ventas</th>
+            <th class="r">% tot</th>
+            <th class="r">Margen</th>
+            <th class="r">% mg</th>
+          </tr></thead>
+          <tbody>
+          ${cats.length ? cats.map(({cat,venta,margen,pct,margenPct}) => `
+            <tr>
+              <td><span class="cat-dot" style="background:${CAT_COLOR[cat]}"></span>${CAT_LABEL[cat]}
+                <div class="bar-bg"><div class="bar-fill" style="width:${(pct*100).toFixed(0)}%;background:${CAT_COLOR[cat]}80"></div></div>
+              </td>
+              <td class="r">${fmtCLP(venta)}</td>
+              <td class="r" style="color:#64748b;font-size:11px">${(pct*100).toFixed(0)}%</td>
+              <td class="r" style="color:#16a34a">${fmtCLP(margen)}</td>
+              <td class="r" style="color:#16a34a;font-size:11px">${(margenPct*100).toFixed(0)}%</td>
+            </tr>
+          `).join('') : '<tr><td colspan="5" style="text-align:center;color:#94a3b8;padding:20px">Sin datos para este mes</td></tr>'}
+          </tbody>
+          ${cats.length ? `<tfoot><tr>
+            <td>Total <span style="font-size:10px;font-weight:400;color:${deltaYoY===null?'#94a3b8':deltaYoY>=0?'#16a34a':'#dc2626'}">${deltaYoY===null?'':(deltaYoY>=0?'▲ +':'▼ ')+Math.abs(deltaYoY).toFixed(0)+'% vs '+(+y-1)}</span></td>
+            <td class="r">${fmtCLP(ventasMes)}</td>
+            <td class="r" style="color:#64748b;font-size:11px">100%</td>
+            <td class="r" style="color:#16a34a">${fmtCLP(totalMargen)}</td>
+            <td class="r" style="color:#16a34a;font-size:11px">${(margenPctTotal*100).toFixed(0)}%</td>
+          </tr></tfoot>` : ''}
+        </table>
+      </div>
+
+      <div class="section-title">Gasto de personal <span class="badge badge-est">estimado</span></div>
+      <div class="card" style="margin-bottom:12px">
+        <div class="personal-grid">
+          <div class="personal-cell">
+            <div class="label">Este mes</div>
+            <div class="value">${personal ? fmtCLP(personal) : '—'}</div>
+            <div class="delta" style="color:${personalPct?personalPct<0.2?'#16a34a':personalPct<0.3?'#d97706':'#dc2626':'#94a3b8'}">${personalPct ? (personalPct*100).toFixed(1)+'% s/ventas' : ''}</div>
+          </div>
+          <div class="personal-cell">
+            <div class="label">Mes anterior</div>
+            <div class="value" style="color:#64748b">${personalPrevMes ? fmtCLP(personalPrevMes) : '—'}</div>
+            ${personal && personalPrevMes ? `<div class="delta" style="color:${personal<=personalPrevMes?'#16a34a':'#dc2626'}">${fmtPct((personal/personalPrevMes-1)*100)} vs mes ant.</div>` : '<div style="font-size:10px;color:#94a3b8">—</div>'}
+          </div>
+          <div class="personal-cell">
+            <div class="label">Mismo mes 2025</div>
+            <div class="value" style="color:#64748b">${personalPrevYear ? fmtCLP(personalPrevYear) : '—'}</div>
+            ${personal && personalPrevYear ? `<div class="delta" style="color:${personal<=personalPrevYear?'#16a34a':'#dc2626'}">${fmtPct((personal/personalPrevYear-1)*100)} vs 2025</div>` : '<div style="font-size:10px;color:#94a3b8">sin dato 2025</div>'}
+          </div>
+        </div>
+      </div>
+
+      <div class="section-title">Evolución mensual · ventas ${tienda}</div>
+      <div class="card" style="margin-bottom:12px">
+        <div class="chart-wrap"><canvas id="chart-evol"></canvas></div>
+      </div>
+
+      ${buildDailyTable(ym, tienda, ventasPrevYear)}
+    </div>
+  `;
+
+  document.getElementById('main-content').innerHTML = html;
+
+  // Chart evolución
+  const ctx = document.getElementById('chart-evol');
+  if(chartInst) { chartInst.destroy(); chartInst = null; }
+  if(ctx) {
+    const MESES3 = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+    const labels = allMonths.map(m => MESES3[+m.split('-')[1]]+' '+m.split('-')[0].slice(2));
+    const data2026 = allMonths.map(m => byM[m]?.[tienda] || null);
+    const data2025 = allMonths.map(m => {
+      const ym25 = `${+m.split('-')[0]-1}-${m.split('-')[1]}`;
+      return VENTAS_2025[ym25]?.[tienda] || null;
+    });
+    chartInst = new Chart(ctx, {
+      type:'bar',
+      data:{ labels, datasets:[
+        { label:'2026', data:data2026, backgroundColor:'#2563ebcc', borderColor:'#2563eb', borderWidth:1, borderRadius:4 },
+        { label:'2025', data:data2025, backgroundColor:'#cbd5e1', borderColor:'#94a3b8', borderWidth:1, borderRadius:4 },
+      ]},
+      options:{
+        responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{ position:'bottom', labels:{ font:{size:10}, padding:10, boxWidth:10 } },
+          tooltip:{ callbacks:{ label:c => ` ${c.dataset.label}: ${c.parsed.y!=null?fmtCLP(c.parsed.y):'sin datos'}` } } },
+        scales:{
+          x:{ grid:{display:false}, ticks:{font:{size:9}} },
+          y:{ beginAtZero:true, grid:{color:'#f1f5f9'}, ticks:{ font:{size:9}, callback:v=>'$'+(v/1e6).toFixed(0)+'M' } }
+        }
+      }
+    });
+  }
+}
+
+// Arrancar
+init();
+</script>
+</body>
+</html>

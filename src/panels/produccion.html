@@ -1,0 +1,1867 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Producción Larrs</title>
+<style>
+:root { color-scheme: light; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f2f7; color: #1e293b; padding: 14px; font-size: 14px; }
+.container { max-width: 700px; margin: 0 auto; }
+
+.header { background: linear-gradient(135deg, #111418, #1e293b); border-radius: 12px; padding: 18px 22px; margin-bottom: 12px; color: #fff; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.logo-img { height: 46px; width: auto; display: block; }
+.header-left .title { font-size: 14px; font-weight: 700; color: #e2e8f0; margin-top: 11px; }
+.header-left .subtitle { font-size: 12px; color: #94a3b8; margin-top: 2px; }
+.refresh-btn { background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.25); color: #fff; padding: 8px 14px; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600; transition: background 0.15s; display: flex; align-items: center; gap: 6px; white-space: nowrap; flex-shrink: 0; }
+.refresh-btn:hover:not(:disabled) { background: rgba(255,255,255,0.25); }
+.refresh-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Toolbar */
+.toolbar { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 9px 12px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.toolbar-label { font-size: 11px; font-weight: 700; color: #64748b; white-space: nowrap; }
+.toolbar select { font-size: 12px; border: 1px solid #e2e8f0; border-radius: 6px; padding: 5px 8px; color: #1e293b; background: #f8fafc; flex: 1; min-width: 160px; cursor: pointer; }
+.toolbar select:focus { outline: none; border-color: #94a3b8; }
+.tool-btn { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 5px 11px; cursor: pointer; font-size: 12px; font-weight: 600; color: #475569; white-space: nowrap; transition: background 0.1s; }
+.tool-btn:hover { background: #e2e8f0; color: #1e293b; }
+
+/* KPI grid */
+.kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px; }
+.kpi { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 10px; text-align: center; }
+.kpi .label { font-size: 9px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 5px; }
+.kpi .value { font-size: 22px; font-weight: 800; line-height: 1; }
+.kpi .sub { font-size: 10px; color: #94a3b8; margin-top: 3px; }
+
+/* Sections */
+.section-title { font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.08em; margin: 0 0 7px; }
+.card { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; margin-bottom: 12px; }
+.chart-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; }
+
+/* Tables */
+table { width: 100%; border-collapse: collapse; }
+th { padding: 7px 12px; text-align: left; font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; background: #f8fafc; }
+th.r { text-align: right; }
+td { padding: 8px 12px; border-top: 1px solid #f1f5f9; font-size: 13px; vertical-align: middle; }
+td.r { text-align: right; }
+.tienda-cell { display: flex; align-items: center; gap: 7px; font-weight: 600; }
+.dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+
+/* Badges */
+.badge { display: inline-block; padding: 2px 7px; border-radius: 10px; font-size: 11px; font-weight: 700; }
+.badge.red { background: #fef2f2; color: #dc2626; }
+.badge.yellow { background: #fffbeb; color: #d97706; }
+.badge.green { background: #f0fdf4; color: #16a34a; }
+.badge.blue { background: #eff6ff; color: #2563eb; }
+
+/* Flavor bar */
+.flavor-bar-wrap { flex: 1; background: #f1f5f9; border-radius: 4px; height: 8px; overflow: hidden; }
+.flavor-bar-fill { height: 100%; border-radius: 4px; background: linear-gradient(90deg, #3b82f6, #60a5fa); }
+.rank-num { font-size: 11px; font-weight: 700; color: #94a3b8; width: 20px; flex-shrink: 0; }
+
+/* Utils */
+.spinner { display: inline-block; width: 13px; height: 13px; border: 2px solid rgba(255,255,255,0.35); border-top-color: #fff; border-radius: 50%; animation: spin 0.65s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-overlay { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 200px; color: #64748b; gap: 14px; }
+.big-spinner { width: 32px; height: 32px; border: 3px solid #e2e8f0; border-top-color: #3b82f6; border-radius: 50%; animation: spin 0.8s linear infinite; }
+.error-box { background: #fef2f2; border: 1px solid #fecaca; border-radius: 10px; padding: 20px; text-align: center; color: #dc2626; margin: 12px 0; }
+.last-update { font-size: 11px; color: #b0bac8; text-align: center; margin-top: 4px; padding-bottom: 4px; }
+.delta { font-size: 10px; margin-left: 4px; }
+.delta.pos { color: #16a34a; }
+.delta.neg { color: #dc2626; }
+.sin-reporte { color: #94a3b8; }
+.reporto { color: #16a34a; font-weight: 600; }
+.insight { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 8px 12px; font-size: 12px; color: #166534; margin-bottom: 12px; line-height: 1.5; }
+
+/* Print / PDF */
+@media print {
+  @page { size: A4; margin: 1.5cm; }
+  body { background: white; padding: 0; font-size: 12px; }
+  .toolbar, .refresh-btn, details { display: none !important; }
+  .header { -webkit-print-color-adjust: exact; print-color-adjust: exact; border-radius: 6px; }
+  .chart-card, .card, .kpi, .kpi-grid { break-inside: avoid; }
+  .container { max-width: 100%; }
+  .kpi-grid { display: grid; grid-template-columns: repeat(4,1fr); }
+  canvas { max-height: 160px !important; }
+}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.js" integrity="sha384-iU8HYtnGQ8Cy4zl7gbNMOhsDTTKX02BTXptVP/vqAWIaTfM7isw76iyZCsjL2eVi" crossorigin="anonymous"></script>
+</head>
+<body>
+<div class="container">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-left">
+      <img class="logo-img" src="https://heladerialarrs.cl/cdn/shop/t/2/assets/logo-footer.png?v=41616879924709803011609269083" alt="Lärrs heladería artesanal" />
+      <div class="title">Informe de producción</div>
+      <div class="subtitle" id="header-sub">Cargando...</div>
+    </div>
+    <button class="refresh-btn" id="refresh-btn" onclick="loadData()">
+      <span id="refresh-icon">↻</span> Actualizar
+    </button>
+  </div>
+
+  <!-- Toolbar: selector de semana + botones descarga -->
+  <div class="toolbar" id="toolbar" style="display:none">
+    <span class="toolbar-label">📅</span>
+    <select id="week-select" onchange="switchWeek(this.value)"></select>
+    <button class="tool-btn" onclick="downloadCSV()" title="Descargar como CSV (se abre en Excel)">📊 CSV</button>
+    <button class="tool-btn" onclick="window.print()" title="Exportar como PDF">📄 PDF</button>
+  </div>
+
+  <div id="main-content">
+    <div class="loading-overlay"><div class="big-spinner"></div><div>Descargando planilla...</div></div>
+  </div>
+  <div class="last-update" id="last-update"></div>
+</div>
+
+<script>
+// ========== CONFIG ==========
+// 👇 Pega aquí la URL de tu Google Apps Script (larrs_apps_script.gs)
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzO2QtBbjXbzbVF0xIPzAn5Uh5P6amNiDE4sCgSolkG0wdynTfQKjxD99tzJ5thB9Zh/exec?token=larrs-produccion-2026';
+const _solo = window._LARRS_TIENDA || null;
+const TIENDAS = _solo ? new Set([_solo]) : new Set(['Costanera', 'Dominicos', 'Trapenses']);
+const T_ORDEN = _solo ? [_solo] : ['Costanera', 'Dominicos', 'Trapenses'];
+const T_COLOR = { Costanera: '#f59e0b', Dominicos: '#10b981', Trapenses: '#3b82f6' };
+const DIAS_ES = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+const DIAS_SHORT = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+
+// Estado global
+let cachedCSV = null;
+let currentData = null;
+let selectedWeekKey = null;
+let salesData = null;
+
+// ========== COSTOS DE REFERENCIA POR TIENDA — ACTUALIZAR AQUÍ ==========
+// Para agregar una semana, copia el bloque comentado de abajo y cambia los valores:
+//   costo_kg = costo promedio CLP por kg · merma_kg = kg perdidos · merma_pct = % merma
+// La clave es la semana ISO (ej. '2026-W22'). Si una semana no está, se usa la más reciente.
+const COSTOS_HISTORIAL = {
+  '2026-W21': {
+    Costanera: { costo_kg: 4030, merma_kg: 12.63, merma_pct: 3.0 },
+    Dominicos:  { costo_kg: 4133, merma_kg: 10.98, merma_pct: 4.7 },
+    Trapenses:  { costo_kg: 4170, merma_kg: 10.82, merma_pct: 4.2 },
+    _total:     { costo: 3566397, costo_kg: 4096, merma_kg: 34.43, merma_pct: 3.8 }
+  }
+  // ,'2026-W22': {
+  //   Costanera: { costo_kg: 0, merma_kg: 0, merma_pct: 0 },
+  //   Dominicos: { costo_kg: 0, merma_kg: 0, merma_pct: 0 },
+  //   Trapenses: { costo_kg: 0, merma_kg: 0, merma_pct: 0 },
+  //   _total:    { costo: 0, costo_kg: 0, merma_kg: 0, merma_pct: 0 }
+  // }
+};
+
+function getCostoRef(weekKey) {
+  if (COSTOS_HISTORIAL[weekKey]) return { data: COSTOS_HISTORIAL[weekKey], exacto: true };
+  const keys = Object.keys(COSTOS_HISTORIAL).sort();
+  return { data: COSTOS_HISTORIAL[keys[keys.length - 1]], exacto: false };
+}
+
+function fmtCLP(v) { return '$ ' + Math.round(v).toLocaleString('es-CL'); }
+
+// ── Umbral de merma — OBJETIVO < 4% ──
+// Verde: < 4% (objetivo)  ·  Amarillo: 4–5%  ·  Rojo: > 5%
+const MERMA_OBJETIVO = 4;
+const MERMA_ALERTA   = 5;
+function mermaColor(pct) {
+  if (pct > MERMA_ALERTA)    return '#dc2626'; // rojo
+  if (pct >= MERMA_OBJETIVO) return '#d97706'; // amarillo
+  return '#16a34a';                            // verde
+}
+
+// Ventas promedio por día de semana (real jul–dic 2024) — para proyección vs demanda
+const VENTAS_POR_DIA = {
+  'Lunes': 2863716, 'Martes': 3058305, 'Miércoles': 3056792, 'Jueves': 3399316,
+  'Viernes': 4055875, 'Sábado': 4831469, 'Domingo': 4864549
+};
+
+// ╔══════════════════════════════════════════════════════════════════════╗
+// ║  PRESUPUESTO DE VENTAS MENSUAL POR TIENDA (CLP) — desde Power BI 2026   ║
+// ║  Clave = mes 'YYYY-MM'. Copia un bloque y cambia los montos por mes.    ║
+// ║  (Es la meta del mes COMPLETO; a mitad de mes el % de cumplimiento sale ║
+// ║   parcial, igual que en Power BI.)                                      ║
+// ╚══════════════════════════════════════════════════════════════════════╝
+const PRESUPUESTO_VENTAS = {
+  '2026-01': { Costanera: 66697429, Dominicos: 60791245, Trapenses: 35026099 },
+  '2026-02': { Costanera: 47613607, Dominicos: 43640135, Trapenses: 27940915 },
+  '2026-03': { Costanera: 63226705, Dominicos: 59199796, Trapenses: 44690548 },
+  '2026-04': { Costanera: 45102685, Dominicos: 43685452, Trapenses: 34119303 },
+  '2026-05': { Costanera: 44473909, Dominicos: 43315450, Trapenses: 32696945 },
+  '2026-06': { Costanera: 57375000, Dominicos: 33839612, Trapenses: 28117795 },
+  '2026-07': { Costanera: 67500000, Dominicos: 44140410, Trapenses: 31883104 },
+  '2026-08': { Costanera: 45992876, Dominicos: 44970042, Trapenses: 33500972 },
+  '2026-09': { Costanera: 53470550, Dominicos: 50645819, Trapenses: 34723252 },
+  '2026-10': { Costanera: 71372449, Dominicos: 67035848, Trapenses: 44289715 },
+  '2026-11': { Costanera: 67500000, Dominicos: 62566440, Trapenses: 43983026 },
+  '2026-12': { Costanera: 86384884, Dominicos: 78488085, Trapenses: 50713092 }
+};
+
+// Ventas REALES 2025 por tienda (CLP) — para comparativo interanual (Costanera abrió jul-2025)
+const VENTAS_2025 = {
+  '2025-01': { Costanera: 0, Dominicos: 55264768, Trapenses: 30120381 },
+  '2025-02': { Costanera: 0, Dominicos: 39672850, Trapenses: 24050812 },
+  '2025-03': { Costanera: 0, Dominicos: 53817997, Trapenses: 38708557 },
+  '2025-04': { Costanera: 0, Dominicos: 39714047, Trapenses: 29657438 },
+  '2025-05': { Costanera: 0, Dominicos: 39377682, Trapenses: 28487123 },
+  '2025-06': { Costanera: 0, Dominicos: 30763284, Trapenses: 24534610 },
+  '2025-07': { Costanera: 18907446, Dominicos: 40127645, Trapenses: 27677166 },
+  '2025-08': { Costanera: 43752781, Dominicos: 40881856, Trapenses: 29085536 },
+  '2025-09': { Costanera: 44528540, Dominicos: 46041654, Trapenses: 29946646 },
+  '2025-10': { Costanera: 50577747, Dominicos: 60941680, Trapenses: 38167331 },
+  '2025-11': { Costanera: 50143316, Dominicos: 56878582, Trapenses: 37846313 },
+  '2025-12': { Costanera: 63529517, Dominicos: 71352805, Trapenses: 43580441 }
+};
+
+// ╔══════════════════════════════════════════════════════════════════════╗
+// ║  VENTAS REALES HISTÓRICAS 2026 — meses sin datos en Apps Script     ║
+// ║  Completar con valores reales desde Power BI / Excel de presupuesto ║
+// ╚══════════════════════════════════════════════════════════════════════╝
+const VENTAS_HIST_2026 = {
+  '2026-01': { Costanera: 52143181, Dominicos: 53046933, Trapenses: 31400794 },
+  '2026-02': { Costanera: 48135911, Dominicos: 42475646, Trapenses: 23863358 },
+  '2026-03': { Costanera: 49498136, Dominicos: 58681740, Trapenses: 41317310 },
+};
+
+// ========== UTILS ==========
+function toKg(v) { return v >= 100 ? v / 1000 : v; }
+function capFirst(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; }
+function fmtDate(d) { return d.toLocaleDateString('es-CL', { day:'numeric', month:'short' }); }
+function realToday() { const d = new Date(); d.setHours(0,0,0,0); return d; }
+
+function parseDateDMY(s, fallbackYear) {
+  if (!s) return null;
+  try {
+    const part = s.trim().split(' ')[0];
+    const [d,m,y] = part.split('/');
+    if (!d||!m||!y) return null;
+    let yr = +y;
+    // Corregir años con typo: 0026→2026, 2027 cuando debía ser 2026, etc.
+    // Regla: si el año es inválido (< 2000) o mayor al año de envío del formulario → corregir
+    if (fallbackYear && (yr < 2000 || yr > fallbackYear)) yr = fallbackYear;
+    const dt = new Date(yr, +m-1, +d);
+    return isNaN(dt.getTime()) ? null : dt;
+  } catch(e) { return null; }
+}
+
+function getMonday(date) {
+  const d = new Date(date);
+  const day = d.getDay() || 7;
+  d.setDate(d.getDate() - day + 1);
+  d.setHours(0,0,0,0);
+  return d;
+}
+
+function isoWeekKey(date) {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const day = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - day);
+  const ys = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const wk = Math.ceil((((d - ys) / 86400000) + 1) / 7);
+  return `${d.getUTCFullYear()}-W${String(wk).padStart(2,'0')}`;
+}
+
+function weekKeyToMonday(weekKey) {
+  const [y, w] = weekKey.split('-W').map(Number);
+  const jan4 = new Date(y, 0, 4);
+  const jan4Day = jan4.getDay() || 7;
+  const firstMon = new Date(jan4);
+  firstMon.setDate(jan4.getDate() - jan4Day + 1);
+  const target = new Date(firstMon);
+  target.setDate(firstMon.getDate() + (w - 1) * 7);
+  target.setHours(0,0,0,0);
+  return target;
+}
+
+function prevWeekKey(wk) {
+  const [y, w] = wk.split('-W').map(Number);
+  return w === 1 ? `${y-1}-W52` : `${y}-W${String(w-1).padStart(2,'0')}`;
+}
+
+function weekLabel(weekKey, isCurrent) {
+  const lunes = weekKeyToMonday(weekKey);
+  const dom = new Date(lunes); dom.setDate(lunes.getDate() + 6);
+  const range = `${fmtDate(lunes)} – ${fmtDate(dom)}`;
+  return isCurrent ? `${weekKey}  ·  ${range}  ✦ actual` : `${weekKey}  ·  ${range}`;
+}
+
+// ========== CSV PARSER ==========
+function parseCSV(raw) {
+  const text = raw.replace(/\r/g,'');
+  const rows = [];
+  let inQ = false, cur = '', fields = [];
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === '"') {
+      if (inQ && text[i+1] === '"') { cur += '"'; i++; }
+      else inQ = !inQ;
+    } else if (ch === ',' && !inQ) {
+      fields.push(cur); cur = '';
+    } else if (ch === '\n' && !inQ) {
+      fields.push(cur); cur = '';
+      if (fields.some(f=>f.trim())) rows.push(fields);
+      fields = [];
+    } else { cur += ch; }
+  }
+  if (cur || fields.length) { fields.push(cur); if (fields.some(f=>f.trim())) rows.push(fields); }
+  return rows;
+}
+
+// ========== SEMANAS DISPONIBLES ==========
+function getAvailableWeeks(csvText) {
+  const rows = parseCSV(csvText);
+  const weekSet = new Set();
+  for (let r = 1; r < rows.length; r++) {
+    const row = rows[r];
+    if (row.length < 6) continue;
+    const tienda = (row[2]||'').trim();
+    if (!TIENDAS.has(tienda)) continue;
+    const tipo = (row[5]||'').toLowerCase();
+    if (!tipo.includes('fabricaci')) continue;
+    const tsYear = parseDateDMY(row[0])?.getFullYear();
+    const fecha = parseDateDMY(row[3], tsYear) || parseDateDMY(row[0]);
+    if (!fecha) continue;
+    weekSet.add(isoWeekKey(fecha));
+  }
+  return [...weekSet].sort().reverse(); // más reciente primero → más antigua última
+}
+
+// ========== PROCESAMIENTO ==========
+function processCSV(csvText, targetWeekKey) {
+  const rows = parseCSV(csvText);
+  if (rows.length < 2) throw new Error('CSV vacío');
+  const headers = rows[0];
+
+  const today = realToday();
+  const currentWK = isoWeekKey(today);
+  const weekKey = targetWeekKey || currentWK;
+  const isCurrentWeek = weekKey === currentWK;
+
+  const lunes = weekKeyToMonday(weekKey);
+  const domingo = new Date(lunes); domingo.setDate(lunes.getDate() + 6);
+  const weekEnd = isCurrentWeek ? today : domingo;
+  const ayer = new Date(weekEnd); ayer.setDate(weekEnd.getDate() - 1);
+  const ayerKey = ayer.toISOString().slice(0,10);
+
+  // Columnas de sabores
+  const flavorCols = [];
+  for (let i = 6; i < headers.length; i++) {
+    if (headers[i].includes('#;')) {
+      const hdr = headers[i];
+      const cut = Math.min(
+        hdr.includes('[') ? hdr.indexOf('[') : hdr.length,
+        hdr.includes('#') ? hdr.indexOf('#') : hdr.length
+      );
+      flavorCols.push({ idx: i, name: hdr.slice(0, cut).trim() });
+    }
+  }
+
+  // Acumuladores
+  const semana = {};
+  const ayerAcc = {};
+  const flavorAgg = {};
+  const flavorByTienda = {};
+  const dailyTotal = {};
+
+  for (const t of TIENDAS) {
+    semana[t] = {};
+    ayerAcc[t] = { kg: 0, reported: false };
+    flavorByTienda[t] = {};
+  }
+
+  // Rango de fechas lunes → weekEnd
+  const dateRange = [];
+  { const d = new Date(lunes); while (d <= weekEnd) { dateRange.push(new Date(d)); d.setDate(d.getDate()+1); } }
+
+  // Procesar filas
+  for (let r = 1; r < rows.length; r++) {
+    const row = rows[r];
+    if (row.length < 6) continue;
+    const tienda = (row[2]||'').trim();
+    if (!TIENDAS.has(tienda)) continue;
+    const tipo = (row[5]||'').toLowerCase();
+    if (!tipo.includes('fabricaci')) continue;
+    const tsYear = parseDateDMY(row[0])?.getFullYear();
+    const fecha = parseDateDMY(row[3], tsYear) || parseDateDMY(row[0]);
+    if (!fecha) continue;
+    fecha.setHours(0,0,0,0);
+    if (fecha < lunes || fecha > weekEnd) continue;
+
+    let kgRow = 0;
+    for (const fc of flavorCols) {
+      if (fc.idx >= row.length) continue;
+      const val = parseFloat((row[fc.idx]||'').replace(',','.'));
+      if (!val || val <= 0) continue;
+      const kg = toKg(val);
+      kgRow += kg;
+      if (!flavorAgg[fc.name]) flavorAgg[fc.name] = { kg: 0, count: 0 };
+      flavorAgg[fc.name].kg += kg;
+      flavorAgg[fc.name].count++;
+      if (!flavorByTienda[tienda][fc.name]) flavorByTienda[tienda][fc.name] = 0;
+      flavorByTienda[tienda][fc.name] += kg;
+    }
+    if (kgRow <= 0) continue;
+
+    const dk = fecha.toISOString().slice(0,10);
+    semana[tienda][dk] = (semana[tienda][dk] || 0) + kgRow;
+    dailyTotal[dk] = (dailyTotal[dk] || 0) + kgRow;
+    if (dk === ayerKey) { ayerAcc[tienda].kg += kgRow; ayerAcc[tienda].reported = true; }
+  }
+
+  // Stats por tienda
+  const semStats = {};
+  for (const t of TIENDAS) {
+    const kg = Object.values(semana[t]).reduce((s,v)=>s+v,0);
+    semStats[t] = { kg, dias: Object.keys(semana[t]).length, daily: semana[t] };
+  }
+
+  const totalKg = T_ORDEN.reduce((s,t)=>s+semStats[t].kg,0);
+  const bestDay = Object.entries(dailyTotal).sort((a,b)=>b[1]-a[1])[0];
+  const flavorRanking = Object.entries(flavorAgg).sort((a,b)=>b[1].kg-a[1].kg).slice(0,15);
+  const topKg = flavorRanking[0]?.[1]?.kg || 1;
+  // Solo contar días que tienen producción real (evita que hoy sin datos baje el promedio)
+  const diasConData = Object.keys(dailyTotal).filter(dk => (dailyTotal[dk]||0) > 0).length;
+  const diasElapsed = diasConData > 0 ? diasConData : dateRange.length;
+  const kgPerDia = totalKg / Math.max(diasElapsed, 1);
+
+  return {
+    weekKey, isCurrentWeek,
+    lunes, domingo, weekEnd, ayer,
+    dateRange, semStats, ayerAcc,
+    totalKg, dailyTotal,
+    flavorRanking, flavorAgg, flavorByTienda, topKg,
+    kgPerDia, bestDay, diasElapsed,
+    _rows: rows.length, _flavorCols: flavorCols.length,
+  };
+}
+
+// ========== CHARTS ==========
+const charts = {};
+function destroyChart(id) { if (charts[id]) { charts[id].destroy(); delete charts[id]; } }
+
+function buildTiendaChart(data) {
+  destroyChart('tienda');
+  const ctx = document.getElementById('chart-tienda');
+  if (!ctx) return;
+  charts['tienda'] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: T_ORDEN,
+      datasets: [{
+        data: T_ORDEN.map(t => +data.semStats[t].kg.toFixed(1)),
+        backgroundColor: T_ORDEN.map(t => T_COLOR[t] + 'bb'),
+        borderColor: T_ORDEN.map(t => T_COLOR[t]),
+        borderWidth: 2, borderRadius: 6,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend:{ display:false }, tooltip:{ callbacks:{ label: c => ` ${c.parsed.y} kg` } } },
+      scales: {
+        y: { beginAtZero:true, grid:{ color:'#f1f5f9' }, ticks:{ font:{size:11} } },
+        x: { grid:{ display:false }, ticks:{ font:{size:12}, color:'#334155' } }
+      }
+    }
+  });
+}
+
+function buildDailyChart(data) {
+  destroyChart('daily');
+  const ctx = document.getElementById('chart-daily');
+  if (!ctx) return;
+  charts['daily'] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: data.dateRange.map(d => DIAS_SHORT[d.getDay()]),
+      datasets: T_ORDEN.map(t => ({
+        label: t,
+        data: data.dateRange.map(d => {
+          const dk = d.toISOString().slice(0,10);
+          return +((data.semStats[t].daily[dk] || 0).toFixed(1));
+        }),
+        backgroundColor: T_COLOR[t] + 'aa',
+        borderColor: T_COLOR[t],
+        borderWidth: 1.5, borderRadius: 4,
+      }))
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend:{ position:'bottom', labels:{ font:{size:11}, padding:12, boxWidth:10 } },
+        tooltip:{ callbacks:{ label: c => ` ${c.dataset.label}: ${c.parsed.y} kg` } }
+      },
+      scales: {
+        x: { stacked:true, grid:{ display:false }, ticks:{ font:{size:11} } },
+        y: { stacked:true, beginAtZero:true, grid:{ color:'#f1f5f9' }, ticks:{ font:{size:10} } }
+      }
+    }
+  });
+}
+
+// ========== CHART: TOP SABORES (dona) ==========
+function buildFlavorDoughnut(data) {
+  destroyChart('flavor-dough');
+  const ctx = document.getElementById('chart-flavor-dough');
+  if (!ctx || !data.flavorRanking?.length) return;
+  const top = data.flavorRanking.slice(0, 8);
+  const otrosKg = data.flavorRanking.slice(8).reduce((a, [,s]) => a + s.kg, 0);
+  const labels = top.map(([n]) => n.split('(')[0].trim());
+  const vals = top.map(([,s]) => +s.kg.toFixed(1));
+  if (otrosKg > 0) { labels.push('Otros'); vals.push(+otrosKg.toFixed(1)); }
+  const pal = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#ec4899','#84cc16','#94a3b8'];
+  charts['flavor-dough'] = new Chart(ctx, {
+    type: 'doughnut',
+    data: { labels, datasets: [{ data: vals, backgroundColor: labels.map((_,i) => pal[i % pal.length]), borderWidth: 1.5, borderColor: '#fff' }] },
+    options: { responsive: true, maintainAspectRatio: false, cutout: '58%',
+      plugins: { legend: { position: 'right', labels: { font:{size:10}, padding: 7, boxWidth: 10 } },
+        tooltip: { callbacks: { label: c => ` ${c.label}: ${c.parsed} kg (${(c.parsed / data.totalKg * 100).toFixed(1)}%)` } } } }
+  });
+}
+
+// ========== CHART: MERMA % POR TIENDA ==========
+function buildMermaPctChart(data) {
+  destroyChart('merma-pct');
+  const ctx = document.getElementById('chart-merma-pct');
+  if (!ctx) return;
+  const { data: ref } = getCostoRef(data.weekKey);
+  const vals = T_ORDEN.map(t => +((ref[t]?.merma_pct) || 0).toFixed(1));
+  charts['merma-pct'] = new Chart(ctx, {
+    type: 'bar',
+    data: { labels: T_ORDEN, datasets: [{ data: vals, backgroundColor: vals.map(v => mermaColor(v) + 'cc'), borderColor: vals.map(v => mermaColor(v)), borderWidth: 2, borderRadius: 6 }] },
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ` ${c.parsed.y}% merma` } } },
+      scales: { y: { beginAtZero: true, suggestedMax: 6, grid: { color: '#f1f5f9' }, ticks: { font: {size:10}, callback: v => v + '%' } },
+        x: { grid: { display: false }, ticks: { font: {size:12}, color: '#334155' } } } }
+  });
+}
+
+// ========== CHART: COSTO TOTAL POR TIENDA ==========
+function buildCostoTiendaChart(data) {
+  destroyChart('costo-tienda');
+  const ctx = document.getElementById('chart-costo-tienda');
+  if (!ctx) return;
+  const { data: ref } = getCostoRef(data.weekKey);
+  const vals = T_ORDEN.map(t => Math.round(data.semStats[t].kg * (ref[t]?.costo_kg || 4096)));
+  charts['costo-tienda'] = new Chart(ctx, {
+    type: 'bar',
+    data: { labels: T_ORDEN, datasets: [{ data: vals, backgroundColor: T_ORDEN.map(t => T_COLOR[t] + 'bb'), borderColor: T_ORDEN.map(t => T_COLOR[t]), borderWidth: 2, borderRadius: 6 }] },
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ` ${fmtCLP(c.parsed.y)}` } } },
+      scales: { y: { beginAtZero: true, grid: { color: '#f1f5f9' }, ticks: { font: {size:9}, callback: v => '$' + (v/1000).toFixed(0) + 'k' } },
+        x: { grid: { display: false }, ticks: { font: {size:12}, color: '#334155' } } } }
+  });
+}
+
+// ========== MÉTRICA: PROYECCIÓN PRODUCCIÓN vs DEMANDA ==========
+function buildProyeccionDemanda(data) {
+  if (!data.totalKg || data.totalKg <= 0) return '';
+  const dias = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
+  const dowIdx = [1,2,3,4,5,6,0];
+  const totV = Object.values(VENTAS_POR_DIA).reduce((a,b) => a+b, 0);
+  const prodDow = {};
+  (data.dateRange || []).forEach(d => { const dk = d.toISOString().slice(0,10); prodDow[d.getDay()] = (prodDow[d.getDay()] || 0) + (data.dailyTotal[dk] || 0); });
+  const rows = dias.map((dia, i) => {
+    const sh = (VENTAS_POR_DIA[dia] || 0) / totV;
+    const sug = data.totalKg * sh;
+    const real = prodDow[dowIdx[i]] || 0;
+    const dl = real - sug;
+    const col = Math.abs(dl) < sug * 0.25 ? '#16a34a' : (dl > 0 ? '#2563eb' : '#dc2626');
+    return `<tr><td style="font-size:12px;font-weight:600">${dia}</td><td class="r" style="font-size:12px">${(sh*100).toFixed(0)}%</td><td class="r" style="font-size:12px">${sug.toFixed(1)} kg</td><td class="r" style="font-size:12px">${real>0?real.toFixed(1)+' kg':'<span style=\"color:#cbd5e1\">—</span>'}</td><td class="r" style="font-size:12px;color:${col};font-weight:600">${dl>=0?'+':''}${dl.toFixed(0)} kg</td></tr>`;
+  }).join('');
+  return `
+  <div class="section-title">Proyección de producción vs demanda</div>
+  <p style="font-size:10px;color:#94a3b8;margin:-4px 0 7px">Distribución sugerida del total de la semana (${data.totalKg.toFixed(0)} kg) según el peso de ventas por día (real jul–dic 2024). Δ = producción real − sugerida.</p>
+  <div class="card" style="margin-bottom:12px">
+    <table><thead><tr><th>Día</th><th class="r">% venta</th><th class="r">Prod. sugerida</th><th class="r">Prod. real</th><th class="r">Δ</th></tr></thead>
+    <tbody>${rows}</tbody></table>
+  </div>`;
+}
+
+// ========== MÉTRICA: COSTO DE MERMA ACUMULADO (período) ==========
+function buildMermaAcumulada() {
+  if (!cachedCSV) return '';
+  const weeks = getAvailableWeeks(cachedCSV); // recientes primero
+  const acc = [];
+  for (const wk of weeks) {
+    let d; try { d = processCSV(cachedCSV, wk); } catch(e) { continue; }
+    if (d.totalKg <= 0) continue;
+    const r = getCostoRef(wk).data;
+    acc.push({ weekKey: wk, tiendas: Object.fromEntries(T_ORDEN.map(t => [t, d.semStats[t].kg])), ref: r });
+  }
+  if (!acc.length) return '';
+  acc.reverse(); // antigua → reciente
+  let kgTot = 0, clpTot = 0;
+  const pt = {}; T_ORDEN.forEach(t => pt[t] = { kg: 0, clp: 0 });
+  // Acumular también por mes para el desglose
+  const byMesKg = {}, byMesCLP = {};
+  acc.forEach(w => {
+    const ym = weekKeyToYM(w.weekKey);
+    if (!byMesKg[ym]) { byMesKg[ym] = 0; byMesCLP[ym] = 0; }
+    T_ORDEN.forEach(t => {
+      const mp = (w.ref[t]?.merma_pct) || 0, ck = (w.ref[t]?.costo_kg) || 4096;
+      const mkg = w.tiendas[t] * mp / 100;
+      kgTot += mkg; clpTot += mkg * ck;
+      pt[t].kg += mkg; pt[t].clp += mkg * ck;
+      byMesKg[ym] += mkg; byMesCLP[ym] += mkg * ck;
+    });
+  });
+  // Fechas legibles del período
+  const fmtWkDate = wk => { const d = weekKeyToMonday(wk); return d.toLocaleDateString('es-CL', { day:'numeric', month:'short' }); };
+  const fechaInicio = fmtWkDate(acc[0].weekKey);
+  const fechaFin    = fmtWkDate(acc[acc.length-1].weekKey);
+  const MESES3 = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const rowsTienda = T_ORDEN.map(t => `<tr>
+    <td><div class="tienda-cell"><span class="dot" style="background:${T_COLOR[t]}"></span>${t}</div></td>
+    <td class="r">${pt[t].kg.toFixed(1)} kg</td>
+    <td class="r" style="color:#dc2626;font-weight:600">${fmtCLP(pt[t].clp)}</td>
+    <td class="r" style="font-size:11px;color:#64748b">${clpTot>0?(pt[t].clp/clpTot*100).toFixed(0):0}%</td>
+  </tr>`).join('');
+  const rowsMes = Object.keys(byMesKg).sort().map(ym => {
+    const [,mNum] = ym.split('-');
+    return `<tr>
+      <td style="font-size:12px;padding:5px 10px">${MESES3[+mNum]}</td>
+      <td class="r" style="font-size:12px;padding:5px 10px">${byMesKg[ym].toFixed(1)} kg</td>
+      <td class="r" style="font-size:12px;padding:5px 10px;color:#dc2626;font-weight:600">${fmtCLP(byMesCLP[ym])}</td>
+      <td class="r" style="font-size:11px;padding:5px 10px;color:#64748b">${clpTot>0?(byMesCLP[ym]/clpTot*100).toFixed(0):0}%</td>
+    </tr>`;
+  }).join('');
+  return `
+  <div class="section-title">Costo de merma acumulado <span style="font-weight:400;color:#94a3b8;font-size:11px">· ${fechaInicio} → ${fechaFin} · ${acc.length} sem.</span></div>
+  <div class="kpi-grid" style="grid-template-columns:repeat(2,1fr);margin-bottom:8px">
+    <div class="kpi"><div class="label">Merma acumulada</div><div class="value" style="font-size:18px">${kgTot.toFixed(0)} kg</div><div class="sub">${(kgTot/acc.length*4.33).toFixed(1)} kg/mes promedio</div></div>
+    <div class="kpi"><div class="label">Costo merma acum.</div><div class="value" style="font-size:18px;color:#dc2626">${fmtCLP(clpTot)}</div><div class="sub">${fmtCLP(Math.round(clpTot/acc.length*4.33))}/mes promedio</div></div>
+  </div>
+  <div class="card" style="margin-bottom:12px">
+    <div style="font-size:11px;font-weight:700;color:#64748b;padding:8px 10px 4px;text-transform:uppercase;letter-spacing:.5px">Por tienda</div>
+    <table><thead><tr><th>Tienda</th><th class="r">Merma kg</th><th class="r">Costo merma</th><th class="r">% del total</th></tr></thead>
+    <tbody>${rowsTienda}</tbody></table>
+    <div style="font-size:11px;font-weight:700;color:#64748b;padding:8px 10px 4px;text-transform:uppercase;letter-spacing:.5px;border-top:1px solid #f1f5f9;margin-top:4px">Por mes</div>
+    <table><thead><tr><th>Mes</th><th class="r">Merma kg</th><th class="r">Costo merma</th><th class="r">% del total</th></tr></thead>
+    <tbody>${rowsMes}</tbody></table>
+  </div>`;
+}
+
+// ========== HELPER: week key → YYYY-MM ==========
+function weekKeyToYM(wk) {
+  const m = weekKeyToMonday(wk);
+  return m.getFullYear() + '-' + String(m.getMonth()+1).padStart(2,'0');
+}
+
+// ========== TOP 10 SABORES ACUMULADO ==========
+function buildFlavorAcumuladoSection() {
+  if (!cachedCSV) return '';
+  const weeks = getAvailableWeeks(cachedCSV);
+  const flavorTotal = {};
+  for (const wk of weeks) {
+    let d; try { d = processCSV(cachedCSV, wk); } catch(e) { continue; }
+    if (!d || d.totalKg <= 0) continue;
+    for (const [name, stat] of Object.entries(d.flavorAgg || {})) {
+      flavorTotal[name] = (flavorTotal[name] || 0) + stat.kg;
+    }
+  }
+  const ranking = Object.entries(flavorTotal).sort((a,b)=>b[1]-a[1]).slice(0,10);
+  if (!ranking.length) return '';
+  const totalAcum = Object.values(flavorTotal).reduce((s,v)=>s+v,0);
+  const topKg = ranking[0][1];
+  const rows = ranking.map(([name, kg], i) => {
+    const pct = (kg/topKg*100).toFixed(0);
+    return `<tr>
+      <td style="padding:5px 12px">
+        <div style="display:flex;align-items:center;gap:7px">
+          <span class="rank-num">#${i+1}</span>
+          <span style="font-size:12px;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${name}">${name}</span>
+          <div class="flavor-bar-wrap" style="max-width:80px"><div class="flavor-bar-fill" style="width:${pct}%"></div></div>
+        </div>
+      </td>
+      <td class="r" style="font-size:12px;white-space:nowrap">${kg.toFixed(1)} kg</td>
+      <td class="r" style="font-size:11px;color:#64748b;white-space:nowrap">${(kg/totalAcum*100).toFixed(1)}%</td>
+    </tr>`;
+  }).join('');
+  return `
+    <div class="section-title">Top 10 sabores — acumulado <span style="font-weight:400;color:#94a3b8">(${weeks.length} semanas · ${totalAcum.toFixed(0)} kg total)</span></div>
+    <div class="chart-card" style="margin-bottom:8px">
+      <div style="height:240px"><canvas id="chart-flavor-acum"></canvas></div>
+    </div>
+    <div class="card" style="margin-bottom:12px">
+      <table>
+        <thead><tr><th>Sabor</th><th class="r">kg total</th><th class="r">% vol</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
+
+function buildFlavorAcumChart() {
+  destroyChart('flavor-acum');
+  const ctx = document.getElementById('chart-flavor-acum');
+  if (!ctx || !cachedCSV) return;
+  const weeks = getAvailableWeeks(cachedCSV);
+  const flavorTotal = {};
+  for (const wk of weeks) {
+    let d; try { d = processCSV(cachedCSV, wk); } catch(e) { continue; }
+    for (const [name, stat] of Object.entries(d.flavorAgg || {})) {
+      flavorTotal[name] = (flavorTotal[name] || 0) + stat.kg;
+    }
+  }
+  const ranking = Object.entries(flavorTotal).sort((a,b)=>b[1]-a[1]).slice(0,10);
+  if (!ranking.length) return;
+  const pal = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#ec4899','#84cc16','#f97316','#94a3b8'];
+  charts['flavor-acum'] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: ranking.map(([n]) => n.split('(')[0].trim().slice(0, 22)),
+      datasets: [{ data: ranking.map(([,kg]) => +kg.toFixed(1)), backgroundColor: pal.map(c=>c+'cc'), borderColor: pal, borderWidth: 1.5, borderRadius: 5 }]
+    },
+    options: {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      plugins: { legend:{display:false}, tooltip:{callbacks:{label:c=>` ${c.parsed.x} kg`}} },
+      scales: { x:{beginAtZero:true,grid:{color:'#f1f5f9'},ticks:{font:{size:10},callback:v=>v+' kg'}}, y:{grid:{display:false},ticks:{font:{size:10},color:'#334155'}} }
+    }
+  });
+}
+
+// ========== CHART: EVOLUCIÓN MENSUAL MERMA ==========
+function buildMermaEvolucionChart() {
+  destroyChart('merma-evol');
+  const ctx = document.getElementById('chart-merma-evol');
+  if (!ctx || !cachedCSV) return;
+
+  // Eje X: todos los meses que aparecen en el CSV de producción
+  const weeks = getAvailableWeeks(cachedCSV);
+  const byMonth = {};
+  weeks.forEach(wk => { const m = weekKeyToYM(wk); if (!byMonth[m]) byMonth[m] = []; byMonth[m].push(wk); });
+  const months = Object.keys(byMonth).sort();
+  if (!months.length) return;
+
+  const MES3 = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const labels = months.map(m => MES3[+m.slice(5)] + " '" + m.slice(2,4));
+
+  // Para cada mes: promedio de semanas con datos EXACTOS en COSTOS_HISTORIAL; null si no hay
+  const datasets = T_ORDEN.map(t => ({
+    label: t,
+    data: months.map(m => {
+      const wks = byMonth[m];
+      const vals = wks.map(wk => {
+        const { data: ref, exacto } = getCostoRef(wk);
+        return exacto ? (ref[t]?.merma_pct ?? null) : null;
+      }).filter(v => v !== null);
+      return vals.length ? +(vals.reduce((s,v)=>s+v,0)/vals.length).toFixed(2) : null;
+    }),
+    borderColor: T_COLOR[t], backgroundColor: T_COLOR[t]+'22',
+    borderWidth: 2, pointRadius: 5, tension: 0.3, fill: false, spanGaps: false,
+  }));
+
+  datasets.push({
+    label: 'Objetivo 4%',
+    data: months.map(()=>4),
+    borderColor:'#dc2626', borderDash:[5,5], borderWidth:1.5, pointRadius:0, fill:false, tension:0
+  });
+
+  charts['merma-evol'] = new Chart(ctx, {
+    type: 'line', data: { labels, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend:{position:'bottom',labels:{font:{size:10},padding:10,boxWidth:10}},
+        tooltip:{callbacks:{label:c=>c.parsed.y!=null?` ${c.dataset.label}: ${c.parsed.y}%`:` ${c.dataset.label}: sin datos`}}
+      },
+      scales: {
+        y:{beginAtZero:true,suggestedMax:6,grid:{color:'#f1f5f9'},ticks:{font:{size:10},callback:v=>v+'%'}},
+        x:{grid:{display:false},ticks:{font:{size:10}}}
+      }
+    }
+  });
+}
+
+// ========== CHART: PRODUCCIÓN vs VENTAS (mensual) ==========
+function buildProdVsVentasChart() {
+  destroyChart('prod-vs-ventas');
+  const ctx = document.getElementById('chart-prod-vs-ventas');
+  if (!ctx || !cachedCSV) return;
+  const weeks = getAvailableWeeks(cachedCSV);
+  const prodByMonth = {};
+  for (const wk of weeks) {
+    let d; try { d = processCSV(cachedCSV, wk); } catch(e) { continue; }
+    if (!d || d.totalKg <= 0) continue;
+    const m = weekKeyToYM(wk);
+    prodByMonth[m] = (prodByMonth[m]||0) + d.totalKg;
+  }
+  const salesByMonth = {};
+  (salesData||[]).forEach(d => { const m=d.date.slice(0,7); salesByMonth[m]=(salesByMonth[m]||0)+(d.Total||0); });
+  const months = [...new Set([...Object.keys(prodByMonth),...Object.keys(salesByMonth)])].sort().slice(-12);
+  if (!months.length) return;
+  const MES3 = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const labels = months.map(m => MES3[+m.slice(5)] + " '" + m.slice(2,4));
+  charts['prod-vs-ventas'] = new Chart(ctx, {
+    type: 'bar',
+    data: { labels, datasets: [
+      { label: 'Producción (kg)', data: months.map(m=>prodByMonth[m]?+prodByMonth[m].toFixed(0):null), backgroundColor:'#3b82f6cc', borderColor:'#3b82f6', borderWidth:1.5, borderRadius:4, yAxisID:'y' },
+      { label: 'Ventas ($)', type:'line', data: months.map(m=>salesByMonth[m]||null), borderColor:'#10b981', backgroundColor:'#10b98122', borderWidth:2, pointRadius:4, fill:false, tension:0.3, yAxisID:'y1' }
+    ]},
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend:{position:'bottom',labels:{font:{size:10},padding:10,boxWidth:10}}, tooltip:{callbacks:{label:c=>c.dataset.yAxisID==='y'?` Producción: ${c.parsed.y} kg`:` Ventas: ${fmtCLP(c.parsed.y)}`}} },
+      scales: {
+        y: { type:'linear', position:'left', beginAtZero:true, grid:{color:'#f1f5f9'}, ticks:{font:{size:10},callback:v=>v+' kg'} },
+        y1: { type:'linear', position:'right', beginAtZero:true, grid:{drawOnChartArea:false}, ticks:{font:{size:9},callback:v=>'$'+(v/1e6).toFixed(0)+'M'} },
+        x: { grid:{display:false}, ticks:{font:{size:10}} }
+      }
+    }
+  });
+}
+
+// ========== GRÁFICO VENTAS ==========
+function buildSalesChart(salesArr) {
+  destroyChart('sales');
+  const ctx = document.getElementById('chart-sales');
+  if (!ctx || !salesArr || salesArr.length === 0) return;
+  const recent = salesArr.slice(-60);
+  charts['sales'] = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: recent.map(d => { const [,m,day] = d.date.split('-'); return `${day}/${m}`; }),
+      datasets: T_ORDEN.map(t => ({
+        label: t,
+        data: recent.map(d => d[t] || 0),
+        borderColor: T_COLOR[t],
+        backgroundColor: T_COLOR[t] + '22',
+        borderWidth: 2,
+        pointRadius: recent.length > 30 ? 0 : 3,
+        fill: false,
+        tension: 0.3,
+      }))
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'bottom', labels: { font:{size:11}, padding:10, boxWidth:10 } },
+        tooltip: { callbacks: { label: c => ` ${c.dataset.label}: ${fmtCLP(c.parsed.y)}` } }
+      },
+      scales: {
+        x: { grid:{display:false}, ticks:{font:{size:9}, maxRotation:0, maxTicksLimit:10} },
+        y: { beginAtZero:true, grid:{color:'#f1f5f9'}, ticks:{font:{size:10},
+          callback: v => v>=1000000 ? `$${(v/1e6).toFixed(1)}M` : v>=1000 ? `$${(v/1000).toFixed(0)}K` : `$${v}`
+        }}
+      }
+    }
+  });
+}
+
+// ========== GRÁFICO PRESUPUESTO vs REAL (mensual) ==========
+function buildPptoChart() {
+  destroyChart('ppto');
+  const ctx = document.getElementById('chart-ppto');
+  if (!ctx || !salesData) return;
+  const y = new Date().getFullYear();
+  const byM = {};
+  salesData.forEach(d => { const ym = d.date.slice(0,7); if (ym.startsWith(y + '-')) byM[ym] = (byM[ym]||0) + (d.Total||0); });
+  Object.entries(VENTAS_HIST_2026).forEach(([ym, vals]) => {
+    if (!byM[ym] && ym.startsWith(y + '-') && (vals.Costanera || vals.Dominicos || vals.Trapenses))
+      byM[ym] = T_ORDEN.reduce((s,t) => s + (vals[t]||0), 0);
+  });
+  const MES3 = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const months = Object.keys(PRESUPUESTO_VENTAS).filter(k => k.startsWith(y + '-')).sort();
+  const labels = months.map(ym => MES3[+ym.slice(5)]);
+  const pptoArr = months.map(ym => T_ORDEN.reduce((s,t) => s + (PRESUPUESTO_VENTAS[ym][t]||0), 0));
+  const realArr = months.map(ym => (byM[ym] != null ? byM[ym] : null));
+  charts['ppto'] = new Chart(ctx, {
+    type: 'bar',
+    data: { labels, datasets: [
+      { label: 'Presupuesto', data: pptoArr, backgroundColor: '#cbd5e1', borderColor: '#94a3b8', borderWidth: 1, borderRadius: 4 },
+      { label: 'Venta real', data: realArr, backgroundColor: '#2563ebcc', borderColor: '#2563eb', borderWidth: 1, borderRadius: 4 }
+    ]},
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'bottom', labels: { font:{size:10}, padding:10, boxWidth:10 } },
+        tooltip: { callbacks: { label: c => ` ${c.dataset.label}: ${c.parsed.y!=null?fmtCLP(c.parsed.y):'sin datos'}` } } },
+      scales: { x: { grid:{display:false}, ticks:{font:{size:10}} },
+        y: { beginAtZero:true, grid:{color:'#f1f5f9'}, ticks:{ font:{size:9}, callback: v => '$'+(v/1e6).toFixed(0)+'M' } } } }
+  });
+}
+
+function buildSalesSection() {
+  if (!salesData || salesData.length === 0) return '';
+  const recent7 = salesData.slice(-7).reverse();
+
+  const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  const hoy = new Date();
+  const currentYM = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}`;
+  const mesNombre  = MESES[hoy.getMonth()];
+  const cumpColor = p => p >= 100 ? '#16a34a' : p >= 80 ? '#d97706' : '#dc2626';
+
+  // ── Agrupar por mes ──
+  const byMonth = {};
+  salesData.forEach(d => {
+    const ym = d.date.slice(0, 7);
+    if (!byMonth[ym]) byMonth[ym] = { Costanera: 0, Dominicos: 0, Trapenses: 0, Total: 0, dias: 0 };
+    T_ORDEN.forEach(t => { byMonth[ym][t] += d[t] || 0; });
+    byMonth[ym].Total += d.Total || 0;
+    byMonth[ym].dias++;
+  });
+  Object.entries(VENTAS_HIST_2026).forEach(([ym, vals]) => {
+    if (!byMonth[ym] && (vals.Costanera || vals.Dominicos || vals.Trapenses)) {
+      const total = T_ORDEN.reduce((s, t) => s + (vals[t] || 0), 0);
+      byMonth[ym] = { ...vals, Total: total, dias: 0, isHistorico: true };
+    }
+  });
+  const monthKeys = Object.keys(byMonth).sort();
+
+  // ── KPIs del mes actual ──
+  const mTotals = byMonth[currentYM] || { Costanera: 0, Dominicos: 0, Trapenses: 0, Total: 0, dias: 0 };
+  const monthKPIs = T_ORDEN.map(t => `
+    <div class="kpi">
+      <div class="label" style="color:${T_COLOR[t]}">${t}</div>
+      <div class="value" style="font-size:13px;color:${T_COLOR[t]}">${fmtCLP(mTotals[t])}</div>
+      <div class="sub">${mTotals.dias} días</div>
+    </div>`).join('') + `
+    <div class="kpi" style="border-left:2px solid #e2e8f0">
+      <div class="label">Total</div>
+      <div class="value" style="font-size:13px">${fmtCLP(mTotals.Total)}</div>
+      <div class="sub">${mesNombre} ${hoy.getFullYear()}</div>
+    </div>`;
+
+  // ── Barra de participación mes actual ──
+  const barras = mTotals.Total > 0 ? T_ORDEN.map(t => {
+    const pct = (mTotals[t] / mTotals.Total * 100).toFixed(1);
+    return `<div style="flex:${mTotals[t]||0.01};background:${T_COLOR[t]};height:6px;min-width:2px" title="${t}: ${pct}%"></div>`;
+  }).join('') : '';
+
+  // ── Presupuesto vs ventas (mes actual) ──
+  const ppto = PRESUPUESTO_VENTAS[currentYM];
+  let presupuestoBlock = '';
+  if (ppto) {
+    const cumpColor = p => p >= 100 ? '#16a34a' : p >= 80 ? '#d97706' : '#dc2626';
+    let totReal = 0, totPpto = 0;
+    const pRows = T_ORDEN.map(t => {
+      const real = mTotals[t] || 0, pp = ppto[t] || 0;
+      totReal += real; totPpto += pp;
+      const c = pp > 0 ? (real / pp * 100) : 0;
+      const dif = real - pp;
+      return `<tr>
+        <td><div class="tienda-cell"><span class="dot" style="background:${T_COLOR[t]}"></span>${t}</div></td>
+        <td class="r">${fmtCLP(pp)}</td>
+        <td class="r">${fmtCLP(real)}</td>
+        <td class="r" style="font-size:11px;color:${dif>=0?'#16a34a':'#dc2626'}">${dif>=0?'+':''}${fmtCLP(dif)}</td>
+        <td class="r" style="color:${cumpColor(c)};font-weight:700">${c.toFixed(0)}%</td>
+      </tr>`;
+    }).join('');
+    const cTot = totPpto > 0 ? (totReal / totPpto * 100) : 0;
+    const difTot = totReal - totPpto;
+    presupuestoBlock = `
+      <div class="section-title" style="margin-bottom:7px">Presupuesto vs ventas — ${mesNombre} ${hoy.getFullYear()}</div>
+      <div class="card" style="margin-bottom:12px">
+        <table>
+          <thead><tr><th>Tienda</th><th class="r">Presupuesto</th><th class="r">Real</th><th class="r">Dif.</th><th class="r">% Cump.</th></tr></thead>
+          <tbody>${pRows}</tbody>
+          <tfoot style="background:#f8fafc"><tr>
+            <td style="font-weight:700;font-size:12px">Total</td>
+            <td class="r" style="font-weight:700;font-size:12px">${fmtCLP(totPpto)}</td>
+            <td class="r" style="font-weight:700;font-size:12px">${fmtCLP(totReal)}</td>
+            <td class="r" style="font-weight:700;font-size:11px;color:${difTot>=0?'#16a34a':'#dc2626'}">${difTot>=0?'+':''}${fmtCLP(difTot)}</td>
+            <td class="r" style="font-weight:700;font-size:12px;color:${cumpColor(cTot)}">${cTot.toFixed(0)}%</td>
+          </tr></tfoot>
+        </table>
+      </div>`;
+  }
+
+  // ── Extras de presupuesto: proyección, ranking, acumulado, trimestres, vs 2025, gráfico ──
+  let extrasBlock = '';
+  {
+    const cumpColor = p => p >= 100 ? '#16a34a' : p >= 80 ? '#d97706' : '#dc2626';
+    const y = hoy.getFullYear();
+    const curMonth = hoy.getMonth() + 1;
+    const MES3 = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+    const dataMonths = Object.keys(byMonth).filter(k => k.startsWith(y + '-') && byMonth[k].Total > 0).sort();
+
+    // Proyección de cierre del mes actual
+    let proyBlock = '';
+    if (ppto && mTotals.dias > 0) {
+      const diasMes = new Date(y, curMonth, 0).getDate();
+      const factor = diasMes / mTotals.dias;
+      const cards = T_ORDEN.map(t => {
+        const proy = (mTotals[t]||0) * factor, pp = ppto[t]||0;
+        const c = pp>0 ? proy/pp*100 : 0;
+        return `<div class="kpi"><div class="label" style="color:${T_COLOR[t]}">${t}</div><div class="value" style="font-size:12px">${fmtCLP(proy)}</div><div class="sub" style="color:${cumpColor(c)}">${c.toFixed(0)}% meta</div></div>`;
+      }).join('');
+      const proyTot = (mTotals.Total||0)*factor;
+      const pTot = T_ORDEN.reduce((s,t)=>s+(ppto[t]||0),0);
+      const cTot = pTot>0?proyTot/pTot*100:0;
+      proyBlock = `
+      <div class="section-title" style="margin-bottom:7px">Proyección de cierre — ${mesNombre}</div>
+      <p style="font-size:10px;color:#94a3b8;margin:-4px 0 7px">Estimado a fin de mes según ritmo diario (${mTotals.dias} de ${diasMes} días). Total proyectado: <b>${fmtCLP(proyTot)}</b> · <b style="color:${cumpColor(cTot)}">${cTot.toFixed(0)}%</b> de la meta.</p>
+      <div class="kpi-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:12px">${cards}</div>`;
+    }
+
+    // Ranking de cumplimiento del mes
+    let rankBlock = '';
+    if (ppto) {
+      const arr = T_ORDEN.map(t => ({ t, c: (ppto[t]>0 ? (mTotals[t]||0)/ppto[t]*100 : 0) })).sort((a,b)=>b.c-a.c);
+      rankBlock = `
+      <div class="section-title" style="margin-bottom:7px">Ranking de cumplimiento — ${mesNombre}</div>
+      <div class="card" style="margin-bottom:12px"><table><tbody>
+      ${arr.map((x,i)=>`<tr><td style="width:28px;font-weight:700;color:#94a3b8">#${i+1}</td><td><div class="tienda-cell"><span class="dot" style="background:${T_COLOR[x.t]}"></span>${x.t}</div></td><td class="r" style="font-weight:700;color:${cumpColor(x.c)}">${x.c.toFixed(0)}%</td></tr>`).join('')}
+      </tbody></table></div>`;
+    }
+
+    // Cumplimiento acumulado (meses con datos)
+    let ytdBlock = '';
+    if (dataMonths.length) {
+      let tot={ppto:0,real:0};
+      const rows = T_ORDEN.map(t => {
+        let pp=0, rr=0;
+        dataMonths.forEach(ym=>{ pp += (PRESUPUESTO_VENTAS[ym]?.[t])||0; rr += byMonth[ym][t]||0; });
+        tot.ppto+=pp; tot.real+=rr;
+        const c = pp>0?rr/pp*100:0;
+        return `<tr><td><div class="tienda-cell"><span class="dot" style="background:${T_COLOR[t]}"></span>${t}</div></td><td class="r">${fmtCLP(pp)}</td><td class="r">${fmtCLP(rr)}</td><td class="r" style="color:${cumpColor(c)};font-weight:700">${c.toFixed(0)}%</td></tr>`;
+      }).join('');
+      const cTot=tot.ppto>0?tot.real/tot.ppto*100:0;
+      const rango = `${MES3[+dataMonths[0].slice(5)]}–${MES3[+dataMonths[dataMonths.length-1].slice(5)]}`;
+      ytdBlock = `
+      <div class="section-title" style="margin-bottom:7px">Cumplimiento acumulado <span style="font-weight:400;color:#94a3b8">· ${rango} ${y}</span></div>
+      <div class="card" style="margin-bottom:12px"><table>
+        <thead><tr><th>Tienda</th><th class="r">Presupuesto</th><th class="r">Real</th><th class="r">% Cump.</th></tr></thead>
+        <tbody>${rows}</tbody>
+        <tfoot style="background:#f8fafc"><tr><td style="font-weight:700;font-size:12px">Total</td><td class="r" style="font-weight:700;font-size:12px">${fmtCLP(tot.ppto)}</td><td class="r" style="font-weight:700;font-size:12px">${fmtCLP(tot.real)}</td><td class="r" style="font-weight:700;font-size:12px;color:${cumpColor(cTot)}">${cTot.toFixed(0)}%</td></tr></tfoot>
+      </table></div>`;
+    }
+
+    // Cumplimiento por trimestre
+    let quarterBlock = '';
+    {
+      const Qs=[[1,2,3],[4,5,6],[7,8,9],[10,11,12]];
+      const rows = Qs.map((mm,qi)=>{
+        let pp=0, rr=0, hasData=false, hasAll=true;
+        mm.forEach(m=>{
+          const ym=`${y}-${String(m).padStart(2,'0')}`;
+          const real = byMonth[ym]?.Total||0;
+          const bud = T_ORDEN.reduce((s,t)=>s+((PRESUPUESTO_VENTAS[ym]?.[t])||0),0);
+          if (real>0){ hasData=true; pp+=bud; rr+=real; } else { hasAll=false; }
+        });
+        if(!hasData) return `<tr style="opacity:0.4"><td style="font-weight:600">Q${qi+1}</td><td class="r">—</td><td class="r">—</td><td class="r" style="color:#cbd5e1">sin datos</td></tr>`;
+        const c=pp>0?rr/pp*100:0;
+        return `<tr><td style="font-weight:600">Q${qi+1}${hasAll?'':' <span style="font-size:9px;color:#94a3b8">parcial</span>'}</td><td class="r">${fmtCLP(pp)}</td><td class="r">${fmtCLP(rr)}</td><td class="r" style="color:${cumpColor(c)};font-weight:700">${c.toFixed(0)}%</td></tr>`;
+      }).join('');
+      quarterBlock = `
+      <div class="section-title" style="margin-bottom:7px">Cumplimiento por trimestre ${y}</div>
+      <p style="font-size:10px;color:#94a3b8;margin:-4px 0 7px">Cuenta solo meses con ventas registradas y su presupuesto correspondiente.</p>
+      <div class="card" style="margin-bottom:12px"><table>
+        <thead><tr><th>Trimestre</th><th class="r">Presupuesto</th><th class="r">Real</th><th class="r">% Cump.</th></tr></thead>
+        <tbody>${rows}</tbody></table></div>`;
+    }
+
+    // Comparativo vs 2025
+    let comp25Block = '';
+    if (dataMonths.length) {
+      let t26=0,t25=0;
+      const lastMonth = dataMonths[dataMonths.length-1];
+      const isCurPartial = lastMonth === currentYM;
+      const diasHoy = hoy.getDate();
+      const rows = T_ORDEN.map(t=>{
+        let r26=0,r25=0;
+        dataMonths.forEach(ym=>{
+          r26 += byMonth[ym][t]||0;
+          const v25 = (VENTAS_2025['2025-'+ym.slice(5)]?.[t])||0;
+          if (ym === currentYM && isCurPartial) {
+            // Prorratear 2025 al mismo día del mes que llevamos en 2026
+            const diasMes25 = new Date(2025, parseInt(ym.slice(5)), 0).getDate();
+            r25 += v25 * (diasHoy / diasMes25);
+          } else {
+            r25 += v25;
+          }
+        });
+        t26+=r26; t25+=r25;
+        const g = r25>0?((r26-r25)/r25*100):null;
+        const gTxt = g===null?'<span style="color:#94a3b8">nuevo</span>':`<span style="color:${g>=0?'#16a34a':'#dc2626'};font-weight:700">${g>=0?'+':''}${g.toFixed(0)}%</span>`;
+        return `<tr><td><div class="tienda-cell"><span class="dot" style="background:${T_COLOR[t]}"></span>${t}</div></td><td class="r">${fmtCLP(r26)}</td><td class="r" style="color:#94a3b8">${fmtCLP(r25)}</td><td class="r">${gTxt}</td></tr>`;
+      }).join('');
+      const gT = t25>0?((t26-t25)/t25*100):null;
+      const rangoFin = isCurPartial ? `${MES3[+lastMonth.slice(5)]} (al día ${diasHoy})` : MES3[+lastMonth.slice(5)];
+      const rango = `${MES3[+dataMonths[0].slice(5)]}–${rangoFin}`;
+      comp25Block = `
+      <div class="section-title" style="margin-bottom:7px">Comparativo vs 2025 <span style="font-weight:400;color:#94a3b8">· ${rango}</span></div>
+      <div class="card" style="margin-bottom:12px"><table>
+        <thead><tr><th>Tienda</th><th class="r">2026</th><th class="r">2025</th><th class="r">Var.</th></tr></thead>
+        <tbody>${rows}</tbody>
+        <tfoot style="background:#f8fafc"><tr><td style="font-weight:700;font-size:12px">Total</td><td class="r" style="font-weight:700;font-size:12px">${fmtCLP(t26)}</td><td class="r" style="font-weight:700;font-size:12px;color:#94a3b8">${fmtCLP(t25)}</td><td class="r" style="font-weight:700;font-size:12px">${gT===null?'—':(gT>=0?'+':'')+gT.toFixed(0)+'%'}</td></tr></tfoot>
+      </table></div>`;
+    }
+
+    // Gráfico presupuesto vs real (mensual)
+    const chartBlock = `
+      <div class="chart-card">
+        <div class="section-title">Presupuesto vs venta real — mensual ${y}</div>
+        <div style="height:190px"><canvas id="chart-ppto"></canvas></div>
+      </div>`;
+
+    // Tabla presupuesto todos los meses del año
+    const pptoMeses = Object.keys(PRESUPUESTO_VENTAS).filter(k => k.startsWith(y + '-')).sort();
+    let _pTot = 0, _rTot = 0, _rTotHasAny = false;
+    const pptoRows = pptoMeses.map(ym => {
+      const [,mNum] = ym.split('-');
+      const pp = T_ORDEN.reduce((s,t) => s + (PRESUPUESTO_VENTAS[ym][t]||0), 0);
+      const hasData = byMonth[ym] && (byMonth[ym].dias > 0 || byMonth[ym].isHistorico);
+      const real = hasData ? byMonth[ym].Total : 0;
+      const isCurrent = ym === currentYM;
+      const c = pp > 0 && hasData ? (real / pp * 100) : null;
+      const dif = hasData ? real - pp : null;
+      _pTot += pp;
+      if (hasData) { _rTot += real; _rTotHasAny = true; }
+      return `<tr style="${isCurrent ? 'background:#f0fdf4' : ''}">
+        <td style="font-size:12px;padding:5px 10px${isCurrent ? ';font-weight:700;color:#15803d' : ''}">${MESES[parseInt(mNum)-1]}</td>
+        <td class="r" style="font-size:12px;padding:5px 10px">${fmtCLP(pp)}</td>
+        <td class="r" style="font-size:12px;padding:5px 10px">${hasData ? fmtCLP(real) : '<span style="color:#e2e8f0">—</span>'}</td>
+        <td class="r" style="font-size:11px;padding:5px 10px;color:${dif===null?'#e2e8f0':dif>=0?'#16a34a':'#dc2626'}">${dif===null?'—':(dif>=0?'+':'')+fmtCLP(dif)}</td>
+        <td class="r" style="font-size:12px;padding:5px 10px;${isCurrent?'font-weight:700;':''};color:${c===null?'#94a3b8':cumpColor(c)}">${c===null?'—':c.toFixed(0)+'%'}</td>
+      </tr>`;
+    }).join('');
+    const _cTot = _pTot > 0 && _rTotHasAny ? _rTot / _pTot * 100 : null;
+    const pptoAnualBlock = `
+      <div class="section-title" style="margin-bottom:7px">Presupuesto ${y} — todos los meses</div>
+      <div class="card" style="margin-bottom:12px">
+        <table>
+          <thead><tr><th>Mes</th><th class="r">Presupuesto</th><th class="r">Real</th><th class="r">Diferencia</th><th class="r">% Cump.</th></tr></thead>
+          <tbody>${pptoRows}</tbody>
+          <tfoot style="background:#f8fafc"><tr>
+            <td style="font-weight:700;font-size:12px">Total año</td>
+            <td class="r" style="font-weight:700;font-size:12px">${fmtCLP(_pTot)}</td>
+            <td class="r" style="font-weight:700;font-size:12px">${_rTotHasAny ? fmtCLP(_rTot) : '—'}</td>
+            <td class="r" style="font-weight:700;font-size:11px;color:${_rTotHasAny ? (_rTot-_pTot>=0?'#16a34a':'#dc2626') : '#94a3b8'}">${_rTotHasAny ? ((_rTot-_pTot>=0?'+':'')+fmtCLP(_rTot-_pTot)) : '—'}</td>
+            <td class="r" style="font-weight:700;font-size:12px;color:${_cTot===null?'#94a3b8':cumpColor(_cTot)}">${_cTot===null?'—':_cTot.toFixed(0)+'%'}</td>
+          </tr></tfoot>
+        </table>
+      </div>`;
+
+    extrasBlock = proyBlock + rankBlock + ytdBlock + quarterBlock + chartBlock + pptoAnualBlock + comp25Block;
+  }
+
+  // ── Acordeón de ventas por mes con detalle diario ──
+  // Incluir todos los meses del año (con y sin datos reales)
+  const curYear = hoy.getFullYear();
+  const allYearMonths = Object.keys(PRESUPUESTO_VENTAS).filter(k => k.startsWith(curYear + '-')).sort();
+  const allMonthKeys = [...new Set([...monthKeys, ...allYearMonths])].sort();
+
+  const grandTotals = { Total: 0, ppto: 0 };
+  T_ORDEN.forEach(t => { grandTotals[t] = 0; });
+  allMonthKeys.forEach(ym => {
+    if (byMonth[ym]) {
+      T_ORDEN.forEach(t => { grandTotals[t] += byMonth[ym][t] || 0; });
+      grandTotals.Total += byMonth[ym].Total || 0;
+    }
+    if (PRESUPUESTO_VENTAS[ym]) {
+      grandTotals.ppto += T_ORDEN.reduce((s,t) => s + (PRESUPUESTO_VENTAS[ym][t]||0), 0);
+    }
+  });
+
+  const monthSections = allMonthKeys.map(ym => {
+    const m = byMonth[ym];
+    const hasData = m && (m.dias > 0 || m.isHistorico);
+    const [yStr, mNum] = ym.split('-');
+    const nombre = MESES[parseInt(mNum) - 1];
+    const isCurrent = ym === currentYM;
+    const isFuture = ym > currentYM;
+    const pp = PRESUPUESTO_VENTAS[ym] ? T_ORDEN.reduce((s,t) => s + (PRESUPUESTO_VENTAS[ym][t]||0), 0) : null;
+    const realTotal = hasData ? m.Total : 0;
+    const c = pp && hasData ? (realTotal / pp * 100) : null;
+
+    const acumTag = isCurrent ? ` <span style="font-size:9px;color:#16a34a;background:#dcfce7;padding:1px 5px;border-radius:8px;font-weight:700;margin-left:4px">acum.</span>` : '';
+    const futuroTag = isFuture ? ` <span style="font-size:9px;color:#94a3b8;background:#f1f5f9;padding:1px 5px;border-radius:8px;margin-left:4px">próximo</span>` : '';
+    const histTag = (m && m.isHistorico) ? ` <span style="font-size:9px;color:#7c3aed;background:#ede9fe;padding:1px 5px;border-radius:8px;margin-left:4px">hist.</span>` : '';
+
+    // Detalle diario (solo meses con datos del Apps Script, no históricos)
+    let dailyContent = '';
+    if (hasData && !m.isHistorico) {
+      const dayData = salesData.filter(d => d.date.startsWith(ym)).sort((a,b) => a.date.localeCompare(b.date));
+      const dailyRows = dayData.map(d => {
+        const dd = d.date.slice(8,10);
+        const dm = d.date.slice(5,7);
+        return `<tr style="background:${isCurrent ? '#f7fef9' : '#fafafa'}">
+          <td style="font-size:11px;padding:4px 10px 4px 22px;color:#64748b">${dd}/${dm}</td>
+          ${T_ORDEN.map(t => `<td class="r" style="font-size:11px;padding:4px 10px;color:${T_COLOR[t]}">${(d[t]||0)>0 ? fmtCLP(d[t]) : '<span style="color:#e2e8f0">—</span>'}</td>`).join('')}
+          <td class="r" style="font-size:11px;padding:4px 10px;font-weight:600">${fmtCLP(d.Total||0)}</td>
+        </tr>`;
+      }).join('');
+      dailyContent = `<table style="table-layout:fixed">
+        <colgroup><col style="width:auto"><col style="width:90px"><col style="width:90px"><col style="width:90px"><col style="width:100px"></colgroup>
+        <thead><tr>
+          <th style="background:#f8fafc">Fecha</th>
+          ${T_ORDEN.map(t=>`<th class="r" style="background:#f8fafc;color:${T_COLOR[t]}">${t.slice(0,3)}</th>`).join('')}
+          <th class="r" style="background:#f8fafc">Total</th>
+        </tr></thead>
+        <tbody>${dailyRows}</tbody>
+        <tfoot style="background:#f1f5f9"><tr>
+          <td style="font-weight:700;font-size:11px;padding:6px 10px 6px 22px">Total ${m.dias} días</td>
+          ${T_ORDEN.map(t=>`<td class="r" style="font-weight:700;font-size:11px;color:${m[t]>0?T_COLOR[t]:'#fca5a5'}">${m[t]>0?fmtCLP(m[t]):'sin datos'}</td>`).join('')}
+          <td class="r" style="font-weight:800;font-size:11px">${fmtCLP(m.Total)}</td>
+        </tr></tfoot>
+      </table>`;
+    }
+
+    return `<details${isCurrent ? ' open' : ''} style="border-bottom:1px solid #f1f5f9;${!hasData&&!isCurrent?'opacity:0.65':''}">
+      <summary style="padding:10px 12px;cursor:${hasData?'pointer':'default'};display:grid;grid-template-columns:1fr 80px 80px 80px 90px 50px;align-items:center;gap:4px;list-style:none;${isCurrent?'background:#f0fdf4':isFuture?'background:#fafafa':''}">
+        <span style="font-weight:700;font-size:13px">${nombre} ${yStr}${acumTag}${futuroTag}${histTag}</span>
+        ${T_ORDEN.map(t => `<span style="font-size:11px;color:${hasData&&(m[t]||0)>0?T_COLOR[t]:'#cbd5e1'};text-align:right;white-space:nowrap">${hasData&&(m[t]||0)>0?fmtCLP(m[t]):'—'}</span>`).join('')}
+        <span style="font-size:11px;text-align:right;white-space:nowrap;color:#94a3b8">${pp?fmtCLP(pp):'—'}</span>
+        <span style="font-size:11px;font-weight:700;text-align:right;color:${c===null?'#cbd5e1':cumpColor(c)}">${c===null?'—':c.toFixed(0)+'%'}</span>
+      </summary>
+      ${dailyContent}
+    </details>`;
+  }).join('');
+
+  const _gcTot = grandTotals.ppto > 0 ? grandTotals.Total / grandTotals.ppto * 100 : null;
+  const footerTotals = `<div style="padding:10px 12px;background:#f8fafc;display:grid;grid-template-columns:1fr 80px 80px 80px 90px 50px;align-items:center;gap:4px;border-top:2px solid #e2e8f0">
+    <span style="font-weight:700;font-size:12px">Total año</span>
+    ${T_ORDEN.map(t=>`<span style="font-size:12px;font-weight:700;color:${T_COLOR[t]};text-align:right;white-space:nowrap">${fmtCLP(grandTotals[t])}</span>`).join('')}
+    <span style="font-size:11px;font-weight:600;text-align:right;white-space:nowrap;color:#94a3b8">${fmtCLP(grandTotals.ppto)}</span>
+    <span style="font-size:11px;font-weight:700;text-align:right;color:${_gcTot===null?'#94a3b8':cumpColor(_gcTot)}">${_gcTot===null?'—':_gcTot.toFixed(0)+'%'}</span>
+  </div>`;
+
+  // ── Últimos 7 días ──
+  const dataRows = recent7.map(d => {
+    const [y,m,day] = d.date.split('-');
+    const tiendaCols = T_ORDEN.map(t =>
+      `<td class="r" style="font-size:12px">${(d[t]||0) > 0 ? fmtCLP(d[t]) : '<span style="color:#cbd5e1">—</span>'}</td>`
+    ).join('');
+    return `<tr>
+      <td style="font-size:12px">${day}/${m}/${y}</td>
+      ${tiendaCols}
+      <td class="r" style="font-weight:700;font-size:12px">${fmtCLP(d.Total||0)}</td>
+    </tr>`;
+  }).join('');
+
+  return `
+    <div class="section-title" style="margin-bottom:7px">Acumulado ${mesNombre} ${hoy.getFullYear()}</div>
+    <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:6px">
+      ${monthKPIs}
+    </div>
+    ${mTotals.Total > 0 ? `<div style="display:flex;border-radius:4px;overflow:hidden;margin-bottom:12px;height:6px">${barras}</div>` : ''}
+    ${presupuestoBlock}
+    ${extrasBlock}
+    <div class="section-title" style="margin-bottom:7px">Ventas por mes <span style="font-weight:400;color:#94a3b8;font-size:9px">▸ Cost · Dom · Trap · Meta · % Cump.</span></div>
+    <div class="card" style="margin-bottom:12px">
+      ${monthSections}
+      ${footerTotals}
+    </div>
+    <div class="chart-card">
+      <div class="section-title">Evolución — últimos ${Math.min(salesData.length,60)} días</div>
+      <div style="height:200px"><canvas id="chart-sales"></canvas></div>
+    </div>
+    <div class="section-title">Últimos 7 días</div>
+    <div class="card" style="margin-bottom:12px">
+      <table>
+        <thead><tr>
+          <th>Fecha</th>
+          ${T_ORDEN.map(t=>`<th class="r" style="color:${T_COLOR[t]}">${t.slice(0,3)}</th>`).join('')}
+          <th class="r">Total</th>
+        </tr></thead>
+        <tbody>${dataRows}</tbody>
+      </table>
+    </div>`;
+}
+
+// ========== SABORES POR TIENDA ==========
+function buildFlavorByTiendaSection(data) {
+  const { flavorByTienda } = data;
+  const sections = T_ORDEN.map(t => {
+    const flavors = Object.entries(flavorByTienda[t] || {})
+      .sort((a,b) => b[1]-a[1]).slice(0, 10);
+    if (flavors.length === 0) return '';
+    const totalT = flavors.reduce((s,[,kg])=>s+kg, 0);
+    const topKgT = flavors[0][1];
+    const rows = flavors.map(([name, kg], i) => {
+      const pct = (kg/topKgT*100).toFixed(0);
+      return `<tr>
+        <td style="padding:5px 10px">
+          <div style="display:flex;align-items:center;gap:7px">
+            <span class="rank-num">#${i+1}</span>
+            <span style="font-size:12px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${name}">${name}</span>
+            <div class="flavor-bar-wrap" style="max-width:60px"><div class="flavor-bar-fill" style="width:${pct}%;background:linear-gradient(90deg,${T_COLOR[t]},${T_COLOR[t]}88)"></div></div>
+          </div>
+        </td>
+        <td class="r" style="font-size:12px;padding:5px 10px">${kg.toFixed(1)} kg</td>
+      </tr>`;
+    }).join('');
+    return `<details open style="border-bottom:1px solid #f1f5f9">
+      <summary style="padding:10px 12px;cursor:pointer;display:flex;align-items:center;gap:8px;list-style:none;background:#f8fafc">
+        <span class="dot" style="background:${T_COLOR[t]}"></span>
+        <span style="font-weight:700;font-size:13px;flex:1">${t}</span>
+        <span style="font-size:11px;color:#64748b">${flavors.length} sabores · ${totalT.toFixed(0)} kg</span>
+      </summary>
+      <table><tbody>${rows}</tbody></table>
+    </details>`;
+  }).join('');
+  return `
+    <div class="section-title">Sabores más producidos por tienda</div>
+    <div class="card" style="margin-bottom:12px">${sections}</div>`;
+}
+
+// ========== SECCIÓN DE COSTOS ==========
+function buildCostSection(data) {
+  const { weekKey, semStats, totalKg } = data;
+  const { data: ref, exacto } = getCostoRef(weekKey);
+
+  const perTienda = T_ORDEN.map(t => {
+    const s = semStats[t];
+    const r = ref[t] || ref.Costanera;
+    const costoKg = r.costo_kg;
+    const costoTienda = s.kg * costoKg;
+    const mermaKg = exacto ? r.merma_kg : (s.kg * r.merma_pct / 100);
+    const mermaCLP = mermaKg * costoKg;
+    return { t, r, costoKg, costoTienda, mermaKg, mermaCLP };
+  });
+  const costoTotalSemana = perTienda.reduce((a,p) => a + p.costoTienda, 0);
+  const mermaTotalKg     = perTienda.reduce((a,p) => a + p.mermaKg, 0);
+  const mermaTotalCLP    = perTienda.reduce((a,p) => a + p.mermaCLP, 0);
+
+  const rows = perTienda.map(p => {
+    const mCol = mermaColor(p.r.merma_pct);
+    const pctCosto = costoTotalSemana > 0 ? (p.costoTienda / costoTotalSemana * 100) : 0;
+    return `<tr>
+      <td><div class="tienda-cell"><span class="dot" style="background:${T_COLOR[p.t]}"></span>${p.t}</div></td>
+      <td class="r" style="font-weight:600">${fmtCLP(p.costoKg)}</td>
+      <td class="r">${fmtCLP(p.costoTienda)}</td>
+      <td class="r">${p.mermaKg.toFixed(1)} kg<br><span style="font-size:10px;color:${mCol}">${p.r.merma_pct.toFixed(1)}%</span></td>
+      <td class="r" style="color:${mCol};font-weight:600">${fmtCLP(p.mermaCLP)}</td>
+      <td class="r" style="font-size:11px;color:#64748b">${pctCosto.toFixed(1)}%</td>
+    </tr>`;
+  }).join('');
+
+  const nota = exacto ? '' : `<p style="font-size:10px;color:#94a3b8;margin:-4px 0 7px">* Costos estimados basados en semana W21. Merma estimada con % histórico por tienda.</p>`;
+  const avgCostoKg = totalKg > 0 ? costoTotalSemana / totalKg : 0;
+
+  return `
+  <div class="kpi-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:12px">
+    <div class="kpi">
+      <div class="label">Costo total semana${exacto ? '' : '*'}</div>
+      <div class="value" style="font-size:17px">${fmtCLP(costoTotalSemana)}</div>
+      <div class="sub">estimado</div>
+    </div>
+    <div class="kpi">
+      <div class="label">Costo promedio/kg${exacto ? '' : '*'}</div>
+      <div class="value" style="font-size:17px">${fmtCLP(avgCostoKg)}</div>
+      <div class="sub">CLP por kg</div>
+    </div>
+    <div class="kpi">
+      <div class="label">Costo merma${exacto ? '' : '*'}</div>
+      <div class="value" style="font-size:17px;color:#dc2626">${fmtCLP(mermaTotalCLP)}</div>
+      <div class="sub">${mermaTotalKg.toFixed(1)} kg perdidos</div>
+    </div>
+  </div>
+  <div class="section-title">Costos y merma por tienda${exacto ? '' : ' (estimado)'}</div>
+  ${nota}
+  <div class="card" style="margin-bottom:12px">
+    <table>
+      <thead><tr>
+        <th>Tienda</th><th class="r">$/kg</th><th class="r">Costo total</th>
+        <th class="r">Merma kg / %</th><th class="r">Costo merma</th><th class="r">% costo</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot style="background:#f8fafc"><tr>
+        <td style="font-weight:700;font-size:12px">Total</td>
+        <td class="r" style="font-weight:700;font-size:12px">${fmtCLP(avgCostoKg)}</td>
+        <td class="r" style="font-weight:700;font-size:12px">${fmtCLP(costoTotalSemana)}</td>
+        <td class="r" style="font-weight:700;font-size:12px">${mermaTotalKg.toFixed(1)} kg</td>
+        <td class="r" style="font-weight:700;font-size:12px;color:#dc2626">${fmtCLP(mermaTotalCLP)}</td>
+        <td class="r" style="font-weight:700;font-size:12px">100%</td>
+      </tr></tfoot>
+    </table>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+    <div class="chart-card" style="margin-bottom:0">
+      <div class="section-title">Costo total por tienda</div>
+      <div style="height:150px"><canvas id="chart-costo-tienda"></canvas></div>
+    </div>
+    <div class="chart-card" style="margin-bottom:0">
+      <div class="section-title">Merma % por tienda <span style="font-weight:400;color:#94a3b8">· objetivo &lt; 4%</span></div>
+      <div style="height:150px"><canvas id="chart-merma-pct"></canvas></div>
+    </div>
+  </div>`;
+}
+
+// ========== RENDER ==========
+function render(data, prevData) {
+  currentData = data;
+  const { weekKey, isCurrentWeek, lunes, domingo, weekEnd, ayer,
+          semStats, ayerAcc, totalKg, dailyTotal,
+          flavorRanking, topKg, kgPerDia, bestDay, diasElapsed, dateRange } = data;
+
+  // Subtitle en header
+  if (isCurrentWeek) {
+    document.getElementById('header-sub').textContent =
+      `${capFirst(DIAS_ES[weekEnd.getDay()])} ${fmtDate(weekEnd)} · ${weekKey}`;
+  } else {
+    document.getElementById('header-sub').textContent =
+      `${weekKey}  ·  ${fmtDate(lunes)} – ${fmtDate(domingo)}`;
+  }
+
+  // Tienda líder
+  const bestTienda = T_ORDEN.reduce((a,b) => semStats[a].kg >= semStats[b].kg ? a : b);
+  const bestDayStr = bestDay
+    ? `Mejor día: <b>${capFirst(DIAS_ES[new Date(bestDay[0]+'T12:00:00').getDay()])}</b> con ${bestDay[1].toFixed(0)} kg. `
+    : '';
+
+  // Insight
+  let insightText;
+  if (prevData && prevData.kgPerDia > 0) {
+    const ratio = kgPerDia / prevData.kgPerDia;
+    const arrow = ratio >= 1 ? '📈' : '📉';
+    const paceStr = ratio >= 1
+      ? `Ritmo <b>${((ratio-1)*100).toFixed(0)}% por encima</b> del promedio diario de la semana anterior`
+      : `Ritmo <b>${((1-ratio)*100).toFixed(0)}% por debajo</b> del promedio diario de la semana anterior`;
+    insightText = `${arrow} ${paceStr}. ${bestDayStr}Líder: <b>${bestTienda}</b> (${semStats[bestTienda].kg.toFixed(0)} kg).`;
+  } else {
+    const verb = isCurrentWeek ? 'acumulados' : 'producidos en la semana';
+    insightText = `📊 ${totalKg.toFixed(0)} kg ${verb} en ${diasElapsed} día${diasElapsed!==1?'s':''}. ${bestDayStr}Líder: <b>${bestTienda}</b> (${semStats[bestTienda].kg.toFixed(0)} kg).`;
+  }
+
+  // KPIs
+  const reportados = T_ORDEN.filter(t => ayerAcc[t].reported).length;
+  const diasConActividad = T_ORDEN.reduce((mx,t)=>Math.max(mx,semStats[t].dias),0);
+  const paceColor = prevData && prevData.kgPerDia > 0
+    ? (kgPerDia/prevData.kgPerDia >= 0.9 ? '#16a34a' : kgPerDia/prevData.kgPerDia >= 0.7 ? '#d97706' : '#dc2626')
+    : '#1e293b';
+
+  // Fechas reales de hoy y ayer para labels en tabla
+  const todayStr = realToday().toISOString().slice(0,10);
+  const ayerStr = ayer.toISOString().slice(0,10);
+
+  // Filas tabla diaria
+  const dailyRows = dateRange.map(d => {
+    const dk = d.toISOString().slice(0,10);
+    const total = dailyTotal[dk] || 0;
+    const tiendaCols = T_ORDEN.map(t => {
+      const kg = semStats[t].daily?.[dk] || 0;
+      return `<td class="r" style="font-size:12px">${kg > 0 ? kg.toFixed(1) : '<span style="color:#cbd5e1">—</span>'}</td>`;
+    }).join('');
+    const label = isCurrentWeek && dk === todayStr ? 'Hoy'
+                : isCurrentWeek && dk === ayerStr  ? 'Ayer'
+                : capFirst(DIAS_ES[d.getDay()]);
+    return `<tr style="${total>0?'':'opacity:0.4'}">
+      <td style="font-size:12px;font-weight:${total>0?'600':'400'}">${label} <span style="color:#94a3b8;font-weight:400">${fmtDate(d)}</span></td>
+      ${tiendaCols}
+      <td class="r" style="font-weight:700;font-size:12px">${total > 0 ? total.toFixed(1) : '—'}</td>
+    </tr>`;
+  }).join('');
+
+  // Filas ayer / último día
+  const ayerLabel = isCurrentWeek
+    ? `Ayer — ${capFirst(DIAS_ES[ayer.getDay()])} ${fmtDate(ayer)}`
+    : `Último día — ${capFirst(DIAS_ES[ayer.getDay()])} ${fmtDate(ayer)}`;
+  const ayerRows = T_ORDEN.map(t => {
+    const d = ayerAcc[t];
+    const estado = d.reported
+      ? `<span class="reporto">✓</span> ${d.kg.toFixed(1)} kg`
+      : `<span class="sin-reporte">Sin reporte</span>`;
+    return `<tr>
+      <td><div class="tienda-cell"><span class="dot" style="background:${T_COLOR[t]}"></span>${t}</div></td>
+      <td class="r">${estado}</td>
+    </tr>`;
+  }).join('');
+
+  // Filas acumulado por tienda
+  const { data: refAcum, exacto: exactoAcum } = getCostoRef(weekKey);
+  const semanaRows = T_ORDEN.map(t => {
+    const s = semStats[t];
+    let dlt = '';
+    if (prevData?.semStats?.[t]) {
+      const delta = s.kg - prevData.semStats[t].kg;
+      dlt = `<span class="delta ${delta>=0?'pos':'neg'}">${delta>=0?'+':''}${delta.toFixed(0)} kg</span>`;
+    }
+    const pct = totalKg > 0 ? (s.kg/totalKg*100).toFixed(0) : 0;
+    const rAc = refAcum[t] || refAcum.Costanera;
+    const costoEstT = s.kg * (rAc.costo_kg || 4096);
+    const mermaEstT = exactoAcum ? rAc.merma_kg : (s.kg * (rAc.merma_pct || 0) / 100);
+    const mColT = mermaColor(rAc.merma_pct || 0);
+    return `<tr>
+      <td><div class="tienda-cell"><span class="dot" style="background:${T_COLOR[t]}"></span>${t}</div></td>
+      <td class="r">${s.kg.toFixed(1)} kg ${dlt}</td>
+      <td class="r">${s.dias} día${s.dias!==1?'s':''}</td>
+      <td class="r"><span class="badge blue">${pct}%</span></td>
+      <td class="r" style="font-size:12px">${s.kg > 0 ? fmtCLP(costoEstT) : '—'}</td>
+      <td class="r" style="font-size:12px;color:${mColT}">${s.kg > 0 ? mermaEstT.toFixed(1)+' kg' : '—'}</td>
+    </tr>`;
+  }).join('');
+
+  // Costo referencia para el ranking
+  const { data: costoRefRank } = getCostoRef(weekKey);
+  const avgCostoKgRank = T_ORDEN.reduce((s,t) => s + (costoRefRank[t]?.costo_kg||4096), 0) / T_ORDEN.length;
+  const costoTotalRank = totalKg * avgCostoKgRank;
+
+  // Ranking sabores
+  const flavorRows = flavorRanking.map(([name, stat], i) => {
+    const pctVol = (stat.kg / topKg * 100).toFixed(0);
+    const pctVolTotal = totalKg > 0 ? (stat.kg / totalKg * 100) : 0;
+    const costoSabor = stat.kg * avgCostoKgRank;
+    const pctCosto = costoTotalRank > 0 ? (costoSabor / costoTotalRank * 100) : 0;
+    return `<tr>
+      <td style="padding:5px 12px">
+        <div style="display:flex;align-items:center;gap:7px">
+          <span class="rank-num">#${i+1}</span>
+          <span style="font-size:12px;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${name}">${name}</span>
+          <div class="flavor-bar-wrap" style="max-width:80px"><div class="flavor-bar-fill" style="width:${pctVol}%"></div></div>
+        </div>
+      </td>
+      <td class="r" style="font-size:12px;white-space:nowrap">${stat.kg.toFixed(1)} kg</td>
+      <td class="r" style="font-size:11px;color:#64748b;white-space:nowrap">${pctVolTotal.toFixed(1)}%</td>
+      <td class="r" style="font-size:11px;color:#475569;white-space:nowrap">${fmtCLP(costoSabor)}</td>
+      <td class="r" style="font-size:11px;color:#64748b;white-space:nowrap">${pctCosto.toFixed(1)}%</td>
+    </tr>`;
+  }).join('');
+
+  // Comparativo vs semana anterior
+  let compSection = '';
+  if (prevData && prevData.totalKg > 0) {
+    const compRows = T_ORDEN.map(t => {
+      const curr = semStats[t].kg, prev = prevData.semStats[t]?.kg || 0;
+      const delta = curr - prev;
+      const color = delta >= 0 ? '#16a34a' : '#dc2626';
+      return `<tr>
+        <td><div class="tienda-cell"><span class="dot" style="background:${T_COLOR[t]}"></span>${t}</div></td>
+        <td class="r">${curr.toFixed(1)} kg</td>
+        <td class="r" style="color:#94a3b8">${prev.toFixed(1)} kg</td>
+        <td class="r" style="color:${color};font-weight:700">${delta>=0?'+':''}${delta.toFixed(0)} kg</td>
+      </tr>`;
+    }).join('');
+    const prevWKLabel = `${prevData.weekKey} · ${fmtDate(prevData.lunes)}–${fmtDate(prevData.domingo)}`;
+    compSection = `
+    <div class="section-title">Comparativo vs ${prevWKLabel}</div>
+    ${!isCurrentWeek && !prevData.isCurrentWeek ? '' : '<p style="font-size:10px;color:#94a3b8;margin:-4px 0 7px">* Comparación parcial — semana actual en curso</p>'}
+    <div class="card" style="margin-bottom:12px">
+      <table>
+        <thead><tr><th>Tienda</th><th class="r">Esta sem.</th><th class="r">S. ant.</th><th class="r">Δ</th></tr></thead>
+        <tbody>${compRows}</tbody>
+      </table>
+    </div>`;
+  }
+
+  const semRangeLabel = isCurrentWeek
+    ? `lun ${fmtDate(lunes)} – hoy`
+    : `${fmtDate(lunes)} – ${fmtDate(domingo)}`;
+
+  document.getElementById('main-content').innerHTML = `
+    <div class="larrs-prod-sec">
+    <!-- KPIs -->
+    <div class="kpi-grid">
+      <div class="kpi">
+        <div class="label">Total semana</div>
+        <div class="value">${totalKg.toFixed(0)}</div>
+        <div class="sub">kg producidos</div>
+      </div>
+      <div class="kpi">
+        <div class="label">Kg / día</div>
+        <div class="value" style="color:${paceColor}">${kgPerDia.toFixed(0)}</div>
+        <div class="sub">promedio</div>
+      </div>
+      <div class="kpi">
+        <div class="label">${isCurrentWeek ? 'Reportes ayer' : 'Días activos'}</div>
+        <div class="value">${isCurrentWeek ? reportados+'/3' : diasConActividad}</div>
+        <div class="sub">${isCurrentWeek ? 'tiendas' : 'con producción'}</div>
+      </div>
+      <div class="kpi">
+        <div class="label">Sabores</div>
+        <div class="value">${flavorRanking.length}</div>
+        <div class="sub">producidos</div>
+      </div>
+    </div>
+
+    <!-- Insight -->
+    <div class="insight">${insightText}</div>
+
+    <!-- Chart: kg por tienda -->
+    <div class="chart-card">
+      <div class="section-title">Kg por tienda</div>
+      <div style="height:160px"><canvas id="chart-tienda"></canvas></div>
+    </div>
+
+    <!-- Chart: producción diaria apilada -->
+    <div class="chart-card">
+      <div class="section-title">Producción diaria — ${fmtDate(lunes)} a ${fmtDate(weekEnd)}</div>
+      <div style="height:180px"><canvas id="chart-daily"></canvas></div>
+    </div>
+
+    <!-- Tabla diaria detallada -->
+    <div class="section-title">Detalle por día</div>
+    <div class="card" style="margin-bottom:12px">
+      <table>
+        <thead><tr>
+          <th>Día</th>
+          ${T_ORDEN.map(t=>`<th class="r" style="color:${T_COLOR[t]}">${t.slice(0,3)}</th>`).join('')}
+          <th class="r">Total</th>
+        </tr></thead>
+        <tbody>${dailyRows}</tbody>
+      </table>
+    </div>
+
+    <!-- Ayer / último día -->
+    <div class="section-title">${ayerLabel}</div>
+    <div class="card" style="margin-bottom:12px">
+      <table><tbody>${ayerRows}</tbody></table>
+    </div>
+
+    <!-- Acumulado por tienda -->
+    <div class="section-title">Acumulado (${semRangeLabel})</div>
+    <div class="card" style="margin-bottom:12px">
+      <table>
+        <thead><tr><th>Tienda</th><th class="r">kg semana</th><th class="r">Días</th><th class="r">% total</th><th class="r">Costo est.</th><th class="r">Merma est.</th></tr></thead>
+        <tbody>${semanaRows}</tbody>
+      </table>
+    </div>
+
+    <!-- Top sabores (dona) -->
+    <div class="chart-card">
+      <div class="section-title">Top sabores por volumen</div>
+      <div style="height:200px"><canvas id="chart-flavor-dough"></canvas></div>
+    </div>
+
+    <!-- Ranking sabores -->
+    <div class="section-title">Ranking de sabores producidos <span style="font-weight:400;color:#94a3b8">(ref. ${fmtCLP(avgCostoKgRank)}/kg)</span></div>
+    <div class="card" style="margin-bottom:12px">
+      <table>
+        <thead><tr>
+          <th>Sabor</th>
+          <th class="r">kg</th>
+          <th class="r">% vol</th>
+          <th class="r">Costo est.</th>
+          <th class="r">% costo</th>
+        </tr></thead>
+        <tbody>${flavorRows}</tbody>
+        <tfoot style="background:#f8fafc"><tr>
+          <td style="font-weight:700;font-size:11px;padding:6px 12px">Total ${flavorRanking.length} sabores</td>
+          <td class="r" style="font-weight:700;font-size:11px">${totalKg.toFixed(1)} kg</td>
+          <td class="r" style="font-weight:700;font-size:11px">100%</td>
+          <td class="r" style="font-weight:700;font-size:11px">${fmtCLP(costoTotalRank)}</td>
+          <td class="r" style="font-weight:700;font-size:11px">100%</td>
+        </tr></tfoot>
+      </table>
+    </div>
+
+    ${compSection}
+
+    ${buildFlavorAcumuladoSection()}
+
+    ${buildCostSection(data)}
+
+    ${buildProyeccionDemanda(data)}
+
+    ${buildMermaAcumulada()}
+
+    <div class="section-title">Evolución mensual de merma %</div>
+    <div class="chart-card" style="margin-bottom:12px">
+      <p style="font-size:10px;color:#94a3b8;margin:0 0 6px">% merma por tienda por mes. Línea roja = objetivo &lt; 4%.</p>
+      <div style="height:200px"><canvas id="chart-merma-evol"></canvas></div>
+    </div>
+
+    ${buildFlavorByTiendaSection(data)}
+
+    <div class="section-title">Producción vs ventas — últimos 12 meses</div>
+    <div class="chart-card" style="margin-bottom:12px">
+      <p style="font-size:10px;color:#94a3b8;margin:0 0 6px">Barras = kg producidos (eje izq.). Línea = ventas totales en $ (eje der.).</p>
+      <div style="height:220px"><canvas id="chart-prod-vs-ventas"></canvas></div>
+    </div>
+
+    </div><!-- end larrs-prod-sec -->
+    <div class="larrs-ventas-sec">
+    <!-- Ventas diarias por tienda -->
+    <div class="section-title">Ventas diarias por tienda</div>
+    <div id="sales-section-container">
+      ${(salesData && salesData.length > 0) ? buildSalesSection() : `<div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:18px;margin-bottom:12px;text-align:center;color:#94a3b8;font-size:12px;display:flex;align-items:center;justify-content:center;gap:10px">
+        <div class="big-spinner" style="width:16px;height:16px;border-width:2px"></div>
+        Cargando ventas…
+      </div>`}
+    </div>
+
+    </div><!-- end larrs-ventas-sec -->
+    <!-- Diagnóstico -->
+    <details style="font-size:10px;color:#94a3b8;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:6px 12px;margin-bottom:4px">
+      <summary style="cursor:pointer">🔍 Info diagnóstico</summary>
+      <pre style="margin-top:6px;white-space:pre-wrap;line-height:1.5">Semana: ${weekKey} | Filas CSV: ${data._rows} | Cols sabor: ${data._flavorCols}</pre>
+    </details>
+  `;
+
+  setTimeout(() => {
+    buildTiendaChart(data);
+    buildDailyChart(data);
+    buildFlavorDoughnut(data);
+    buildCostoTiendaChart(data);
+    buildMermaPctChart(data);
+    buildFlavorAcumChart();
+    buildMermaEvolucionChart();
+    buildProdVsVentasChart();
+    if (salesData && salesData.length > 0) { buildSalesChart(salesData); buildPptoChart(); }
+  }, 50);
+  document.getElementById('last-update').textContent = `Actualizado: ${new Date().toLocaleString('es-CL')}`;
+}
+
+// ========== SWITCH WEEK ==========
+function switchWeek(weekKey) {
+  if (!cachedCSV) return;
+  selectedWeekKey = weekKey;
+  document.getElementById('main-content').innerHTML =
+    `<div class="loading-overlay"><div class="big-spinner"></div><div>Procesando semana ${weekKey}…</div></div>`;
+  setTimeout(() => {
+    try {
+      const data = processCSV(cachedCSV, weekKey);
+      const prevKey = prevWeekKey(weekKey);
+      let prevData = null;
+      try { prevData = processCSV(cachedCSV, prevKey); } catch(e) {}
+      render(data, prevData);
+    } catch(e) {
+      document.getElementById('main-content').innerHTML =
+        `<div class="error-box">Error procesando semana ${weekKey}: ${e.message}</div>`;
+    }
+  }, 30);
+}
+
+// ========== DESCARGA CSV ==========
+function downloadCSV() {
+  if (!currentData) return;
+  const d = currentData;
+  const lines = [];
+
+  lines.push(`Reporte de producción · Heladería Larrs`);
+  lines.push(`Semana,${d.weekKey}`);
+  lines.push(`Período,${fmtDate(d.lunes)} – ${fmtDate(d.weekEnd)}`);
+  lines.push(`Total kg,${d.totalKg.toFixed(1)}`);
+  lines.push(`Kg/día promedio,${d.kgPerDia.toFixed(1)}`);
+  lines.push(``);
+
+  lines.push(`RESUMEN POR TIENDA`);
+  lines.push(`Tienda,Kg semana,Días con producción,% del total`);
+  for (const t of T_ORDEN) {
+    const s = d.semStats[t];
+    const pct = d.totalKg > 0 ? (s.kg/d.totalKg*100).toFixed(1) : '0.0';
+    lines.push(`${t},${s.kg.toFixed(1)},${s.dias},${pct}%`);
+  }
+  lines.push(``);
+
+  lines.push(`PRODUCCIÓN DIARIA`);
+  lines.push(`Fecha,Día de semana,${T_ORDEN.join(',')},Total`);
+  for (const date of d.dateRange) {
+    const dk = date.toISOString().slice(0,10);
+    const total = d.dailyTotal[dk] || 0;
+    const tiendaVals = T_ORDEN.map(t => {
+      const kg = d.semStats[t].daily?.[dk] || 0;
+      return kg > 0 ? kg.toFixed(1) : '0';
+    });
+    lines.push(`${dk},${capFirst(DIAS_ES[date.getDay()])},${tiendaVals.join(',')},${total > 0 ? total.toFixed(1) : '0'}`);
+  }
+  lines.push(``);
+
+  lines.push(`RANKING DE SABORES`);
+  lines.push(`Ranking,Sabor,Kg producidos`);
+  d.flavorRanking.forEach(([name, stat], i) => {
+    lines.push(`${i+1},"${name.replace(/"/g,'""')}",${stat.kg.toFixed(1)}`);
+  });
+
+  const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `produccion_larrs_${d.weekKey}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// ========== CARGA DE VENTAS (con reintentos) ==========
+async function loadSales(retries) {
+  retries = (retries === undefined) ? 3 : retries;
+  const cont = () => document.getElementById('sales-section-container');
+  const spinner = `<div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:18px;margin-bottom:12px;text-align:center;color:#94a3b8;font-size:12px;display:flex;align-items:center;justify-content:center;gap:10px"><div class="big-spinner" style="width:16px;height:16px;border-width:2px"></div> Cargando ventas…</div>`;
+  { const c = cont(); if (c && !(salesData && salesData.length)) c.innerHTML = spinner; }
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const r = await fetch(APPS_SCRIPT_URL + '&action=getSales');
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const parsed = JSON.parse(await r.text());
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        salesData = parsed;
+        const c = cont();
+        if (c) { c.innerHTML = buildSalesSection(); setTimeout(() => { buildSalesChart(salesData); buildPptoChart(); buildProdVsVentasChart(); }, 50); }
+        return;
+      }
+      throw new Error('respuesta vacía');
+    } catch (e) {
+      if (attempt < retries) { await new Promise(res => setTimeout(res, 1500)); continue; }
+      const c = cont();
+      if (c) c.innerHTML = '<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:14px;margin-bottom:12px;font-size:12px;color:#dc2626;text-align:center">No se pudieron cargar las ventas (' + (e.message || 'error') + '). <button onclick="loadSales()" style="margin-left:8px;padding:4px 12px;border:1px solid #fecaca;border-radius:6px;background:#fff;color:#dc2626;cursor:pointer;font-weight:600">Reintentar</button></div>';
+    }
+  }
+}
+
+// ========== CARGA INICIAL ==========
+async function loadData() {
+  const btn = document.getElementById('refresh-btn');
+  btn.disabled = true;
+  document.getElementById('refresh-icon').innerHTML = '<span class="spinner"></span>';
+  document.getElementById('main-content').innerHTML =
+    `<div class="loading-overlay"><div class="big-spinner"></div><div>Descargando planilla...</div></div>`;
+  document.getElementById('toolbar').style.display = 'none';
+
+  try {
+    if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL === 'PEGAR_URL_AQUI') {
+      throw new Error('Configura APPS_SCRIPT_URL en el código con la URL de tu Google Apps Script.');
+    }
+
+    const response = await fetch(APPS_SCRIPT_URL);
+    if (!response.ok) throw new Error('Error al conectar con la planilla (HTTP ' + response.status + ')');
+    const csvText = await response.text();
+
+    if (!csvText || !csvText.includes(',')) {
+      throw new Error('No se pudo obtener datos de la planilla. Verifica el token y la URL.');
+    }
+
+    cachedCSV = csvText;
+
+    // Poblar selector de semanas
+    const allWeeks = getAvailableWeeks(csvText);
+    const currentWK = isoWeekKey(realToday());
+    const select = document.getElementById('week-select');
+    select.innerHTML = allWeeks.map(wk =>
+      `<option value="${wk}">${weekLabel(wk, wk === currentWK)}</option>`
+    ).join('');
+
+    // Semana a mostrar: si la semana actual no tiene datos, usar la más reciente que sí tenga
+    if (!selectedWeekKey || !allWeeks.includes(selectedWeekKey)) {
+      selectedWeekKey = allWeeks.includes(currentWK) ? currentWK : allWeeks[0];
+    }
+    // Si la semana actual existe pero no tiene producción, ir a la semana anterior (índice 1)
+    if (selectedWeekKey === currentWK && allWeeks.length > 0) {
+      try {
+        const probe = processCSV(csvText, currentWK);
+        if (probe.totalKg === 0 && allWeeks.length > 1) {
+          selectedWeekKey = allWeeks[1]; // índice 1 = segunda más reciente
+        }
+      } catch(e) {
+        selectedWeekKey = allWeeks[0];
+      }
+    }
+    select.value = selectedWeekKey;
+
+    document.getElementById('toolbar').style.display = '';
+
+    // Procesar y renderizar
+    const data = processCSV(csvText, selectedWeekKey);
+    let prevData = null;
+    try { prevData = processCSV(csvText, prevWeekKey(selectedWeekKey)); } catch(e) {}
+    render(data, prevData);
+
+    // Cargar ventas (con reintentos) ahora que el contenedor existe
+    loadSales();
+
+  } catch(err) {
+    document.getElementById('main-content').innerHTML = `
+      <div class="error-box">
+        <div style="font-size:24px;margin-bottom:8px">⚠️</div>
+        <div style="font-weight:700;margin-bottom:4px">Error al cargar datos</div>
+        <div style="font-size:12px;color:#991b1b">${err.message}</div>
+      </div>`;
+    document.getElementById('last-update').textContent = `Error: ${new Date().toLocaleString('es-CL')}`;
+  } finally {
+    btn.disabled = false;
+    document.getElementById('refresh-icon').textContent = '↻';
+  }
+}
+
+loadData();
+</script>
+</body>
+</html>

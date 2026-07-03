@@ -6,7 +6,11 @@ import { logout } from "@/app/login/actions";
 import { createUser, updateUser } from "./actions";
 import { DeleteButton } from "./DeleteButton";
 
-export default async function AdminPage() {
+export default async function AdminPage({ searchParams }: { searchParams: Promise<Record<string, string>> }) {
+  const params = await searchParams;
+  const okMsg = params.ok ? `✓ ${decodeURIComponent(params.ok)} actualizado correctamente` : null;
+  const errMsg = params.err ? decodeURIComponent(params.err) : null;
+
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
@@ -61,6 +65,8 @@ export default async function AdminPage() {
       </div>
 
       <div className="mx-auto w-full max-w-2xl px-4 py-6 space-y-6">
+        {okMsg && <div className="rounded-xl bg-green-50 border border-green-200 px-4 py-3 text-sm font-medium text-green-700">{okMsg}</div>}
+        {errMsg && <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm font-medium text-red-700">⚠ {errMsg}</div>}
 
         {/* Crear usuario */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">

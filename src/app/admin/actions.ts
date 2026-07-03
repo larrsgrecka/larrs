@@ -41,6 +41,7 @@ export async function createUser(formData: FormData) {
 }
 
 export async function updateUser(formData: FormData) {
+  const { redirect } = await import("next/navigation");
   const actor = await assertAdmin();
   const supabase = await createClient();
   const admin = createAdminClient();
@@ -51,15 +52,23 @@ export async function updateUser(formData: FormData) {
   const tienda = (formData.get("tienda") as string) || null;
   const password = formData.get("password") as string;
 
-  const { data: target } = await admin.auth.admin.getUserById(id);
-  await supabase.from("profiles").update({ name, role, tienda }).eq("id", id);
+  try {
+    const { data: target } = await admin.auth.admin.getUserById(id);
+    const { error: profileError } = await supabase.from("profiles").update({ name, role, tienda }).eq("id", id);
+    if (profileError) throw new Error("Error actualizando perfil: " + profileError.message);
 
-  if (password) {
-    await admin.auth.admin.updateUserById(id, { password });
+    if (password) {
+      const { error: pwError } = await admin.auth.admin.updateUserById(id, { password });
+      if (pwError) throw new Error("Error cambiando contraseña: " + pwError.message);
+    }
+
+    await logAudit({ actorId: actor.id, actorEmail: actor.name ?? undefined, action: "update_user", targetEmail: target.user?.email });
+    revalidatePath("/admin");
+    redirect("/admin?ok=" + encodeURIComponent(name));
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : "Error desconocido";
+    redirect("/admin?err=" + encodeURIComponent(msg));
   }
-
-  await logAudit({ actorId: actor.id, actorEmail: actor.name ?? undefined, action: "update_user", targetEmail: target.user?.email });
-  revalidatePath("/admin");
 }
 
 export async function deleteUser(formData: FormData) {

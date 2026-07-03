@@ -39,7 +39,7 @@ window.larrsAgregarProducto = function (sku, desc, cant, um, grupo, btnEl) {
   var ex = window._ordExtra;
   if (ex.find(function (x) { return x.sku === sku; })) {
     if (btnEl) { btnEl.textContent = 'Ya existe'; btnEl.disabled = true; }
-    return;
+    return 'exists';
   }
   ex.push({ sku: sku, desc: desc, sem: parseFloat(cant) || 1, um: um, grupo: grupo || 'Accesorios' });
   if (typeof render === 'function') render();
@@ -49,6 +49,7 @@ window.larrsAgregarProducto = function (sku, desc, cant, um, grupo, btnEl) {
     btnEl.style.background = '#86efac';
     btnEl.style.color = '#14532d';
   }
+  return 'added';
 };
 
 window.larrsParseAI = function (text) {

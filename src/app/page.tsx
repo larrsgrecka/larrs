@@ -68,6 +68,22 @@ export default async function Home() {
           </Link>
 
           <Link
+            href="/analisis-ventas"
+            className="block overflow-hidden rounded-2xl shadow-lg transition-transform active:scale-[0.98]"
+          >
+            <div className="flex items-center gap-4 bg-white p-5">
+              <span className="text-3xl">📊</span>
+              <div className="flex-1">
+                <p className="text-lg font-bold text-slate-800">Análisis de ventas</p>
+                <p className="text-sm text-gray-500">
+                  Comparativo mensual y anual por tienda
+                </p>
+              </div>
+              <span className="text-xl text-gray-400">›</span>
+            </div>
+          </Link>
+
+          <Link
             href="/pedidos"
             className="block overflow-hidden rounded-2xl shadow-md transition-transform active:scale-[0.98]"
           >

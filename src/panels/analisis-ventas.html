@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Análisis de ventas · Larrs</title>
+<style>
+:root { color-scheme: light; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f2f7; color: #1e293b; padding: 14px; font-size: 14px; }
+.container { max-width: 820px; margin: 0 auto; }
+.header { background: linear-gradient(135deg, #111418, #1e293b); border-radius: 12px; padding: 18px 22px; margin-bottom: 12px; color: #fff; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.logo-img { height: 44px; width: auto; display: block; }
+.header .title { font-size: 15px; font-weight: 700; color: #e2e8f0; margin-top: 10px; }
+.header .subtitle { font-size: 12px; color: #94a3b8; margin-top: 2px; }
+.toolbar { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; display: flex; align-items: flex-end; gap: 14px; flex-wrap: wrap; }
+.toolbar label { display: block; font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 4px; }
+.toolbar select, .toolbar input { font-size: 13px; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 9px; color: #1e293b; background: #f8fafc; }
+.btn { background: #2563eb; color: #fff; border: none; border-radius: 6px; padding: 7px 14px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.drillbar { display: none; align-items: center; gap: 10px; margin-bottom: 12px; }
+.btn-back { background: #64748b; color: #fff; border: none; border-radius: 6px; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.drill-label { font-size: 13px; font-weight: 700; color: #334155; }
+.kpis { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+.kpi { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 16px; flex: 1; min-width: 160px; }
+.kpi .v { font-size: 24px; font-weight: 800; }
+.kpi .l { font-size: 10px; color: #64748b; text-transform: uppercase; letter-spacing: .05em; margin-top: 2px; margin-bottom: 8px; }
+.badge { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 8px; margin: 2px 4px 0 0; }
+.badge.up { color: #16a34a; background: #dcfce7; }
+.badge.down { color: #dc2626; background: #fee2e2; }
+.badge.sindatos { color: #94a3b8; background: #f1f5f9; }
+.card { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; margin-bottom: 12px; }
+.chart-card { background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:14px 16px; margin-bottom:12px; }
+.chart-wrap { height: 220px; }
+.section-title { font-size:11px; font-weight:700; color:#334155; text-transform:uppercase; letter-spacing:.06em; margin:0 0 8px; padding: 12px 12px 0; }
+.table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+table { width: 100%; min-width: 540px; border-collapse: collapse; }
+th { padding: 8px 10px; text-align: left; font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .04em; background: #f8fafc; }
+th.r, td.r { text-align: right; }
+td { padding: 7px 10px; border-top: 1px solid #f1f5f9; font-size: 13px; vertical-align: middle; }
+tr.drill-row { cursor: pointer; }
+tr.drill-row:hover td { background: #f8fafc; }
+.empty { padding: 30px; text-align: center; color: #94a3b8; font-size: 13px; }
+.admin-link { display: inline-block; margin-top: 4px; text-decoration: none; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.js" integrity="sha384-iU8HYtnGQ8Cy4zl7gbNMOhsDTTKX02BTXptVP/vqAWIaTfM7isw76iyZCsjL2eVi" crossorigin="anonymous"></script>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div>
+      <img class="logo-img" src="https://heladerialarrs.cl/cdn/shop/t/2/assets/logo-footer.png?v=41616879924709803011609269083" alt="Larrs">
+      <div class="title">Análisis de ventas</div>
+      <div class="subtitle" id="subtitulo">Cargando…</div>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <div>
+      <label>Tienda</label>
+      <select id="selTienda"></select>
+    </div>
+    <div>
+      <label>Mes</label>
+      <input type="month" id="inpMes">
+    </div>
+    <div>
+      <label>Ver por</label>
+      <select id="selNivel">
+        <option value="grupo">Grupo de artículos</option>
+        <option value="articulo">Artículo</option>
+      </select>
+    </div>
+    <div id="familiaWrap" style="display:none;">
+      <label>Familia</label>
+      <select id="selFamilia"></select>
+    </div>
+    <button class="btn" id="btnVer">Ver</button>
+  </div>
+
+  <div class="drillbar" id="drillBar">
+    <button class="btn-back" id="btnVolver">← Volver a totales</button>
+    <span class="drill-label" id="drillLabel"></span>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi">
+      <div class="l">Unidades vendidas</div>
+      <div class="v" id="kpiCantidad">—</div>
+      <div id="badgesCantidad"></div>
+    </div>
+    <div class="kpi">
+      <div class="l">Venta neta</div>
+      <div class="v" id="kpiImporte">—</div>
+      <div id="badgesImporte"></div>
+    </div>
+  </div>
+
+  <div class="chart-card">
+    <p class="section-title" style="padding:0;">Tendencia mensual — unidades</p>
+    <div class="chart-wrap"><canvas id="chartCantidad"></canvas></div>
+  </div>
+  <div class="chart-card">
+    <p class="section-title" style="padding:0;">Tendencia mensual — venta neta</p>
+    <div class="chart-wrap"><canvas id="chartImporte"></canvas></div>
+  </div>
+
+  <div class="card">
+    <p class="section-title">Top familias del mes</p>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Familia</th>
+            <th class="r">Unidades</th>
+            <th class="r">Venta neta</th>
+            <th class="r">vs mes ant.</th>
+            <th class="r">vs año ant.</th>
+          </tr>
+        </thead>
+        <tbody id="tblFamilias"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <p class="section-title" id="tituloDetalle">Detalle del mes (top 15)</p>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Nombre</th>
+            <th class="r">Unidades</th>
+            <th class="r">Venta neta</th>
+            <th class="r">vs mes ant.</th>
+            <th class="r">vs año ant.</th>
+          </tr>
+        </thead>
+        <tbody id="tblBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="adminUpload" style="display:none;">
+    <a class="btn admin-link" href="/admin/analisis-ventas">📊 Importar ventas por tienda</a>
+  </div>
+</div>
+
+<script>
+const TIENDA_FIJA = window._LARRS_TIENDA;
+const IS_ADMIN = !!window._LARRS_IS_ADMIN;
+const TIENDAS = ["Costanera", "Dominicos", "Trapenses"];
+const FAMILIAS = ["ARTICULOS", "BEBIDAS", "BOLLERIA", "CAFETERIA", "CHOCOLATERIA", "GALLETERIA", "HELADERIA", "MATERIAS PRIMAS", "PANADERIA", "PASTELERIA"];
+
+let drillCodigo = null;
+let drillNombre = null;
+let chartCantidad = null;
+let chartImporte = null;
+
+function fmtN(n) { return n == null ? '—' : Math.round(n).toLocaleString('es-CL'); }
+function fmtCLP(n) { return n == null ? '—' : '$' + Math.round(n).toLocaleString('es-CL'); }
+
+function badge(pct, label) {
+  const prefix = label ? label + ': ' : '';
+  if (pct == null) return '<span class="badge sindatos">' + prefix + 'sin datos</span>';
+  const cls = pct >= 0 ? 'up' : 'down';
+  const arrow = pct >= 0 ? '▲' : '▼';
+  return '<span class="badge ' + cls + '">' + prefix + arrow + ' ' + Math.abs(pct).toFixed(1) + '%</span>';
+}
+
+function badgeUnidades(base, actual, label) {
+  const prefix = label ? label + ': ' : '';
+  if (base == null || actual == null) return '<span class="badge sindatos">' + prefix + 'sin datos</span>';
+  return badgeDiffUnidades(actual - base, label);
+}
+
+function badgeDiffUnidades(diff, label) {
+  const prefix = label ? label + ': ' : '';
+  if (diff == null) return '<span class="badge sindatos">' + prefix + 'sin datos</span>';
+  const cls = diff >= 0 ? 'up' : 'down';
+  const arrow = diff >= 0 ? '▲' : '▼';
+  const diffTxt = Math.round(Math.abs(diff)).toLocaleString('es-CL');
+  return '<span class="badge ' + cls + '">' + prefix + arrow + ' ' + diffTxt + ' un.</span>';
+}
+
+function setupSelects() {
+  const selTienda = document.getElementById('selTienda');
+  if (TIENDA_FIJA) {
+    selTienda.innerHTML = '<option value="' + TIENDA_FIJA + '">' + TIENDA_FIJA + '</option>';
+    selTienda.disabled = true;
+  } else {
+    let opts = TIENDAS.map(function (t) { return '<option value="' + t + '">' + t + '</option>'; }).join('');
+    opts += '<option value="">Todas</option>';
+    selTienda.innerHTML = opts;
+  }
+  const inpMes = document.getElementById('inpMes');
+  inpMes.value = new Date().toISOString().slice(0, 7);
+
+  const selFamilia = document.getElementById('selFamilia');
+  selFamilia.innerHTML = '<option value="">Todas</option>' +
+    FAMILIAS.map(function (f) { return '<option value="' + f + '">' + f + '</option>'; }).join('');
+
+  if (IS_ADMIN) document.getElementById('adminUpload').style.display = 'block';
+}
+
+function actualizarVisibilidadFamilia() {
+  const nivel = document.getElementById('selNivel').value;
+  document.getElementById('familiaWrap').style.display = nivel === 'articulo' ? 'block' : 'none';
+}
+
+async function cargar() {
+  const partes = document.getElementById('inpMes').value.split('-').map(Number);
+  const anio = partes[0], mes = partes[1];
+  if (!anio || !mes) return;
+  const nivel = document.getElementById('selNivel').value;
+  const tienda = document.getElementById('selTienda').value;
+  const familia = document.getElementById('selFamilia').value;
+
+  const params = new URLSearchParams({ nivel: nivel, anio: String(anio), mes: String(mes) });
+  if (tienda) params.set('tienda', tienda);
+  if (nivel === 'articulo' && familia) params.set('familia', familia);
+  if (drillCodigo) params.set('codigo', drillCodigo);
+
+  document.getElementById('subtitulo').textContent = 'Cargando…';
+  try {
+    const res = await fetch('/api/ventas-analisis?' + params.toString());
+    const json = await res.json();
+    if (!res.ok || json.error) {
+      document.getElementById('subtitulo').textContent = json.error || 'Error al cargar';
+      return;
+    }
+    render(json);
+  } catch (e) {
+    document.getElementById('subtitulo').textContent = 'Error de conexión';
+  }
+}
+
+function render(d) {
+  document.getElementById('subtitulo').textContent =
+    d.meta.tienda + ' · ' + d.meta.mesNombre + ' ' + d.meta.anio +
+    (d.meta.familia ? ' · ' + d.meta.familia : '') +
+    (d.meta.codigo ? ' · ' + d.meta.codigo : '');
+
+  document.getElementById('kpiCantidad').textContent = fmtN(d.actual && d.actual.cantidad);
+  document.getElementById('kpiImporte').textContent = fmtCLP(d.actual && d.actual.importe_neto);
+  document.getElementById('badgesCantidad').innerHTML =
+    badgeUnidades(d.mesAnterior && d.mesAnterior.cantidad, d.actual && d.actual.cantidad, 'Mes ant.') +
+    badgeUnidades(d.anioAnterior && d.anioAnterior.cantidad, d.actual && d.actual.cantidad, 'Año ant.');
+  document.getElementById('badgesImporte').innerHTML = badge(d.mom.importe_pct, 'Mes ant.') + badge(d.yoy.importe_pct, 'Año ant.');
+
+  const labels = d.serieAnioActual.map(function (x) { return x.label; });
+  renderChart(
+    'chartCantidad', 'cantidad', labels,
+    d.serieAnioActual.map(function (x) { return x.cantidad; }),
+    d.serieAnioAnterior.map(function (x) { return x.cantidad; }),
+    d.meta.anio, false
+  );
+  renderChart(
+    'chartImporte', 'importe', labels,
+    d.serieAnioActual.map(function (x) { return x.importe_neto; }),
+    d.serieAnioAnterior.map(function (x) { return x.importe_neto; }),
+    d.meta.anio, true
+  );
+
+  const drillBar = document.getElementById('drillBar');
+  if (d.meta.codigo) {
+    drillBar.style.display = 'flex';
+    document.getElementById('drillLabel').textContent = drillNombre || d.meta.codigo;
+  } else {
+    drillBar.style.display = 'none';
+  }
+
+  document.getElementById('tituloDetalle').textContent =
+    'Detalle del mes — ' + (d.meta.nivel === 'articulo' ? 'artículos' : 'grupos') + ' (top 15)';
+
+  renderTabla('tblBody', d.desglose, true);
+}
+
+function renderTabla(tbodyId, desglose, clickable) {
+  const tbody = document.getElementById(tbodyId);
+  if (!desglose || desglose.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" class="empty">Sin datos para este mes</td></tr>';
+    return;
+  }
+  tbody.innerHTML = desglose.map(function (r) {
+    const cls = clickable ? ' class="drill-row"' : '';
+    return '<tr' + cls + ' data-codigo="' + r.codigo.replace(/"/g, '&quot;') + '" data-nombre="' + r.nombre.replace(/"/g, '&quot;') + '">' +
+      '<td>' + r.nombre + '</td>' +
+      '<td class="r">' + fmtN(r.cantidad) + '</td>' +
+      '<td class="r">' + fmtCLP(r.importe_neto) + '</td>' +
+      '<td class="r">' + badgeDiffUnidades(r.cantidad_mom, '') + '</td>' +
+      '<td class="r">' + badgeDiffUnidades(r.cantidad_yoy, '') + '</td>' +
+      '</tr>';
+  }).join('');
+
+  if (!clickable) return;
+  Array.prototype.forEach.call(tbody.querySelectorAll('.drill-row'), function (tr) {
+    tr.onclick = function () {
+      drillCodigo = tr.getAttribute('data-codigo');
+      drillNombre = tr.getAttribute('data-nombre');
+      cargar();
+    };
+  });
+}
+
+async function cargarFamilias() {
+  const partes = document.getElementById('inpMes').value.split('-').map(Number);
+  const anio = partes[0], mes = partes[1];
+  if (!anio || !mes) return;
+  const tienda = document.getElementById('selTienda').value;
+
+  const params = new URLSearchParams({ nivel: 'grupo', anio: String(anio), mes: String(mes) });
+  if (tienda) params.set('tienda', tienda);
+
+  try {
+    const res = await fetch('/api/ventas-analisis?' + params.toString());
+    const json = await res.json();
+    if (!res.ok || json.error) return;
+    renderTabla('tblFamilias', json.desglose, false);
+  } catch (e) {
+    // silencioso — la tabla principal ya muestra errores de conexión
+  }
+}
+
+function renderChart(canvasId, kind, labels, actual, anterior, anioSel, esMoneda) {
+  const ctx = document.getElementById(canvasId);
+  const existing = kind === 'cantidad' ? chartCantidad : chartImporte;
+  if (existing) existing.destroy();
+
+  const chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [
+        { label: String(anioSel), data: actual, borderColor: '#2563eb', backgroundColor: '#2563eb22', tension: .3, fill: true, spanGaps: true },
+        { label: String(anioSel - 1), data: anterior, borderColor: '#94a3b8', borderDash: [5, 4], tension: .3, fill: false, spanGaps: true },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: true, position: 'top', labels: { boxWidth: 12, font: { size: 11 } } },
+        tooltip: { callbacks: { label: function (c) { return ' ' + (esMoneda ? fmtCLP(c.parsed.y) : fmtN(c.parsed.y)); } } },
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: { callback: function (v) { return esMoneda ? '$' + (v / 1000).toFixed(0) + 'k' : v; } },
+        },
+      },
+    },
+  });
+
+  if (kind === 'cantidad') chartCantidad = chart; else chartImporte = chart;
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+  setupSelects();
+  actualizarVisibilidadFamilia();
+  document.getElementById('btnVer').onclick = function () { drillCodigo = null; cargar(); cargarFamilias(); };
+  document.getElementById('selNivel').onchange = function () { drillCodigo = null; actualizarVisibilidadFamilia(); cargar(); };
+  document.getElementById('selTienda').onchange = function () { drillCodigo = null; cargar(); cargarFamilias(); };
+  document.getElementById('selFamilia').onchange = function () { drillCodigo = null; cargar(); };
+  document.getElementById('btnVolver').onclick = function () { drillCodigo = null; cargar(); };
+  cargar();
+  cargarFamilias();
+});
+</script>
+</body>
+</html>

@@ -177,6 +177,18 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
           <span className="text-gray-300">›</span>
         </a>
 
+        <a
+          href="/admin/analisis-ventas"
+          className="flex items-center gap-4 bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-4 hover:bg-gray-50 transition-colors"
+        >
+          <span className="text-2xl">📈</span>
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-slate-700">Importar ventas por tienda</p>
+            <p className="text-xs text-gray-400">Subir Excel transaccional para el panel de análisis de ventas</p>
+          </div>
+          <span className="text-gray-300">›</span>
+        </a>
+
         {/* Registro de auditoría */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="px-5 py-3 border-b border-gray-100">

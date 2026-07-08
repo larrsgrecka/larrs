@@ -105,9 +105,20 @@ function mondayOf(d){ const x=new Date(d); x.setHours(0,0,0,0); const day=x.getD
 function fmtD(d){ return d.getDate()+' '+MES3[d.getMonth()+1]; }
 function fmtCLP(v){ return '$'+Math.round(v).toLocaleString('es-CL'); }
 function isSameDay(a,b){ return a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate(); }
-function stepWeek(n){ weekMonday.setDate(weekMonday.getDate()+n*7); weekMonday=new Date(weekMonday); render(); }
-function goNow(){ weekMonday=mondayOf(new Date()); render(); }
-function onLoc(){ buildHist(document.getElementById('loc').value); render(); }
+function stepWeek(n){ weekMonday.setDate(weekMonday.getDate()+n*7); weekMonday=new Date(weekMonday); cargarPedidoAnterior(); }
+function goNow(){ weekMonday=mondayOf(new Date()); cargarPedidoAnterior(); }
+function onLoc(){ buildHist(document.getElementById('loc').value); cargarPedidoAnterior(); }
+let pedAnteriorMap={};
+async function cargarPedidoAnterior(){
+  const loc=document.getElementById('loc').value;
+  const antes=weekMonday.toISOString().slice(0,10);
+  try{
+    const res=await fetch('/api/pedidos-historial?tienda='+encodeURIComponent(loc)+'&antes='+antes);
+    const json=await res.json();
+    pedAnteriorMap=(json&&json.porSku)||{};
+  }catch(e){ pedAnteriorMap={}; }
+  render();
+}
 function buildHist(loc){
   const h=(HIST[loc]||[]).slice(-24); const ctx=document.getElementById('hist'); if(!ctx) return;
   if(chart) chart.destroy();
@@ -137,15 +148,17 @@ function render(){
   if(!items.length){ document.getElementById('tbl').innerHTML='<div class="empty">Sin base del año anterior para este local en '+MESES[weekMonday.getMonth()+1]+'.</div>'; }
   else {
     const byG={}; items.forEach(x=>{(byG[x.grupo]=byG[x.grupo]||[]).push(x);});
-    let html='<table><thead><tr><th>Código</th><th>Descripción del artículo</th><th class="r">Ref. 2025 (mes)</th><th class="r">Cant. sugerida</th><th>Unidad</th></tr></thead><tbody>';
+    let html='<table><thead><tr><th>Código</th><th>Descripción del artículo</th><th class="r">Ref. 2025 (mes)</th><th class="r">Pedido anterior</th><th class="r">Cant. sugerida</th><th>Unidad</th></tr></thead><tbody>';
     Object.keys(byG).sort().forEach(g=>{
-      html+='<tr class="grp-row"><td colspan="5">'+g+' · '+byG[g].length+'</td></tr>';
+      html+='<tr class="grp-row"><td colspan="6">'+g+' · '+byG[g].length+'</td></tr>';
       byG[g].forEach(x=>{
         const defaultQty = x.sem>=1 ? x.sem : 1;
         const qcell = '<input type="number" class="qty-input" data-sku="'+x.sku+'" data-default="'+defaultQty+'" value="'+defaultQty+'" min="0" step="1" oninput="this.classList.toggle(\'modified\',+this.value!==+this.dataset.default)">';
         const ucell = x.um + ((x.sem<1&&x.cada)?(' · c/'+x.cada+' sem'):'');
         const warn = x.old ? ' <span class="repl">↔ auto: reemplaza a '+x.old+'</span>' : (x.nuevo ? ' <span class="nuevo">🆕 nuevo 2026</span>' : '');
-        html+='<tr'+(x.old?' class="replrow"':(x.nuevo?' class="newrow"':''))+'><td class="sku">'+x.sku+'</td><td>'+x.desc+warn+'</td><td class="r" style="color:#94a3b8;font-size:12px">'+x.m2025+'</td><td class="r">'+qcell+'</td><td class="um">'+ucell+'</td></tr>';
+        const ant=pedAnteriorMap[x.sku];
+        const antCell = ant ? Math.round(ant.cantidad) : '<span style="color:#cbd5e1">—</span>';
+        html+='<tr'+(x.old?' class="replrow"':(x.nuevo?' class="newrow"':''))+'><td class="sku">'+x.sku+'</td><td>'+x.desc+warn+'</td><td class="r" style="color:#94a3b8;font-size:12px">'+x.m2025+'</td><td class="r" style="color:#64748b">'+antCell+'</td><td class="r">'+qcell+'</td><td class="um">'+ucell+'</td></tr>';
       });
     });
     html+='</tbody></table>';
@@ -172,13 +185,16 @@ function downloadExcel(btn){
   const sun=new Date(weekMonday); sun.setDate(sun.getDate()+6);
   const wl=fmtD(weekMonday)+" al "+fmtD(sun);
   const qtyMap=getQtyMap();
+  const pedidoItems=[];
+  it.forEach(x=>{ const cant=qtyMap[x.sku]??( x.sem>=1?x.sem:1); if(cant>0) pedidoItems.push({sku:x.sku, descripcion:x.desc, cantidad:cant, um:x.um, grupo:x.grupo}); });
   const rows=[["Pedido Larrs -> Grecka"],["Local:",loc],["Semana:",wl],["Entrega:","Lunes "+fmtD(weekMonday)],[],["Codigo","Descripcion","Cantidad","Unidad","Grupo"]];
-  it.forEach(x=> rows.push([x.sku, x.desc, qtyMap[x.sku]??( x.sem>=1?x.sem:1), x.um, x.grupo]));
+  pedidoItems.forEach(p=> rows.push([p.sku, p.descripcion, p.cantidad, p.um, p.grupo]));
   const ws=XLSX.utils.aoa_to_sheet(rows);
   ws["!cols"]=[{wch:16},{wch:46},{wch:10},{wch:12},{wch:16}];
   const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"Pedido");
   XLSX.writeFile(wb, "pedido_"+loc+"_"+weekMonday.toISOString().slice(0,10)+".xlsx");
   const t="⬇ Excel"; btn.textContent="✓ Descargado"; setTimeout(()=>btn.textContent=t,1600);
+  fetch('/api/pedidos-historial',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tienda:loc, semanaLunes:weekMonday.toISOString().slice(0,10), items:pedidoItems})}).catch(()=>{});
 }
 function copyCol(btn,type){
   const it=window._ord||[];

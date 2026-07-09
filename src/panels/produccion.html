@@ -1093,21 +1093,26 @@ function buildSalesSection() {
 
     // Tabla presupuesto todos los meses del año
     const pptoMeses = Object.keys(PRESUPUESTO_VENTAS).filter(k => k.startsWith(y + '-')).sort();
-    let _pTot = 0, _rTot = 0, _rTotHasAny = false;
+    let _pTot = 0, _rTot = 0, _rTotHasAny = false, _r25Tot = 0, _r25TotHasAny = false;
     const pptoRows = pptoMeses.map(ym => {
       const [,mNum] = ym.split('-');
       const pp = T_ORDEN.reduce((s,t) => s + (PRESUPUESTO_VENTAS[ym][t]||0), 0);
       const hasData = byMonth[ym] && (byMonth[ym].dias > 0 || byMonth[ym].isHistorico);
       const real = hasData ? byMonth[ym].Total : 0;
+      const ymPrev = `${y-1}-${mNum}`;
+      const hasReal25 = !!VENTAS_2025[ymPrev];
+      const real25 = hasReal25 ? T_ORDEN.reduce((s,t) => s + (VENTAS_2025[ymPrev][t]||0), 0) : null;
       const isCurrent = ym === currentYM;
       const c = pp > 0 && hasData ? (real / pp * 100) : null;
       const dif = hasData ? real - pp : null;
       _pTot += pp;
       if (hasData) { _rTot += real; _rTotHasAny = true; }
+      if (hasReal25) { _r25Tot += real25; _r25TotHasAny = true; }
       return `<tr style="${isCurrent ? 'background:#f0fdf4' : ''}">
         <td style="font-size:12px;padding:5px 10px${isCurrent ? ';font-weight:700;color:#15803d' : ''}">${MESES[parseInt(mNum)-1]}</td>
         <td class="r" style="font-size:12px;padding:5px 10px">${fmtCLP(pp)}</td>
         <td class="r" style="font-size:12px;padding:5px 10px">${hasData ? fmtCLP(real) : '<span style="color:#e2e8f0">—</span>'}</td>
+        <td class="r" style="font-size:12px;padding:5px 10px;color:#94a3b8">${hasReal25 ? fmtCLP(real25) : '<span style="color:#e2e8f0">—</span>'}</td>
         <td class="r" style="font-size:11px;padding:5px 10px;color:${dif===null?'#e2e8f0':dif>=0?'#16a34a':'#dc2626'}">${dif===null?'—':(dif>=0?'+':'')+fmtCLP(dif)}</td>
         <td class="r" style="font-size:12px;padding:5px 10px;${isCurrent?'font-weight:700;':''};color:${c===null?'#94a3b8':cumpColor(c)}">${c===null?'—':c.toFixed(0)+'%'}</td>
       </tr>`;
@@ -1117,12 +1122,13 @@ function buildSalesSection() {
       <div class="section-title" style="margin-bottom:7px">Presupuesto ${y} — todos los meses</div>
       <div class="card" style="margin-bottom:12px">
         <table>
-          <thead><tr><th>Mes</th><th class="r">Presupuesto</th><th class="r">Real</th><th class="r">Diferencia</th><th class="r">% Cump.</th></tr></thead>
+          <thead><tr><th>Mes</th><th class="r">Presupuesto</th><th class="r">Real</th><th class="r">Real ${y-1}</th><th class="r">Diferencia</th><th class="r">% Cump.</th></tr></thead>
           <tbody>${pptoRows}</tbody>
           <tfoot style="background:#f8fafc"><tr>
             <td style="font-weight:700;font-size:12px">Total año</td>
             <td class="r" style="font-weight:700;font-size:12px">${fmtCLP(_pTot)}</td>
             <td class="r" style="font-weight:700;font-size:12px">${_rTotHasAny ? fmtCLP(_rTot) : '—'}</td>
+            <td class="r" style="font-weight:700;font-size:12px;color:#94a3b8">${_r25TotHasAny ? fmtCLP(_r25Tot) : '—'}</td>
             <td class="r" style="font-weight:700;font-size:11px;color:${_rTotHasAny ? (_rTot-_pTot>=0?'#16a34a':'#dc2626') : '#94a3b8'}">${_rTotHasAny ? ((_rTot-_pTot>=0?'+':'')+fmtCLP(_rTot-_pTot)) : '—'}</td>
             <td class="r" style="font-weight:700;font-size:12px;color:${_cTot===null?'#94a3b8':cumpColor(_cTot)}">${_cTot===null?'—':_cTot.toFixed(0)+'%'}</td>
           </tr></tfoot>
@@ -1290,6 +1296,129 @@ function buildFlavorByTiendaSection(data) {
   return `
     <div class="section-title">Sabores más producidos por tienda</div>
     <div class="card" style="margin-bottom:12px">${sections}</div>`;
+}
+
+// ========== HISTORIAL DE SABORES POR TIENDA (evolución mensual) ==========
+function flavorEvolByMonthTienda() {
+  const weeks = getAvailableWeeks(cachedCSV);
+  const byMonthTienda = {};
+  for (const wk of weeks) {
+    let d; try { d = processCSV(cachedCSV, wk); } catch(e) { continue; }
+    if (!d || d.totalKg <= 0) continue;
+    const ym = weekKeyToYM(wk);
+    if (!byMonthTienda[ym]) byMonthTienda[ym] = {};
+    T_ORDEN.forEach(t => {
+      if (!byMonthTienda[ym][t]) byMonthTienda[ym][t] = {};
+      for (const [name, kg] of Object.entries(d.flavorByTienda[t] || {})) {
+        byMonthTienda[ym][t][name] = (byMonthTienda[ym][t][name] || 0) + kg;
+      }
+    });
+  }
+  return byMonthTienda;
+}
+
+function buildFlavorEvolutionSection() {
+  if (!cachedCSV) return '';
+  const byMonthTienda = flavorEvolByMonthTienda();
+  const months = Object.keys(byMonthTienda).sort();
+  if (months.length < 2) return '';
+  const MES3 = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const firstYm = months[0], lastYm = months[months.length - 1];
+
+  const sections = T_ORDEN.map(t => {
+    const totals = {};
+    months.forEach(ym => {
+      for (const [name, kg] of Object.entries(byMonthTienda[ym][t] || {})) {
+        totals[name] = (totals[name] || 0) + kg;
+      }
+    });
+    const topFlavors = Object.entries(totals).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([n])=>n);
+    if (!topFlavors.length) return '';
+
+    const rows = topFlavors.map(name => {
+      const first = byMonthTienda[firstYm][t]?.[name] || 0;
+      const last = byMonthTienda[lastYm][t]?.[name] || 0;
+      const delta = first > 0 ? ((last-first)/first*100) : (last > 0 ? null : 0);
+      const trendTxt = delta === null
+        ? '<span style="color:#94a3b8">nuevo</span>'
+        : `<span style="color:${delta>=0?'#16a34a':'#dc2626'};font-weight:700">${delta>=0?'▲':'▼'} ${Math.abs(delta).toFixed(0)}%</span>`;
+      return `<tr>
+        <td style="font-size:12px;padding:5px 10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:140px" title="${name}">${name}</td>
+        <td class="r" style="font-size:11px;padding:5px 10px;color:#94a3b8">${first.toFixed(1)} kg</td>
+        <td class="r" style="font-size:11px;padding:5px 10px">${last.toFixed(1)} kg</td>
+        <td class="r" style="font-size:11px;padding:5px 10px">${trendTxt}</td>
+      </tr>`;
+    }).join('');
+
+    const totalT = Object.values(totals).reduce((s,v)=>s+v,0);
+    const safeId = t.replace(/[^a-zA-Z0-9]/g,'');
+    return `<details style="border-bottom:1px solid #f1f5f9">
+      <summary style="padding:10px 12px;cursor:pointer;display:flex;align-items:center;gap:8px;list-style:none;background:#f8fafc">
+        <span class="dot" style="background:${T_COLOR[t]}"></span>
+        <span style="font-weight:700;font-size:13px;flex:1">${t}</span>
+        <span style="font-size:11px;color:#64748b">${months.length} meses · ${totalT.toFixed(0)} kg</span>
+      </summary>
+      <div style="padding:10px 12px 0">
+        <div style="height:200px"><canvas id="chart-flavor-evol-${safeId}"></canvas></div>
+      </div>
+      <table style="margin-top:6px">
+        <thead><tr><th>Sabor (top ${topFlavors.length})</th><th class="r">${MES3[+firstYm.slice(5)]} '${firstYm.slice(2,4)}</th><th class="r">${MES3[+lastYm.slice(5)]} '${lastYm.slice(2,4)}</th><th class="r">Variación</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </details>`;
+  }).join('');
+
+  return `
+    <div class="section-title">Historial de sabores por tienda <span style="font-weight:400;color:#94a3b8">· evolución mensual, ${months.length} meses</span></div>
+    <p style="font-size:10px;color:#94a3b8;margin:-4px 0 7px">Top 6 sabores por tienda y su evolución mes a mes, para detectar tendencias.</p>
+    <div class="card" style="margin-bottom:12px">${sections}</div>`;
+}
+
+function buildFlavorEvolutionCharts() {
+  if (!cachedCSV) return;
+  const byMonthTienda = flavorEvolByMonthTienda();
+  const months = Object.keys(byMonthTienda).sort();
+  if (months.length < 2) return;
+  const MES3 = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const labels = months.map(m => MES3[+m.slice(5)] + " '" + m.slice(2,4));
+  const pal = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4'];
+
+  T_ORDEN.forEach(t => {
+    const safeId = t.replace(/[^a-zA-Z0-9]/g,'');
+    const chartId = 'flavor-evol-' + safeId;
+    destroyChart(chartId);
+    const ctx = document.getElementById('chart-' + chartId);
+    if (!ctx) return;
+    const totals = {};
+    months.forEach(ym => {
+      for (const [name, kg] of Object.entries(byMonthTienda[ym][t] || {})) {
+        totals[name] = (totals[name] || 0) + kg;
+      }
+    });
+    const topFlavors = Object.entries(totals).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([n])=>n);
+    if (!topFlavors.length) return;
+    const datasets = topFlavors.map((name, i) => ({
+      label: name.split('(')[0].trim().slice(0,20),
+      data: months.map(ym => +((byMonthTienda[ym][t]?.[name])||0).toFixed(1)),
+      borderColor: pal[i % pal.length], backgroundColor: pal[i % pal.length]+'22',
+      borderWidth: 2, pointRadius: 3, tension: 0.3, fill: false
+    }));
+    charts[chartId] = new Chart(ctx, {
+      type: 'line',
+      data: { labels, datasets },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend:{position:'bottom',labels:{font:{size:9},padding:8,boxWidth:8}},
+          tooltip:{callbacks:{label:c=>` ${c.dataset.label}: ${c.parsed.y} kg`}}
+        },
+        scales: {
+          y:{beginAtZero:true,grid:{color:'#f1f5f9'},ticks:{font:{size:10},callback:v=>v+' kg'}},
+          x:{grid:{display:false},ticks:{font:{size:10}}}
+        }
+      }
+    });
+  });
 }
 
 // ========== SECCIÓN DE COSTOS ==========
@@ -1650,6 +1779,8 @@ function render(data, prevData) {
 
     ${buildFlavorByTiendaSection(data)}
 
+    ${buildFlavorEvolutionSection()}
+
     <div class="section-title">Producción vs ventas — últimos 12 meses</div>
     <div class="chart-card" style="margin-bottom:12px">
       <p style="font-size:10px;color:#94a3b8;margin:0 0 6px">Barras = kg producidos (eje izq.). Línea = ventas totales en $ (eje der.).</p>
@@ -1683,6 +1814,7 @@ function render(data, prevData) {
     buildMermaPctChart(data);
     buildFlavorAcumChart();
     buildMermaEvolucionChart();
+    buildFlavorEvolutionCharts();
     buildProdVsVentasChart();
     if (salesData && salesData.length > 0) { buildSalesChart(salesData); buildPptoChart(); }
   }, 50);

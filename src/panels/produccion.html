@@ -1298,6 +1298,65 @@ function buildFlavorByTiendaSection(data) {
     <div class="card" style="margin-bottom:12px">${sections}</div>`;
 }
 
+// ========== ALERTAS DE SABORES (caídas, quiebres, altas) ==========
+function buildFlavorAlertsSection() {
+  if (!cachedCSV) return '';
+  const byMonthTienda = flavorEvolByMonthTienda();
+  const months = Object.keys(byMonthTienda).sort();
+  if (months.length < 2) return '';
+  const lastYm = months[months.length - 1], prevYm = months[months.length - 2];
+  const MES3 = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const minKg = 3;
+
+  const alerts = [];
+  T_ORDEN.forEach(t => {
+    const prevFlavors = byMonthTienda[prevYm]?.[t] || {};
+    const lastFlavors = byMonthTienda[lastYm]?.[t] || {};
+    const names = new Set([...Object.keys(prevFlavors), ...Object.keys(lastFlavors)]);
+    names.forEach(name => {
+      const prev = prevFlavors[name] || 0;
+      const last = lastFlavors[name] || 0;
+      if (Math.max(prev, last) < minKg) return;
+      let kind = null, deltaPct = null;
+      if (prev > 0 && last === 0) { kind = 'quiebre'; deltaPct = -100; }
+      else if (prev === 0 && last >= minKg) { kind = 'nuevo'; }
+      else if (prev > 0) {
+        deltaPct = (last - prev) / prev * 100;
+        if (deltaPct <= -40) kind = 'baja';
+        else if (deltaPct >= 60) kind = 'alza';
+      }
+      if (!kind) return;
+      alerts.push({ t, name, prev, last, deltaPct, kind, impact: Math.abs(last - prev) });
+    });
+  });
+  if (!alerts.length) return '';
+  alerts.sort((a,b) => b.impact - a.impact);
+  const top = alerts.slice(0, 8);
+
+  const cfg = {
+    quiebre: { color:'#dc2626', bg:'#fef2f2', icon:'⛔', label:'Dejó de producirse' },
+    baja:    { color:'#dc2626', bg:'#fef2f2', icon:'📉', label:'Caída fuerte' },
+    alza:    { color:'#16a34a', bg:'#f0fdf4', icon:'📈', label:'Alza fuerte' },
+    nuevo:   { color:'#2563eb', bg:'#eff6ff', icon:'✨', label:'Nuevo / repunte' },
+  };
+  const items = top.map(a => {
+    const c = cfg[a.kind];
+    const pctTxt = a.kind === 'nuevo' ? `${a.last.toFixed(1)} kg` : `${a.deltaPct>=0?'+':''}${a.deltaPct.toFixed(0)}%`;
+    return `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;background:${c.bg};margin-bottom:6px">
+      <span style="font-size:15px">${c.icon}</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:12px;font-weight:700;color:#1e293b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${a.name}">${a.name}</div>
+        <div style="font-size:10px;color:#64748b">${a.t} · ${c.label} · ${a.prev.toFixed(1)}→${a.last.toFixed(1)} kg</div>
+      </div>
+      <div style="font-size:13px;font-weight:700;color:${c.color};white-space:nowrap">${pctTxt}</div>
+    </div>`;
+  }).join('');
+
+  return `
+    <div class="section-title">Alertas de sabores <span style="font-weight:400;color:#94a3b8">· ${MES3[+prevYm.slice(5)]} → ${MES3[+lastYm.slice(5)]} '${lastYm.slice(2,4)}</span></div>
+    <div class="card" style="padding:8px;margin-bottom:12px">${items}</div>`;
+}
+
 // ========== HISTORIAL DE SABORES POR TIENDA (evolución mensual) ==========
 function flavorEvolByMonthTienda() {
   const weeks = getAvailableWeeks(cachedCSV);
@@ -1692,6 +1751,8 @@ function render(data, prevData) {
 
     <!-- Insight -->
     <div class="insight">${insightText}</div>
+
+    ${buildFlavorAlertsSection()}
 
     <!-- Chart: kg por tienda -->
     <div class="chart-card">

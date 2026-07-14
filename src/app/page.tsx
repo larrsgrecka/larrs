@@ -99,6 +99,22 @@ export default async function Home() {
             </div>
           </Link>
 
+          <Link
+            href="/mermas"
+            className="block overflow-hidden rounded-2xl shadow-lg transition-transform active:scale-[0.98]"
+          >
+            <div className="flex items-center gap-4 bg-white p-5">
+              <span className="text-3xl">⚠️</span>
+              <div className="flex-1">
+                <p className="text-lg font-bold text-slate-800">Mermas</p>
+                <p className="text-sm text-gray-500">
+                  Registro de mermas puntuales por tienda
+                </p>
+              </div>
+              <span className="text-xl text-gray-400">›</span>
+            </div>
+          </Link>
+
           {admin && (
             <Link
               href="/admin"

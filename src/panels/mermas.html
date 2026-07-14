@@ -65,17 +65,19 @@ tr:hover td { background: #f8fafc; }
         </div>
         <div class="form-field">
           <label>Categoría</label>
-          <select id="f-categoria">
-            <option>Helado</option>
-            <option>Topping</option>
-            <option>Envase</option>
-            <option>Insumo</option>
-            <option>Otro</option>
+          <select id="f-categoria" onchange="onCategoriaChange()" required>
+            <option value="">Cargando categorías...</option>
           </select>
         </div>
-        <div class="form-field full">
-          <label>Producto / sabor</label>
-          <input type="text" id="f-producto" placeholder="Ej: Chocolate amargo" required>
+        <div class="form-field">
+          <label>Producto</label>
+          <select id="f-producto" onchange="onProductoChange()" required>
+            <option value="">Selecciona una categoría primero</option>
+          </select>
+        </div>
+        <div class="form-field full" id="producto-libre-wrap" style="display:none">
+          <label>Especifica el producto</label>
+          <input type="text" id="f-producto-libre" placeholder="Ej: Vasos de cartón 12oz">
         </div>
         <div class="form-field">
           <label>Cantidad</label>
@@ -146,6 +148,12 @@ function fmtNum(n) {
   return Number(n).toLocaleString('es-CL', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 }
 
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
+}
+
 function initHeader() {
   const sub = document.getElementById('header-sub');
   if (tiendaFija) {
@@ -168,6 +176,47 @@ function onTiendaChange() {
 function onMotivoChange() {
   const isOtro = document.getElementById('f-motivo').value === 'Otro';
   document.getElementById('motivo-detalle-wrap').style.display = isOtro ? 'flex' : 'none';
+}
+
+let catalogo = [];
+
+async function loadCatalogo() {
+  const catSel = document.getElementById('f-categoria');
+  try {
+    const resp = await fetch('/api/mermas/catalogo');
+    const data = await resp.json();
+    if (!data.ok) throw new Error(data.error || 'Error al cargar catálogo');
+    catalogo = data.categorias || [];
+  } catch (e) {
+    catalogo = [];
+  }
+  const opts = catalogo.map(c => `<option value="${esc(c.value)}">${esc(c.label)}</option>`);
+  opts.push('<option value="OTRO">Otro (no está en la lista)</option>');
+  catSel.innerHTML = '<option value="">Selecciona una categoría...</option>' + opts.join('');
+  onCategoriaChange();
+}
+
+function onCategoriaChange() {
+  const catValue = document.getElementById('f-categoria').value;
+  const prodSel = document.getElementById('f-producto');
+  const cat = catalogo.find(c => c.value === catValue);
+
+  if (catValue === 'OTRO') {
+    prodSel.innerHTML = '<option value="__otro__">Especificar producto</option>';
+    prodSel.value = '__otro__';
+  } else if (cat) {
+    const opts = cat.productos.map(p => `<option value="${esc(p)}">${esc(p)}</option>`);
+    opts.push('<option value="__otro__">Otro (no está en la lista)</option>');
+    prodSel.innerHTML = '<option value="">Selecciona un producto...</option>' + opts.join('');
+  } else {
+    prodSel.innerHTML = '<option value="">Selecciona una categoría primero</option>';
+  }
+  onProductoChange();
+}
+
+function onProductoChange() {
+  const isOtro = document.getElementById('f-producto').value === '__otro__';
+  document.getElementById('producto-libre-wrap').style.display = isOtro ? 'flex' : 'none';
 }
 
 function motivoBadgeColor(motivo) {
@@ -198,12 +247,12 @@ function renderHistorial(items) {
   const showTienda = !tiendaFija;
   tbody.innerHTML = items.map(it => `
     <tr>
-      <td style="font-size:12px">${it.fecha || '—'}</td>
-      ${showTienda ? `<td style="font-size:12px">${it.tienda || '—'}</td>` : ''}
-      <td style="font-size:12px">${it.producto || '—'}</td>
-      <td class="r" style="font-size:12px">${fmtNum(it.cantidad)} ${it.unidad || ''}</td>
-      <td><span class="motivo-badge" style="background:${motivoBadgeColor(it.motivo)}">${it.motivo || '—'}</span></td>
-      <td style="font-size:11px;color:#64748b">${it.reportado_por || '—'}</td>
+      <td style="font-size:12px">${esc(it.fecha) || '—'}</td>
+      ${showTienda ? `<td style="font-size:12px">${esc(it.tienda) || '—'}</td>` : ''}
+      <td style="font-size:12px">${esc(it.producto) || '—'}</td>
+      <td class="r" style="font-size:12px">${fmtNum(it.cantidad)} ${esc(it.unidad)}</td>
+      <td><span class="motivo-badge" style="background:${motivoBadgeColor(it.motivo)}">${esc(it.motivo) || '—'}</span></td>
+      <td style="font-size:11px;color:#64748b">${esc(it.reportado_por) || '—'}</td>
     </tr>
   `).join('');
 }
@@ -215,11 +264,17 @@ async function submitMerma(evt) {
   msg.className = 'msg';
   msg.textContent = '';
 
+  const categoria = document.getElementById('f-categoria').value;
+  const productoSel = document.getElementById('f-producto').value;
+  const producto = productoSel === '__otro__'
+    ? document.getElementById('f-producto-libre').value.trim()
+    : productoSel;
+
   const payload = {
     fecha: document.getElementById('f-fecha').value,
     tienda: tiendaFija || document.getElementById('tienda-select').value,
-    producto: document.getElementById('f-producto').value.trim(),
-    categoria_producto: document.getElementById('f-categoria').value,
+    producto,
+    categoria_producto: categoria,
     cantidad: parseFloat(document.getElementById('f-cantidad').value),
     unidad: document.getElementById('f-unidad').value,
     motivo: document.getElementById('f-motivo').value,
@@ -230,6 +285,16 @@ async function submitMerma(evt) {
   if (!payload.tienda || payload.tienda === 'Todas') {
     msg.className = 'msg err';
     msg.textContent = 'Selecciona una tienda antes de registrar.';
+    return;
+  }
+  if (!categoria) {
+    msg.className = 'msg err';
+    msg.textContent = 'Selecciona una categoría.';
+    return;
+  }
+  if (!producto) {
+    msg.className = 'msg err';
+    msg.textContent = 'Selecciona o especifica un producto.';
     return;
   }
 
@@ -247,6 +312,7 @@ async function submitMerma(evt) {
     msg.textContent = 'Merma registrada correctamente.';
     document.getElementById('merma-form').reset();
     document.getElementById('f-fecha').value = new Date().toISOString().slice(0, 10);
+    onCategoriaChange();
     onMotivoChange();
     loadHistorial();
   } catch (e) {
@@ -259,6 +325,7 @@ async function submitMerma(evt) {
 
 document.getElementById('f-fecha').value = new Date().toISOString().slice(0, 10);
 initHeader();
+loadCatalogo();
 loadHistorial();
 </script>
 </body>

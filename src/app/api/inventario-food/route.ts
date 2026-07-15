@@ -39,17 +39,21 @@ export async function POST(request: NextRequest) {
   if (!body.categoria) {
     return NextResponse.json({ error: "categoria es requerida" }, { status: 400 });
   }
+  const unidad = body.unidad || "un";
   const items = (body.items ?? []) as Item[];
   const validItems = items.filter((it) => it.producto && it.cantidad !== null && !Number.isNaN(Number(it.cantidad)));
   if (validItems.length === 0) {
     return NextResponse.json({ error: "Debes contar al menos un producto" }, { status: 400 });
+  }
+  if (unidad === "un" && validItems.some((it) => !Number.isInteger(Number(it.cantidad)))) {
+    return NextResponse.json({ error: "La cantidad debe ser un número entero cuando la unidad es 'un'" }, { status: 400 });
   }
 
   const payload = {
     fecha: body.fecha,
     tienda,
     categoria: body.categoria,
-    unidad: body.unidad || "un",
+    unidad,
     observaciones: body.observaciones || "",
     reportado_por: profile.name || user.email || "",
     reportado_por_id: user.id,

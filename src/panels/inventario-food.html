@@ -71,7 +71,7 @@ tr:hover td { background: #f8fafc; }
       </div>
       <div class="form-field">
         <label>Unidad</label>
-        <select id="f-unidad">
+        <select id="f-unidad" onchange="applyUnidadStep()">
           <option value="un">un</option>
           <option value="kg">kg</option>
           <option value="L">L</option>
@@ -176,12 +176,29 @@ function onCategoriaChange() {
     return;
   }
 
+  // Cafetería en este panel solo incluye café en grano/granel (kg) —
+  // valor por defecto útil, el usuario igual puede cambiarlo.
+  if (catValue === 'CAFETERIA') {
+    document.getElementById('f-unidad').value = 'kg';
+  }
+
   body.innerHTML = cat.productos.map(p => `
     <tr>
       <td style="font-size:12px">${esc(p)}</td>
-      <td class="r"><input type="number" class="cant-input" data-producto="${esc(p)}" min="0" step="0.01" placeholder="—"></td>
+      <td class="r"><input type="number" class="cant-input" data-producto="${esc(p)}" min="0" placeholder="—"></td>
     </tr>
   `).join('');
+  applyUnidadStep();
+}
+
+function applyUnidadStep() {
+  const isEntero = document.getElementById('f-unidad').value === 'un';
+  document.querySelectorAll('#productos-body .cant-input').forEach(inp => {
+    inp.step = isEntero ? '1' : '0.01';
+    if (isEntero && inp.value !== '') {
+      inp.value = Math.round(parseFloat(inp.value));
+    }
+  });
 }
 
 async function submitConteo() {
@@ -215,9 +232,16 @@ async function submitConteo() {
     return;
   }
 
+  const unidad = document.getElementById('f-unidad').value;
+  if (unidad === 'un' && items.some(it => !Number.isInteger(it.cantidad))) {
+    msg.className = 'msg err';
+    msg.textContent = 'Con unidad "un" las cantidades deben ser números enteros (1, 2, 3...).';
+    return;
+  }
+
   const payload = {
     fecha, tienda, categoria,
-    unidad: document.getElementById('f-unidad').value,
+    unidad,
     observaciones: document.getElementById('f-observaciones').value.trim(),
     items,
   };

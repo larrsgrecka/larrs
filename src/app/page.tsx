@@ -131,6 +131,40 @@ export default async function Home() {
             </div>
           </Link>
 
+          <Link
+            href="/produccion-pesaje"
+            className="block overflow-hidden rounded-2xl shadow-lg transition-transform active:scale-[0.98]"
+          >
+            <div className="flex items-center gap-4 bg-white p-5">
+              <span className="text-3xl">⚖️</span>
+              <div className="flex-1">
+                <p className="text-lg font-bold text-slate-800">Pesaje de producción</p>
+                <p className="text-sm text-gray-500">
+                  Registro de kg producidos por sabor
+                </p>
+              </div>
+              <span className="text-xl text-gray-400">›</span>
+            </div>
+          </Link>
+
+          {admin && (
+            <Link
+              href="/vitrina"
+              className="block overflow-hidden rounded-2xl shadow-sm transition-transform active:scale-[0.98]"
+            >
+              <div className="flex items-center gap-4 rounded-2xl border border-amber-200 bg-amber-50 p-5">
+                <span className="text-3xl">🍨</span>
+                <div className="flex-1 text-gray-700">
+                  <p className="font-bold">Vitrina por tienda</p>
+                  <p className="text-sm text-gray-400">
+                    Configurar sabores en exhibición
+                  </p>
+                </div>
+                <span className="text-xl text-gray-300">›</span>
+              </div>
+            </Link>
+          )}
+
           {admin && (
             <Link
               href="/admin"

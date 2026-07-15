@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vitrina · Larrs</title>
+<style>
+:root { color-scheme: light; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f2f7; color: #1e293b; padding: 14px; font-size: 14px; }
+.container { max-width: 900px; margin: 0 auto; }
+.header { background: linear-gradient(135deg, #111418, #1e293b); border-radius: 12px; padding: 18px 22px; margin-bottom: 12px; color: #fff; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.logo-img { height: 44px; width: auto; display: block; }
+.header .title { font-size: 15px; font-weight: 700; color: #e2e8f0; margin-top: 10px; }
+.header .subtitle { font-size: 12px; color: #94a3b8; margin-top: 2px; }
+.toolbar { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.toolbar label { font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .06em; }
+.toolbar select { font-size: 13px; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 9px; color: #1e293b; background: #f8fafc; }
+.section-title { font-size:11px; font-weight:700; color:#334155; text-transform:uppercase; letter-spacing:.06em; margin:0 0 8px; }
+.note { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 9px 13px; font-size: 12px; color: #1e40af; margin-bottom: 12px; line-height: 1.5; }
+.card { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; margin-bottom: 12px; }
+.grid-vitrina { display:grid; grid-template-columns: repeat(6, 1fr); gap:8px; }
+.slot { display:flex; flex-direction:column; gap:4px; }
+.slot label { font-size:9px; font-weight:700; color:#94a3b8; text-transform:uppercase; }
+.slot select { font-size:11px; border:1px solid #e2e8f0; border-radius:6px; padding:6px; background:#f8fafc; color:#1e293b; }
+.fila-label { font-size:10px; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:.05em; margin:14px 0 8px; }
+.btn { background: #2563eb; color: #fff; border: none; border-radius: 6px; padding: 9px 16px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.btn:disabled { opacity:.5; cursor:not-allowed; }
+.msg { font-size:12px; border-radius:8px; padding:9px 13px; margin-top:10px; display:none; }
+.msg.ok { display:block; background:#f0fdf4; border:1px solid #bbf7d0; color:#15803d; }
+.msg.err { display:block; background:#fef2f2; border:1px solid #fecaca; color:#b91c1c; }
+.last { font-size: 11px; color: #b0bac8; text-align: center; margin-top: 6px; }
+@media (max-width: 640px) { .grid-vitrina { grid-template-columns: repeat(3, 1fr); } }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div>
+      <img class="logo-img" src="https://heladerialarrs.cl/cdn/shop/t/2/assets/logo-footer.png?v=41616879924709803011609269083" alt="Larrs">
+      <div class="title">Vitrina por tienda</div>
+      <div class="subtitle">Configura los 24 sabores en exhibición — se actualiza aprox. cada 2 semanas</div>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <label>Tienda</label>
+    <select id="tienda-select" onchange="loadVitrina()"></select>
+  </div>
+
+  <div class="note">Deja 1 o 2 slots en "— Libre —" si quieres reservarlos para un sabor fuera de la lista habitual (se pesa igual desde el formulario de producción buscándolo por nombre).</div>
+
+  <div class="card">
+    <div class="fila-label">Fila superior (slots 1–12)</div>
+    <div class="grid-vitrina" id="fila-superior"></div>
+    <div class="fila-label">Fila inferior (slots 13–24)</div>
+    <div class="grid-vitrina" id="fila-inferior"></div>
+  </div>
+
+  <button class="btn" id="submit-btn" onclick="guardarVitrina()">Guardar vitrina</button>
+  <div class="msg" id="form-msg"></div>
+  <div class="last" id="last-update"></div>
+</div>
+
+<script>
+const TIENDAS = ['Costanera', 'Dominicos', 'Trapenses'];
+let sabores = [];
+let vitrinaActual = {}; // slot -> sabor
+
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
+}
+
+function initTiendaSelect() {
+  const sel = document.getElementById('tienda-select');
+  sel.innerHTML = TIENDAS.map(t => `<option value="${t}">${t}</option>`).join('');
+}
+
+function opcionesSabor(seleccionado) {
+  const opts = ['<option value="">— Libre —</option>']
+    .concat(sabores.map(s => `<option value="${esc(s)}" ${s === seleccionado ? 'selected' : ''}>${esc(s)}</option>`));
+  return opts.join('');
+}
+
+function renderGrid() {
+  const superior = document.getElementById('fila-superior');
+  const inferior = document.getElementById('fila-inferior');
+  const filas = [
+    { el: superior, desde: 1, hasta: 12 },
+    { el: inferior, desde: 13, hasta: 24 },
+  ];
+  filas.forEach(f => {
+    let html = '';
+    for (let slot = f.desde; slot <= f.hasta; slot++) {
+      html += `
+        <div class="slot">
+          <label>Slot ${slot}</label>
+          <select data-slot="${slot}">${opcionesSabor(vitrinaActual[slot] || '')}</select>
+        </div>`;
+    }
+    f.el.innerHTML = html;
+  });
+}
+
+async function loadCatalogo() {
+  const resp = await fetch('/api/vitrina/catalogo');
+  const data = await resp.json();
+  if (data.ok) sabores = data.sabores || [];
+}
+
+async function loadVitrina() {
+  const tienda = document.getElementById('tienda-select').value;
+  vitrinaActual = {};
+  try {
+    const resp = await fetch('/api/vitrina?tienda=' + encodeURIComponent(tienda));
+    const data = await resp.json();
+    if (data.ok) {
+      (data.items || []).forEach(it => { vitrinaActual[Number(it.slot)] = it.sabor; });
+    }
+  } catch (e) { /* deja la grilla vacía si falla */ }
+  renderGrid();
+  document.getElementById('last-update').textContent = `Cargado: ${new Date().toLocaleString('es-CL')}`;
+}
+
+async function guardarVitrina() {
+  const btn = document.getElementById('submit-btn');
+  const msg = document.getElementById('form-msg');
+  msg.className = 'msg'; msg.textContent = '';
+
+  const tienda = document.getElementById('tienda-select').value;
+  const slots = [...document.querySelectorAll('#fila-superior select, #fila-inferior select')]
+    .map(sel => ({ slot: Number(sel.dataset.slot), sabor: sel.value }))
+    .filter(s => s.sabor);
+
+  btn.disabled = true;
+  try {
+    const resp = await fetch('/api/vitrina', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tienda, slots }),
+    });
+    const data = await resp.json();
+    if (!data.ok) throw new Error(data.error || 'Error al guardar');
+    msg.className = 'msg ok';
+    msg.textContent = `Vitrina de ${tienda} guardada (${data.count} slots con sabor).`;
+  } catch (e) {
+    msg.className = 'msg err';
+    msg.textContent = 'Error: ' + e.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+(async function init() {
+  initTiendaSelect();
+  await loadCatalogo();
+  await loadVitrina();
+})();
+</script>
+</body>
+</html>

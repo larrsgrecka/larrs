@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { getProfile } from "@/utils/auth";
 
-type Item = { producto: string; cantidad: number };
+type Item = { producto: string; cantidad: number; unidad?: string };
 
 function appsScriptConfig() {
   const url = process.env.INVENTARIO_FOOD_APPS_SCRIPT_URL;
@@ -39,25 +39,33 @@ export async function POST(request: NextRequest) {
   if (!body.categoria) {
     return NextResponse.json({ error: "categoria es requerida" }, { status: 400 });
   }
-  const unidad = body.unidad || "un";
   const items = (body.items ?? []) as Item[];
   const validItems = items.filter((it) => it.producto && it.cantidad !== null && !Number.isNaN(Number(it.cantidad)));
   if (validItems.length === 0) {
     return NextResponse.json({ error: "Debes contar al menos un producto" }, { status: 400 });
   }
-  if (unidad === "un" && validItems.some((it) => !Number.isInteger(Number(it.cantidad)))) {
-    return NextResponse.json({ error: "La cantidad debe ser un número entero cuando la unidad es 'un'" }, { status: 400 });
+  const conDecimalIndebido = validItems.find(
+    (it) => (it.unidad || "un") === "un" && !Number.isInteger(Number(it.cantidad))
+  );
+  if (conDecimalIndebido) {
+    return NextResponse.json(
+      { error: `"${conDecimalIndebido.producto}" se cuenta en unidades enteras` },
+      { status: 400 }
+    );
   }
 
   const payload = {
     fecha: body.fecha,
     tienda,
     categoria: body.categoria,
-    unidad,
     observaciones: body.observaciones || "",
     reportado_por: profile.name || user.email || "",
     reportado_por_id: user.id,
-    items: validItems.map((it) => ({ producto: it.producto, cantidad: Number(it.cantidad) })),
+    items: validItems.map((it) => ({
+      producto: it.producto,
+      cantidad: Number(it.cantidad),
+      unidad: it.unidad || "un",
+    })),
   };
 
   const resp = await fetch(`${config.url}?token=${encodeURIComponent(config.token)}`, {

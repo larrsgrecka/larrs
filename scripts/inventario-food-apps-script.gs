@@ -95,7 +95,7 @@ function doPost(e) {
     return jsonOut_({ ok: false, error: 'Body inválido' });
   }
 
-  const required = ['fecha', 'tienda', 'categoria', 'unidad', 'reportado_por', 'reportado_por_id'];
+  const required = ['fecha', 'tienda', 'categoria', 'reportado_por', 'reportado_por_id'];
   for (let i = 0; i < required.length; i++) {
     const f = required[i];
     if (!body[f]) return jsonOut_({ ok: false, error: 'Falta campo: ' + f });
@@ -108,6 +108,8 @@ function doPost(e) {
   const ids = [];
   let rows;
   try {
+    // La unidad viene por producto (ej. café en grano = "un", café por kilo
+    // = "kg"), no una sola para toda la planilla.
     rows = body.items.map(function (item) {
       if (!item.producto || item.cantidad === undefined || item.cantidad === null) {
         throw new Error('Cada item requiere producto y cantidad');
@@ -119,6 +121,7 @@ function doPost(e) {
         if (h === 'creado_en') return creadoEn;
         if (h === 'producto') return item.producto;
         if (h === 'cantidad') return item.cantidad;
+        if (h === 'unidad') return item.unidad || 'un';
         return body[h] != null ? body[h] : '';
       });
     });

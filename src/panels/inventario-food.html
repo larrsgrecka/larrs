@@ -58,7 +58,7 @@ tr:hover td { background: #f8fafc; }
 
   <div class="form-card">
     <div class="section-title">Nuevo conteo</div>
-    <div class="form-grid" style="margin-bottom:12px">
+    <div class="form-grid" style="margin-bottom:12px; grid-template-columns: repeat(2, 1fr)">
       <div class="form-field">
         <label>Fecha del conteo</label>
         <input type="date" id="f-fecha">
@@ -69,21 +69,13 @@ tr:hover td { background: #f8fafc; }
           <option value="">Cargando categorías...</option>
         </select>
       </div>
-      <div class="form-field">
-        <label>Unidad</label>
-        <select id="f-unidad" onchange="applyUnidadStep()">
-          <option value="un">un</option>
-          <option value="kg">kg</option>
-          <option value="L">L</option>
-        </select>
-      </div>
     </div>
 
     <div class="card" id="productos-card" style="margin-bottom:12px">
       <table>
-        <thead><tr><th>Producto</th><th class="r">Cantidad contada</th></tr></thead>
+        <thead><tr><th>Producto</th><th>Unidad</th><th class="r">Cantidad contada</th></tr></thead>
         <tbody id="productos-body">
-          <tr><td colspan="2" class="empty">Selecciona una categoría para empezar el conteo.</td></tr>
+          <tr><td colspan="3" class="empty">Selecciona una categoría para empezar el conteo.</td></tr>
         </tbody>
       </table>
     </div>
@@ -172,33 +164,19 @@ function onCategoriaChange() {
   const cat = catalogo.find(c => c.value === catValue);
 
   if (!cat) {
-    body.innerHTML = '<tr><td colspan="2" class="empty">Selecciona una categoría para empezar el conteo.</td></tr>';
+    body.innerHTML = '<tr><td colspan="3" class="empty">Selecciona una categoría para empezar el conteo.</td></tr>';
     return;
   }
 
-  // Cafetería en este panel solo incluye café en grano/granel (kg) —
-  // valor por defecto útil, el usuario igual puede cambiarlo.
-  if (catValue === 'CAFETERIA') {
-    document.getElementById('f-unidad').value = 'kg';
-  }
-
+  // Cada producto trae su propia unidad desde el catálogo (ej. el café en
+  // grano se cuenta en bolsas/"un", pero el café por kilo admite decimales).
   body.innerHTML = cat.productos.map(p => `
     <tr>
-      <td style="font-size:12px">${esc(p)}</td>
-      <td class="r"><input type="number" class="cant-input" data-producto="${esc(p)}" min="0" placeholder="—"></td>
+      <td style="font-size:12px">${esc(p.nombre)}</td>
+      <td style="font-size:11px;color:#64748b">${esc(p.unidad)}</td>
+      <td class="r"><input type="number" class="cant-input" data-producto="${esc(p.nombre)}" data-unidad="${esc(p.unidad)}" min="0" step="${p.unidad === 'un' ? '1' : '0.01'}" placeholder="—"></td>
     </tr>
   `).join('');
-  applyUnidadStep();
-}
-
-function applyUnidadStep() {
-  const isEntero = document.getElementById('f-unidad').value === 'un';
-  document.querySelectorAll('#productos-body .cant-input').forEach(inp => {
-    inp.step = isEntero ? '1' : '0.01';
-    if (isEntero && inp.value !== '') {
-      inp.value = Math.round(parseFloat(inp.value));
-    }
-  });
 }
 
 async function submitConteo() {
@@ -224,7 +202,7 @@ async function submitConteo() {
   const inputs = [...document.querySelectorAll('#productos-body .cant-input')];
   const items = inputs
     .filter(inp => inp.value !== '')
-    .map(inp => ({ producto: inp.dataset.producto, cantidad: parseFloat(inp.value) }));
+    .map(inp => ({ producto: inp.dataset.producto, cantidad: parseFloat(inp.value), unidad: inp.dataset.unidad }));
 
   if (items.length === 0) {
     msg.className = 'msg err';
@@ -232,16 +210,15 @@ async function submitConteo() {
     return;
   }
 
-  const unidad = document.getElementById('f-unidad').value;
-  if (unidad === 'un' && items.some(it => !Number.isInteger(it.cantidad))) {
+  const conDecimalIndebido = items.find(it => it.unidad === 'un' && !Number.isInteger(it.cantidad));
+  if (conDecimalIndebido) {
     msg.className = 'msg err';
-    msg.textContent = 'Con unidad "un" las cantidades deben ser números enteros (1, 2, 3...).';
+    msg.textContent = `"${conDecimalIndebido.producto}" se cuenta en unidades enteras (1, 2, 3...).`;
     return;
   }
 
   const payload = {
     fecha, tienda, categoria,
-    unidad,
     observaciones: document.getElementById('f-observaciones').value.trim(),
     items,
   };

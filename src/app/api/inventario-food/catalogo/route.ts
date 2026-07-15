@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
-import { getCatalogoProductos, type Categoria } from "@/utils/catalogo-productos";
+import { getCatalogoProductos } from "@/utils/catalogo-productos";
 
 // En Cafetería casi todo son preparaciones al momento (americano, latte, tés,
 // syrups...) que no se cuentan como stock. Solo el café en grano/granel es
@@ -21,7 +21,22 @@ const CAFETERIA_CONTABLES = new Set([
 const EXCLUIR_EXACTO = new Set([
   "ART. CAMBIO",
   "CROISSANT CON HELADO (2 SABORES)",
+  "JENGIBRE",
+  "LIMONADA LÄRRS",
+  "MENTA",
+  "NATURAL",
 ]);
+
+// Unidad por defecto: "un" (se cuenta en paquetes/unidades enteras). Solo el
+// café vendido/pesado suelto por kilo admite decimales — los demás formatos
+// de café (340 gramos, 0,5 kg, 250 gr.) son bolsas cerradas, se cuentan de a una.
+const UNIDAD_POR_PRODUCTO: Record<string, string> = {
+  "CAFE FILICORI KILO": "kg",
+};
+
+function unidadDe(nombre: string): string {
+  return UNIDAD_POR_PRODUCTO[nombre] || "un";
+}
 
 function esContable(grupo: string, nombre: string): boolean {
   if (grupo === "CAFETERIA") return CAFETERIA_CONTABLES.has(nombre);
@@ -31,7 +46,11 @@ function esContable(grupo: string, nombre: string): boolean {
   if (n.startsWith("HUEVO")) return false; // huevos revueltos, preparación al momento
   if (n.startsWith("SANDWICH")) return false; // se arman al pedido
   if (n.startsWith("TOSTADA")) return false; // se arman al pedido
-  if (n.startsWith("PACK #")) return false; // combo de desayuno/almuerzo, no un producto en sí
+  if (n.startsWith("PACK")) return false; // pack/combo de productos ya contados por separado
+  if (n.startsWith("CAJA")) return false; // caja multi-unidad de productos ya contados por separado
+  if (n.startsWith("GOOD BAG")) return false; // bolsa sorpresa antidesperdicio, no stock propio
+  if (n.includes("UBER")) return false; // combo/empaque específico de delivery
+  if (n.startsWith("JUGO")) return false; // jugo natural exprimido al momento, no stock
   if (nombre.includes("+")) return false; // combos (ej. "Café 240 + Medialuna")
   if (EXCLUIR_EXACTO.has(nombre)) return false;
 
@@ -44,11 +63,16 @@ export async function GET() {
   if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
   try {
-    const categorias = await getCatalogoProductos({ excluir: ["HELADERIA"] });
-    const filtradas: Categoria[] = categorias
+    const categorias = await getCatalogoProductos({
+      excluir: ["HELADERIA", "CHOCOLATERIA", "ARTICULOS", "MATERIAS PRIMAS"],
+    });
+    const filtradas = categorias
       .map((c) => ({
-        ...c,
-        productos: c.productos.filter((p) => esContable(c.value, p)),
+        value: c.value,
+        label: c.label,
+        productos: c.productos
+          .filter((p) => esContable(c.value, p))
+          .map((nombre) => ({ nombre, unidad: unidadDe(nombre) })),
       }))
       .filter((c) => c.productos.length > 0);
 

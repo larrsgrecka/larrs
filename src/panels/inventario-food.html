@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Inventario Food · Larrs</title>
+<style>
+:root { color-scheme: light; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f2f7; color: #1e293b; padding: 14px; font-size: 14px; }
+.container { max-width: 820px; margin: 0 auto; }
+.header { background: linear-gradient(135deg, #111418, #1e293b); border-radius: 12px; padding: 18px 22px; margin-bottom: 12px; color: #fff; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.logo-img { height: 44px; width: auto; display: block; }
+.header .title { font-size: 15px; font-weight: 700; color: #e2e8f0; margin-top: 10px; }
+.header .subtitle { font-size: 12px; color: #94a3b8; margin-top: 2px; }
+.toolbar { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.toolbar label { font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .06em; }
+.toolbar select { font-size: 13px; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 9px; color: #1e293b; background: #f8fafc; }
+.section-title { font-size:11px; font-weight:700; color:#334155; text-transform:uppercase; letter-spacing:.06em; margin:0 0 8px; }
+.card { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; margin-bottom: 12px; }
+.form-card { background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:16px; margin-bottom:12px; }
+.form-grid { display:grid; grid-template-columns: repeat(3, 1fr); gap:12px; }
+.form-field { display:flex; flex-direction:column; gap:4px; }
+.form-field.full { grid-column: 1 / -1; }
+.form-field label { font-size:10px; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:.05em; }
+.form-field input, .form-field select, .form-field textarea { font-size:13px; border:1px solid #e2e8f0; border-radius:6px; padding:8px 10px; color:#1e293b; background:#f8fafc; font-family:inherit; }
+.form-field textarea { resize:vertical; min-height:44px; }
+.btn { background: #2563eb; color: #fff; border: none; border-radius: 6px; padding: 9px 16px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.btn:disabled { opacity:.5; cursor:not-allowed; }
+.msg { font-size:12px; border-radius:8px; padding:9px 13px; margin-top:10px; display:none; }
+.msg.ok { display:block; background:#f0fdf4; border:1px solid #bbf7d0; color:#15803d; }
+.msg.err { display:block; background:#fef2f2; border:1px solid #fecaca; color:#b91c1c; }
+table { width: 100%; border-collapse: collapse; }
+th { padding: 8px 10px; text-align: left; font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .04em; background: #f8fafc; }
+th.r, td.r { text-align: right; }
+td { padding: 7px 10px; border-top: 1px solid #f1f5f9; font-size: 13px; vertical-align: middle; }
+tr:hover td { background: #f8fafc; }
+.empty { padding: 30px; text-align: center; color: #94a3b8; font-size: 13px; }
+.cant-input { width:90px; text-align:right; font-weight:700; }
+.last { font-size: 11px; color: #b0bac8; text-align: center; margin-top: 6px; }
+.cat-badge { display:inline-block; font-size:10px; font-weight:700; padding:2px 8px; border-radius:6px; background:#eff6ff; color:#1d4ed8; white-space:nowrap; }
+@media (max-width: 560px) { .form-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div>
+      <img class="logo-img" src="https://heladerialarrs.cl/cdn/shop/t/2/assets/logo-footer.png?v=41616879924709803011609269083" alt="Larrs">
+      <div class="title">Inventario food</div>
+      <div class="subtitle" id="header-sub">Cargando...</div>
+    </div>
+  </div>
+
+  <div class="toolbar" id="admin-toolbar" style="display:none">
+    <label>Tienda</label>
+    <select id="tienda-select" onchange="onTiendaChange()"></select>
+  </div>
+
+  <div class="form-card">
+    <div class="section-title">Nuevo conteo</div>
+    <div class="form-grid" style="margin-bottom:12px">
+      <div class="form-field">
+        <label>Fecha del conteo</label>
+        <input type="date" id="f-fecha">
+      </div>
+      <div class="form-field">
+        <label>Categoría</label>
+        <select id="f-categoria" onchange="onCategoriaChange()">
+          <option value="">Cargando categorías...</option>
+        </select>
+      </div>
+      <div class="form-field">
+        <label>Unidad</label>
+        <select id="f-unidad">
+          <option value="un">un</option>
+          <option value="kg">kg</option>
+          <option value="L">L</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="card" id="productos-card" style="margin-bottom:12px">
+      <table>
+        <thead><tr><th>Producto</th><th class="r">Cantidad contada</th></tr></thead>
+        <tbody id="productos-body">
+          <tr><td colspan="2" class="empty">Selecciona una categoría para empezar el conteo.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="form-field full" style="margin-bottom:12px">
+      <label>Observaciones generales (opcional)</label>
+      <textarea id="f-observaciones" placeholder="Ej: faltó contar la bodega chica..."></textarea>
+    </div>
+
+    <button class="btn" id="submit-btn" onclick="submitConteo()">Guardar conteo</button>
+    <div class="msg" id="form-msg"></div>
+  </div>
+
+  <div class="section-title">Stock actual (último conteo por producto)</div>
+  <div class="card">
+    <table>
+      <thead>
+        <tr>
+          <th id="th-tienda" style="display:none">Tienda</th>
+          <th>Categoría</th>
+          <th>Producto</th>
+          <th class="r">Cantidad</th>
+          <th>Fecha conteo</th>
+        </tr>
+      </thead>
+      <tbody id="stock-body">
+        <tr><td colspan="5" class="empty">Cargando...</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="last" id="last-update"></div>
+</div>
+
+<script>
+const TIENDAS = ['Costanera', 'Dominicos', 'Trapenses'];
+const tiendaFija = window._LARRS_TIENDA || null;
+let tiendaActiva = tiendaFija || 'Todas';
+let catalogo = [];
+
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
+}
+
+function fmtNum(n) {
+  return Number(n).toLocaleString('es-CL', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
+
+function initHeader() {
+  const sub = document.getElementById('header-sub');
+  if (tiendaFija) {
+    sub.textContent = tiendaFija;
+  } else {
+    sub.textContent = 'Todas las tiendas';
+    document.getElementById('admin-toolbar').style.display = 'flex';
+    const sel = document.getElementById('tienda-select');
+    sel.innerHTML = ['Todas', ...TIENDAS].map(t => `<option value="${t}">${t}</option>`).join('');
+    document.getElementById('th-tienda').style.display = '';
+  }
+}
+
+function onTiendaChange() {
+  tiendaActiva = document.getElementById('tienda-select').value;
+  loadStock();
+}
+
+async function loadCatalogo() {
+  const sel = document.getElementById('f-categoria');
+  try {
+    const resp = await fetch('/api/inventario-food/catalogo');
+    const data = await resp.json();
+    if (!data.ok) throw new Error(data.error || 'Error al cargar catálogo');
+    catalogo = data.categorias || [];
+  } catch (e) {
+    catalogo = [];
+  }
+  sel.innerHTML = '<option value="">Selecciona una categoría...</option>' +
+    catalogo.map(c => `<option value="${esc(c.value)}">${esc(c.label)}</option>`).join('');
+  onCategoriaChange();
+}
+
+function onCategoriaChange() {
+  const catValue = document.getElementById('f-categoria').value;
+  const body = document.getElementById('productos-body');
+  const cat = catalogo.find(c => c.value === catValue);
+
+  if (!cat) {
+    body.innerHTML = '<tr><td colspan="2" class="empty">Selecciona una categoría para empezar el conteo.</td></tr>';
+    return;
+  }
+
+  body.innerHTML = cat.productos.map(p => `
+    <tr>
+      <td style="font-size:12px">${esc(p)}</td>
+      <td class="r"><input type="number" class="cant-input" data-producto="${esc(p)}" min="0" step="0.01" placeholder="—"></td>
+    </tr>
+  `).join('');
+}
+
+async function submitConteo() {
+  const btn = document.getElementById('submit-btn');
+  const msg = document.getElementById('form-msg');
+  msg.className = 'msg';
+  msg.textContent = '';
+
+  const tienda = tiendaFija || document.getElementById('tienda-select').value;
+  const categoria = document.getElementById('f-categoria').value;
+  const fecha = document.getElementById('f-fecha').value;
+
+  if (!tienda || tienda === 'Todas') {
+    msg.className = 'msg err'; msg.textContent = 'Selecciona una tienda antes de registrar.'; return;
+  }
+  if (!categoria) {
+    msg.className = 'msg err'; msg.textContent = 'Selecciona una categoría.'; return;
+  }
+  if (!fecha) {
+    msg.className = 'msg err'; msg.textContent = 'Selecciona la fecha del conteo.'; return;
+  }
+
+  const inputs = [...document.querySelectorAll('#productos-body .cant-input')];
+  const items = inputs
+    .filter(inp => inp.value !== '')
+    .map(inp => ({ producto: inp.dataset.producto, cantidad: parseFloat(inp.value) }));
+
+  if (items.length === 0) {
+    msg.className = 'msg err';
+    msg.textContent = 'Ingresa la cantidad de al menos un producto.';
+    return;
+  }
+
+  const payload = {
+    fecha, tienda, categoria,
+    unidad: document.getElementById('f-unidad').value,
+    observaciones: document.getElementById('f-observaciones').value.trim(),
+    items,
+  };
+
+  btn.disabled = true;
+  try {
+    const resp = await fetch('/api/inventario-food', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await resp.json();
+    if (!data.ok) throw new Error(data.error || 'Error al registrar');
+
+    msg.className = 'msg ok';
+    msg.textContent = `Conteo guardado: ${data.count} producto(s).`;
+    inputs.forEach(inp => { inp.value = ''; });
+    document.getElementById('f-observaciones').value = '';
+    loadStock();
+  } catch (e) {
+    msg.className = 'msg err';
+    msg.textContent = 'Error: ' + e.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function loadStock() {
+  const tbody = document.getElementById('stock-body');
+  tbody.innerHTML = '<tr><td colspan="5" class="empty">Cargando...</td></tr>';
+  try {
+    const qs = (!tiendaFija && tiendaActiva !== 'Todas') ? `?tienda=${encodeURIComponent(tiendaActiva)}` : '';
+    const resp = await fetch('/api/inventario-food' + qs);
+    const data = await resp.json();
+    if (!data.ok) throw new Error(data.error || 'Error al cargar stock');
+    renderStock(data.items || []);
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="5" class="empty">Error: ${e.message}</td></tr>`;
+  }
+  document.getElementById('last-update').textContent = `Actualizado: ${new Date().toLocaleString('es-CL')}`;
+}
+
+function labelCategoria(value) {
+  const cat = catalogo.find(c => c.value === value);
+  return cat ? cat.label : value;
+}
+
+function renderStock(items) {
+  const tbody = document.getElementById('stock-body');
+  if (!items.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="empty">Sin conteos todavía.</td></tr>';
+    return;
+  }
+  const showTienda = !tiendaFija;
+  const sorted = [...items].sort((a, b) => {
+    if (showTienda && a.tienda !== b.tienda) return String(a.tienda).localeCompare(String(b.tienda));
+    if (a.categoria !== b.categoria) return String(a.categoria).localeCompare(String(b.categoria));
+    return String(a.producto).localeCompare(String(b.producto));
+  });
+  tbody.innerHTML = sorted.map(it => `
+    <tr>
+      ${showTienda ? `<td style="font-size:12px">${esc(it.tienda)}</td>` : ''}
+      <td><span class="cat-badge">${esc(labelCategoria(it.categoria))}</span></td>
+      <td style="font-size:12px">${esc(it.producto)}</td>
+      <td class="r" style="font-size:12px">${fmtNum(it.cantidad)} ${esc(it.unidad)}</td>
+      <td style="font-size:11px;color:#64748b">${esc(it.fecha)}</td>
+    </tr>
+  `).join('');
+}
+
+document.getElementById('f-fecha').value = new Date().toISOString().slice(0, 10);
+initHeader();
+loadCatalogo();
+loadStock();
+</script>
+</body>
+</html>

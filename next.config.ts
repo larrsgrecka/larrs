@@ -8,6 +8,7 @@ const nextConfig: NextConfig = {
     "/pedidos": ["./src/panels/pedidos.html"],
     "/tienda": ["./src/panels/tienda.html"],
     "/mermas": ["./src/panels/mermas.html"],
+    "/inventario-food": ["./src/panels/inventario-food.html"],
   },
   images: {
     remotePatterns: [{ protocol: "https", hostname: "heladerialarrs.cl" }],

@@ -8,7 +8,7 @@ export async function GET() {
   if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
   try {
-    const categorias = await getCatalogoProductos();
+    const categorias = await getCatalogoProductos({ excluir: ["HELADERIA"] });
     return NextResponse.json({ ok: true, categorias });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });

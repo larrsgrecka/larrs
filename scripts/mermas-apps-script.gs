@@ -94,6 +94,13 @@ function doPost(e) {
     return jsonOut_({ ok: false, error: 'Body inválido' });
   }
 
+  const action = e.parameter.action || 'create';
+  if (action === 'update') return doUpdate_(body);
+  if (action === 'delete') return doDelete_(body);
+  return doCreate_(body);
+}
+
+function doCreate_(body) {
   const required = ['fecha', 'tienda', 'producto', 'cantidad', 'unidad', 'motivo',
                      'reportado_por', 'reportado_por_id'];
   for (let i = 0; i < required.length; i++) {
@@ -114,4 +121,47 @@ function doPost(e) {
   sheet.appendRow(row);
 
   return jsonOut_({ ok: true, id: id, creado_en: creadoEn });
+}
+
+// Encuentra la fila (1-indexed, incluye encabezado) de un id dado en la
+// columna "id". Devuelve -1 si no existe.
+function findRowById_(sheet, id) {
+  const ids = sheet.getRange(2, 1, Math.max(sheet.getLastRow() - 1, 0), 1).getValues();
+  for (let i = 0; i < ids.length; i++) {
+    if (ids[i][0] === id) return i + 2;
+  }
+  return -1;
+}
+
+function doUpdate_(body) {
+  if (!body.id) return jsonOut_({ ok: false, error: 'Falta campo: id' });
+  const required = ['fecha', 'tienda', 'producto', 'cantidad', 'unidad', 'motivo'];
+  for (let i = 0; i < required.length; i++) {
+    const f = required[i];
+    if (!body[f]) return jsonOut_({ ok: false, error: 'Falta campo: ' + f });
+  }
+
+  const sheet = ensureSheet_();
+  const rowNum = findRowById_(sheet, body.id);
+  if (rowNum < 0) return jsonOut_({ ok: false, error: 'No se encontró el registro (id inválido)' });
+
+  const actual = sheet.getRange(rowNum, 1, 1, HEADERS.length).getValues()[0];
+  const fila = HEADERS.map(function (h, i) {
+    if (h === 'id' || h === 'creado_en' || h === 'reportado_por' || h === 'reportado_por_id') return actual[i];
+    return body[h] != null ? body[h] : '';
+  });
+
+  sheet.getRange(rowNum, 1, 1, HEADERS.length).setValues([fila]);
+  return jsonOut_({ ok: true, id: body.id });
+}
+
+function doDelete_(body) {
+  if (!body.id) return jsonOut_({ ok: false, error: 'Falta campo: id' });
+
+  const sheet = ensureSheet_();
+  const rowNum = findRowById_(sheet, body.id);
+  if (rowNum < 0) return jsonOut_({ ok: false, error: 'No se encontró el registro (id inválido)' });
+
+  sheet.deleteRow(rowNum);
+  return jsonOut_({ ok: true, id: body.id });
 }

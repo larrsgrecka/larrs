@@ -98,6 +98,36 @@ tr:hover td { background: #f8fafc; }
     <div class="msg" id="form-msg"></div>
   </div>
 
+  <div class="form-card" id="correccion-card" style="display:none">
+    <div class="section-title">Corrección de un pesaje anterior</div>
+    <p style="font-size:11px;color:#94a3b8;margin:-4px 0 10px">Para admins: agrega un ajuste (positivo o negativo) sin borrar ni tocar la fila original. Ej: si pesaron 12kg por error y eran 10kg, ingresa -2.</p>
+    <div class="form-grid" style="margin-bottom:12px">
+      <div class="form-field">
+        <label>Tienda</label>
+        <select id="correccion-tienda"></select>
+      </div>
+      <div class="form-field">
+        <label>Fecha del pesaje original</label>
+        <input type="date" id="correccion-fecha">
+      </div>
+      <div class="form-field full">
+        <label>Sabor</label>
+        <input type="text" id="correccion-sabor-buscar" list="correccion-sabores-list" placeholder="Escribe para buscar el sabor...">
+        <datalist id="correccion-sabores-list"></datalist>
+      </div>
+      <div class="form-field">
+        <label>Ajuste (kg, puede ser negativo)</label>
+        <input type="number" id="correccion-cantidad" step="0.01" placeholder="Ej: -2 o 1.5">
+      </div>
+    </div>
+    <div class="form-field full" style="margin-bottom:12px">
+      <label>Motivo de la corrección</label>
+      <input type="text" id="correccion-motivo" placeholder="Ej: error de tipeo, se contó doble...">
+    </div>
+    <button class="btn" id="correccion-btn" style="background:#dc2626" onclick="submitCorreccion()">Registrar corrección</button>
+    <div class="msg" id="correccion-msg"></div>
+  </div>
+
   <div class="msg ok" style="display:block">
     Los datos guardados aquí se ven reflejados directamente en <a href="/produccion" style="color:#15803d;font-weight:700">el panel de Producción</a> (kg por sabor, evolución, alertas) — es la misma planilla.
   </div>
@@ -107,6 +137,7 @@ tr:hover td { background: #f8fafc; }
 <script>
 const TIENDAS = ['Costanera', 'Dominicos', 'Trapenses'];
 const tiendaFija = window._LARRS_TIENDA || null;
+const esAdmin = window._LARRS_IS_ADMIN === true;
 let sabores = [];
 let vitrinaSabores = []; // sabores de la vitrina actual de la tienda activa
 let cantidades = {}; // sabor -> valor string ingresado (se conserva al filtrar)
@@ -192,8 +223,72 @@ async function loadSabores() {
     if (!data.ok) throw new Error(data.error || 'Error al cargar sabores');
     sabores = data.sabores || [];
     renderSabores();
+    if (esAdmin) {
+      document.getElementById('correccion-sabores-list').innerHTML =
+        sabores.map(s => `<option value="${esc(s)}">`).join('');
+    }
   } catch (e) {
     body.innerHTML = `<tr><td colspan="2" class="empty">Error: ${e.message}</td></tr>`;
+  }
+}
+
+function initCorreccion() {
+  if (!esAdmin) return;
+  document.getElementById('correccion-card').style.display = 'block';
+  const sel = document.getElementById('correccion-tienda');
+  sel.innerHTML = TIENDAS.map(t => `<option value="${t}">${t}</option>`).join('');
+  document.getElementById('correccion-fecha').value = new Date().toISOString().slice(0, 10);
+}
+
+async function submitCorreccion() {
+  const btn = document.getElementById('correccion-btn');
+  const msg = document.getElementById('correccion-msg');
+  msg.className = 'msg'; msg.textContent = '';
+
+  const tienda = document.getElementById('correccion-tienda').value;
+  const fecha = document.getElementById('correccion-fecha').value;
+  const sabor = document.getElementById('correccion-sabor-buscar').value.trim();
+  const cantidad = parseFloat(document.getElementById('correccion-cantidad').value);
+  const motivo = document.getElementById('correccion-motivo').value.trim();
+
+  if (!tienda || !fecha) {
+    msg.className = 'msg err'; msg.textContent = 'Selecciona tienda y fecha.'; return;
+  }
+  if (!sabor || !sabores.includes(sabor)) {
+    msg.className = 'msg err'; msg.textContent = 'Selecciona un sabor válido de la lista.'; return;
+  }
+  if (Number.isNaN(cantidad) || cantidad === 0) {
+    msg.className = 'msg err'; msg.textContent = 'Ingresa un ajuste distinto de 0 (puede ser negativo).'; return;
+  }
+  if (!motivo) {
+    msg.className = 'msg err'; msg.textContent = 'Indica el motivo de la corrección.'; return;
+  }
+
+  btn.disabled = true;
+  try {
+    const resp = await fetch('/api/produccion-pesaje', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fecha, tienda,
+        observaciones: motivo,
+        esCorreccion: true,
+        items: [{ sabor, cantidad }],
+      }),
+    });
+    const data = await resp.json();
+    if (!data.ok) throw new Error(data.error || 'Error al registrar corrección');
+
+    msg.className = 'msg ok';
+    msg.textContent = `Corrección de ${cantidad > 0 ? '+' : ''}${cantidad} kg registrada para "${sabor}".`;
+    document.getElementById('correccion-sabor-buscar').value = '';
+    document.getElementById('correccion-cantidad').value = '';
+    document.getElementById('correccion-motivo').value = '';
+  } catch (e) {
+    msg.className = 'msg err';
+    msg.textContent = 'Error: ' + e.message;
+  } finally {
+    btn.disabled = false;
   }
 }
 
@@ -280,6 +375,7 @@ async function submitPesaje() {
 
 document.getElementById('f-fecha').value = new Date().toISOString().slice(0, 10);
 initHeader();
+initCorreccion();
 loadVitrina();
 loadSabores();
 document.getElementById('last-update').textContent = `Cargado: ${new Date().toLocaleString('es-CL')}`;

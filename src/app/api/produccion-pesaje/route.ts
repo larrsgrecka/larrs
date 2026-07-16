@@ -36,16 +36,26 @@ export async function POST(request: NextRequest) {
   if (!body.fecha || !/^\d{4}-\d{2}-\d{2}$/.test(body.fecha)) {
     return NextResponse.json({ error: "fecha inválida" }, { status: 400 });
   }
+
+  // Una corrección (solo admin) permite cantidades negativas, para ajustar
+  // un pesaje anterior sin tocar ni borrar la fila original.
+  const esCorreccion = body.esCorreccion === true && profile.role === "admin";
   const items = (body.items ?? []) as Item[];
-  const validItems = items.filter((it) => it.sabor && Number(it.cantidad) > 0);
+  const validItems = esCorreccion
+    ? items.filter((it) => it.sabor && Number(it.cantidad) !== 0 && !Number.isNaN(Number(it.cantidad)))
+    : items.filter((it) => it.sabor && Number(it.cantidad) > 0);
   if (validItems.length === 0) {
     return NextResponse.json({ error: "Debes pesar al menos un sabor" }, { status: 400 });
   }
 
+  const observaciones = esCorreccion
+    ? `[Corrección] ${body.observaciones || ""}`.trim()
+    : body.observaciones || "";
+
   const payload = {
     fecha: body.fecha,
     tienda,
-    observaciones: body.observaciones || "",
+    observaciones,
     reportado_por_email: user.email || "",
     reportado_por_nombre: profile.name || user.email || "",
     items: validItems.map((it) => ({ sabor: it.sabor, cantidad: Number(it.cantidad) })),

@@ -80,6 +80,94 @@ export async function POST(request: NextRequest) {
   return NextResponse.json(data);
 }
 
+export async function PUT(request: NextRequest) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+
+  const profile = await getProfile();
+  if (profile?.role !== "admin") {
+    return NextResponse.json({ error: "Solo un admin puede editar conteos" }, { status: 403 });
+  }
+
+  const config = appsScriptConfig();
+  if (!config) {
+    return NextResponse.json({ error: "Apps Script de inventario food no configurado" }, { status: 500 });
+  }
+
+  const body = await request.json();
+  if (!body.id) {
+    return NextResponse.json({ error: "id es requerido" }, { status: 400 });
+  }
+  if (!body.tienda || !body.categoria || !body.producto) {
+    return NextResponse.json({ error: "tienda, categoria y producto son requeridos" }, { status: 400 });
+  }
+  if (!body.fecha || !/^\d{4}-\d{2}-\d{2}$/.test(body.fecha)) {
+    return NextResponse.json({ error: "fecha inválida" }, { status: 400 });
+  }
+  if (body.cantidad === undefined || body.cantidad === null || Number.isNaN(Number(body.cantidad))) {
+    return NextResponse.json({ error: "cantidad inválida" }, { status: 400 });
+  }
+  const unidad = body.unidad || "un";
+  if (unidad === "un" && !Number.isInteger(Number(body.cantidad))) {
+    return NextResponse.json({ error: "La cantidad debe ser un número entero cuando la unidad es 'un'" }, { status: 400 });
+  }
+
+  const payload = {
+    id: body.id,
+    fecha: body.fecha,
+    tienda: body.tienda,
+    categoria: body.categoria,
+    producto: body.producto,
+    cantidad: Number(body.cantidad),
+    unidad,
+    observaciones: body.observaciones || "",
+  };
+
+  const resp = await fetch(`${config.url}?token=${encodeURIComponent(config.token)}&action=update`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  const data = await resp.json();
+  if (!data.ok) {
+    return NextResponse.json({ error: data.error || "Error en Apps Script" }, { status: 502 });
+  }
+
+  return NextResponse.json(data);
+}
+
+export async function DELETE(request: NextRequest) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+
+  const profile = await getProfile();
+  if (profile?.role !== "admin") {
+    return NextResponse.json({ error: "Solo un admin puede eliminar conteos" }, { status: 403 });
+  }
+
+  const config = appsScriptConfig();
+  if (!config) {
+    return NextResponse.json({ error: "Apps Script de inventario food no configurado" }, { status: 500 });
+  }
+
+  const body = await request.json();
+  if (!body.id) {
+    return NextResponse.json({ error: "id es requerido" }, { status: 400 });
+  }
+
+  const resp = await fetch(`${config.url}?token=${encodeURIComponent(config.token)}&action=delete`, {
+    method: "POST",
+    body: JSON.stringify({ id: body.id }),
+  });
+  const data = await resp.json();
+  if (!data.ok) {
+    return NextResponse.json({ error: data.error || "Error en Apps Script" }, { status: 502 });
+  }
+
+  return NextResponse.json(data);
+}
+
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

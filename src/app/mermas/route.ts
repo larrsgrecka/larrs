@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/utils/supabase/server";
-import { getProfile } from "@/utils/auth";
+import { getProfile, isAdmin } from "@/utils/auth";
 import { readFileSync } from "fs";
 import { join } from "path";
 
@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
   const tienda =
     profile?.role === "jefe_tienda" && profile.tienda ? profile.tienda : null;
 
-  const inject = `<script>window._LARRS_TIENDA=${JSON.stringify(tienda)};</script>
+  const inject = `<script>window._LARRS_TIENDA=${JSON.stringify(tienda)};window._LARRS_IS_ADMIN=${isAdmin(profile)};</script>
 <script src="/larrs-nav.js" defer></script>`;
 
   let html = readFileSync(

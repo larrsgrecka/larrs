@@ -77,6 +77,95 @@ export async function POST(request: NextRequest) {
   return NextResponse.json(data);
 }
 
+export async function PUT(request: NextRequest) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+
+  const profile = await getProfile();
+  if (profile?.role !== "admin") {
+    return NextResponse.json({ error: "Solo un admin puede editar mermas" }, { status: 403 });
+  }
+
+  const config = appsScriptConfig();
+  if (!config) {
+    return NextResponse.json({ error: "Apps Script de mermas no configurado" }, { status: 500 });
+  }
+
+  const body = await request.json();
+  if (!body.id) {
+    return NextResponse.json({ error: "id es requerido" }, { status: 400 });
+  }
+  if (!body.tienda) {
+    return NextResponse.json({ error: "tienda es requerida" }, { status: 400 });
+  }
+  if (!body.fecha || !/^\d{4}-\d{2}-\d{2}$/.test(body.fecha)) {
+    return NextResponse.json({ error: "fecha inválida" }, { status: 400 });
+  }
+  if (!body.producto || !(Number(body.cantidad) > 0)) {
+    return NextResponse.json({ error: "producto y cantidad son requeridos" }, { status: 400 });
+  }
+  if (!MOTIVOS_VALIDOS.includes(body.motivo)) {
+    return NextResponse.json({ error: "motivo inválido" }, { status: 400 });
+  }
+
+  const payload = {
+    id: body.id,
+    fecha: body.fecha,
+    tienda: body.tienda,
+    producto: body.producto,
+    categoria_producto: body.categoria_producto || "",
+    cantidad: Number(body.cantidad),
+    unidad: body.unidad || "un",
+    motivo: body.motivo,
+    motivo_detalle: body.motivo_detalle || "",
+    observaciones: body.observaciones || "",
+  };
+
+  const resp = await fetch(`${config.url}?token=${encodeURIComponent(config.token)}&action=update`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  const data = await resp.json();
+  if (!data.ok) {
+    return NextResponse.json({ error: data.error || "Error en Apps Script" }, { status: 502 });
+  }
+
+  return NextResponse.json(data);
+}
+
+export async function DELETE(request: NextRequest) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+
+  const profile = await getProfile();
+  if (profile?.role !== "admin") {
+    return NextResponse.json({ error: "Solo un admin puede eliminar mermas" }, { status: 403 });
+  }
+
+  const config = appsScriptConfig();
+  if (!config) {
+    return NextResponse.json({ error: "Apps Script de mermas no configurado" }, { status: 500 });
+  }
+
+  const body = await request.json();
+  if (!body.id) {
+    return NextResponse.json({ error: "id es requerido" }, { status: 400 });
+  }
+
+  const resp = await fetch(`${config.url}?token=${encodeURIComponent(config.token)}&action=delete`, {
+    method: "POST",
+    body: JSON.stringify({ id: body.id }),
+  });
+  const data = await resp.json();
+  if (!data.ok) {
+    return NextResponse.json({ error: data.error || "Error en Apps Script" }, { status: 502 });
+  }
+
+  return NextResponse.json(data);
+}
+
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

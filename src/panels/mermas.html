@@ -114,6 +114,7 @@ tr:hover td { background: #f8fafc; }
         </div>
       </div>
       <button class="btn" type="submit" id="submit-btn" style="margin-top:14px">Registrar merma</button>
+      <button class="btn" type="button" id="cancelar-edicion-btn" onclick="cancelarEdicion()" style="margin-top:14px;margin-left:8px;background:#64748b;display:none">Cancelar edición</button>
       <div class="msg" id="form-msg"></div>
     </form>
   </div>
@@ -129,10 +130,11 @@ tr:hover td { background: #f8fafc; }
           <th class="r">Cantidad</th>
           <th>Motivo</th>
           <th>Reportado por</th>
+          <th id="th-acciones" style="display:none">Acciones</th>
         </tr>
       </thead>
       <tbody id="historial-body">
-        <tr><td colspan="6" class="empty">Cargando histórico...</td></tr>
+        <tr><td colspan="7" class="empty">Cargando histórico...</td></tr>
       </tbody>
     </table>
   </div>
@@ -142,7 +144,10 @@ tr:hover td { background: #f8fafc; }
 <script>
 const TIENDAS = ['Costanera', 'Dominicos', 'Trapenses'];
 const tiendaFija = window._LARRS_TIENDA || null;
+const esAdmin = window._LARRS_IS_ADMIN === true;
 let tiendaActiva = tiendaFija || 'Todas';
+let historialItems = [];
+let editingId = null;
 
 function fmtNum(n) {
   return Number(n).toLocaleString('es-CL', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
@@ -166,6 +171,7 @@ function initHeader() {
     sel.innerHTML = ['Todas', ...TIENDAS].map(t => `<option value="${t}">${t}</option>`).join('');
     document.getElementById('th-tienda').style.display = '';
   }
+  if (esAdmin) document.getElementById('th-acciones').style.display = '';
 }
 
 function onTiendaChange() {
@@ -225,15 +231,16 @@ function motivoBadgeColor(motivo) {
 
 async function loadHistorial() {
   const tbody = document.getElementById('historial-body');
-  tbody.innerHTML = '<tr><td colspan="6" class="empty">Cargando histórico...</td></tr>';
+  tbody.innerHTML = `<tr><td colspan="${esAdmin ? 7 : 6}" class="empty">Cargando histórico...</td></tr>`;
   try {
     const qs = (!tiendaFija && tiendaActiva !== 'Todas') ? `?tienda=${encodeURIComponent(tiendaActiva)}` : '';
     const resp = await fetch('/api/mermas' + qs);
     const data = await resp.json();
     if (!data.ok) throw new Error(data.error || 'Error al cargar histórico');
-    renderHistorial(data.items || []);
+    historialItems = data.items || [];
+    renderHistorial(historialItems);
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="6" class="empty">Error: ${e.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="${esAdmin ? 7 : 6}" class="empty">Error: ${e.message}</td></tr>`;
   }
   document.getElementById('last-update').textContent = `Actualizado: ${new Date().toLocaleString('es-CL')}`;
 }
@@ -241,7 +248,7 @@ async function loadHistorial() {
 function renderHistorial(items) {
   const tbody = document.getElementById('historial-body');
   if (!items.length) {
-    tbody.innerHTML = '<tr><td colspan="6" class="empty">Sin registros todavía.</td></tr>';
+    tbody.innerHTML = `<tr><td colspan="${esAdmin ? 7 : 6}" class="empty">Sin registros todavía.</td></tr>`;
     return;
   }
   const showTienda = !tiendaFija;
@@ -253,8 +260,72 @@ function renderHistorial(items) {
       <td class="r" style="font-size:12px">${fmtNum(it.cantidad)} ${esc(it.unidad)}</td>
       <td><span class="motivo-badge" style="background:${motivoBadgeColor(it.motivo)}">${esc(it.motivo) || '—'}</span></td>
       <td style="font-size:11px;color:#64748b">${esc(it.reportado_por) || '—'}</td>
+      ${esAdmin ? `<td style="white-space:nowrap">
+        <button type="button" class="btn" style="padding:4px 9px;font-size:11px" onclick="editarMerma('${it.id}')">Editar</button>
+        <button type="button" class="btn" style="padding:4px 9px;font-size:11px;background:#dc2626" onclick="eliminarMerma('${it.id}')">Eliminar</button>
+      </td>` : ''}
     </tr>
   `).join('');
+}
+
+function editarMerma(id) {
+  const it = historialItems.find(x => String(x.id) === String(id));
+  if (!it) return;
+  editingId = id;
+
+  document.getElementById('f-fecha').value = it.fecha || '';
+  if (!tiendaFija) document.getElementById('tienda-select').value = it.tienda || '';
+
+  const catValue = catalogo.some(c => c.value === it.categoria_producto) ? it.categoria_producto : 'OTRO';
+  document.getElementById('f-categoria').value = catValue;
+  onCategoriaChange();
+
+  const prodSel = document.getElementById('f-producto');
+  const opcionExiste = [...prodSel.options].some(o => o.value === it.producto);
+  if (opcionExiste) {
+    prodSel.value = it.producto;
+  } else {
+    prodSel.value = '__otro__';
+    document.getElementById('f-producto-libre').value = it.producto || '';
+  }
+  onProductoChange();
+
+  document.getElementById('f-cantidad').value = it.cantidad;
+  document.getElementById('f-unidad').value = it.unidad || 'kg';
+  document.getElementById('f-motivo').value = it.motivo || '';
+  onMotivoChange();
+  document.getElementById('f-motivo-detalle').value = it.motivo_detalle || '';
+  document.getElementById('f-observaciones').value = it.observaciones || '';
+
+  document.getElementById('submit-btn').textContent = 'Guardar cambios';
+  document.getElementById('cancelar-edicion-btn').style.display = 'inline-block';
+  document.getElementById('merma-form').scrollIntoView({ behavior: 'smooth' });
+}
+
+function cancelarEdicion() {
+  editingId = null;
+  document.getElementById('merma-form').reset();
+  document.getElementById('f-fecha').value = new Date().toISOString().slice(0, 10);
+  onCategoriaChange();
+  onMotivoChange();
+  document.getElementById('submit-btn').textContent = 'Registrar merma';
+  document.getElementById('cancelar-edicion-btn').style.display = 'none';
+}
+
+async function eliminarMerma(id) {
+  if (!confirm('¿Eliminar este registro de merma? Esta acción no se puede deshacer.')) return;
+  try {
+    const resp = await fetch('/api/mermas', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    });
+    const data = await resp.json();
+    if (!data.ok) throw new Error(data.error || 'Error al eliminar');
+    loadHistorial();
+  } catch (e) {
+    alert('Error al eliminar: ' + e.message);
+  }
 }
 
 async function submitMerma(evt) {
@@ -300,20 +371,24 @@ async function submitMerma(evt) {
 
   btn.disabled = true;
   try {
+    const editando = !!editingId;
     const resp = await fetch('/api/mermas', {
-      method: 'POST',
+      method: editando ? 'PUT' : 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(editando ? { ...payload, id: editingId } : payload),
     });
     const data = await resp.json();
     if (!data.ok) throw new Error(data.error || 'Error al registrar');
 
     msg.className = 'msg ok';
-    msg.textContent = 'Merma registrada correctamente.';
+    msg.textContent = editando ? 'Merma actualizada correctamente.' : 'Merma registrada correctamente.';
+    editingId = null;
     document.getElementById('merma-form').reset();
     document.getElementById('f-fecha').value = new Date().toISOString().slice(0, 10);
     onCategoriaChange();
     onMotivoChange();
+    document.getElementById('submit-btn').textContent = 'Registrar merma';
+    document.getElementById('cancelar-edicion-btn').style.display = 'none';
     loadHistorial();
   } catch (e) {
     msg.className = 'msg err';

@@ -99,10 +99,11 @@ tr:hover td { background: #f8fafc; }
           <th>Producto</th>
           <th class="r">Cantidad</th>
           <th>Fecha conteo</th>
+          <th id="th-acciones" style="display:none">Acciones</th>
         </tr>
       </thead>
       <tbody id="stock-body">
-        <tr><td colspan="5" class="empty">Cargando...</td></tr>
+        <tr><td colspan="6" class="empty">Cargando...</td></tr>
       </tbody>
     </table>
   </div>
@@ -112,8 +113,11 @@ tr:hover td { background: #f8fafc; }
 <script>
 const TIENDAS = ['Costanera', 'Dominicos', 'Trapenses'];
 const tiendaFija = window._LARRS_TIENDA || null;
+const esAdmin = window._LARRS_IS_ADMIN === true;
 let tiendaActiva = tiendaFija || 'Todas';
 let catalogo = [];
+let stockItems = [];
+let editingId = null;
 
 function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({
@@ -136,6 +140,7 @@ function initHeader() {
     sel.innerHTML = ['Todas', ...TIENDAS].map(t => `<option value="${t}">${t}</option>`).join('');
     document.getElementById('th-tienda').style.display = '';
   }
+  if (esAdmin) document.getElementById('th-acciones').style.display = '';
 }
 
 function onTiendaChange() {
@@ -248,15 +253,17 @@ async function submitConteo() {
 
 async function loadStock() {
   const tbody = document.getElementById('stock-body');
-  tbody.innerHTML = '<tr><td colspan="5" class="empty">Cargando...</td></tr>';
+  tbody.innerHTML = `<tr><td colspan="${esAdmin ? 6 : 5}" class="empty">Cargando...</td></tr>`;
   try {
     const qs = (!tiendaFija && tiendaActiva !== 'Todas') ? `?tienda=${encodeURIComponent(tiendaActiva)}` : '';
     const resp = await fetch('/api/inventario-food' + qs);
     const data = await resp.json();
     if (!data.ok) throw new Error(data.error || 'Error al cargar stock');
-    renderStock(data.items || []);
+    stockItems = data.items || [];
+    editingId = null;
+    renderStock(stockItems);
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="5" class="empty">Error: ${e.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="${esAdmin ? 6 : 5}" class="empty">Error: ${e.message}</td></tr>`;
   }
   document.getElementById('last-update').textContent = `Actualizado: ${new Date().toLocaleString('es-CL')}`;
 }
@@ -269,7 +276,7 @@ function labelCategoria(value) {
 function renderStock(items) {
   const tbody = document.getElementById('stock-body');
   if (!items.length) {
-    tbody.innerHTML = '<tr><td colspan="5" class="empty">Sin conteos todavía.</td></tr>';
+    tbody.innerHTML = `<tr><td colspan="${esAdmin ? 6 : 5}" class="empty">Sin conteos todavía.</td></tr>`;
     return;
   }
   const showTienda = !tiendaFija;
@@ -278,15 +285,89 @@ function renderStock(items) {
     if (a.categoria !== b.categoria) return String(a.categoria).localeCompare(String(b.categoria));
     return String(a.producto).localeCompare(String(b.producto));
   });
-  tbody.innerHTML = sorted.map(it => `
+  tbody.innerHTML = sorted.map(it => {
+    if (esAdmin && String(it.id) === String(editingId)) {
+      return `
+        <tr>
+          ${showTienda ? `<td style="font-size:12px">${esc(it.tienda)}</td>` : ''}
+          <td><span class="cat-badge">${esc(labelCategoria(it.categoria))}</span></td>
+          <td style="font-size:12px">${esc(it.producto)}</td>
+          <td class="r"><input type="number" id="edit-cantidad" class="cant-input" value="${it.cantidad}" min="0" step="${it.unidad === 'un' ? '1' : '0.01'}"></td>
+          <td><input type="date" id="edit-fecha" value="${esc(it.fecha)}" style="font-size:12px;border:1px solid #e2e8f0;border-radius:6px;padding:4px 6px"></td>
+          <td style="white-space:nowrap">
+            <button type="button" class="btn" style="padding:4px 9px;font-size:11px" onclick="guardarEdicionStock('${it.id}')">Guardar</button>
+            <button type="button" class="btn" style="padding:4px 9px;font-size:11px;background:#64748b" onclick="cancelarEdicionStock()">Cancelar</button>
+          </td>
+        </tr>`;
+    }
+    return `
     <tr>
       ${showTienda ? `<td style="font-size:12px">${esc(it.tienda)}</td>` : ''}
       <td><span class="cat-badge">${esc(labelCategoria(it.categoria))}</span></td>
       <td style="font-size:12px">${esc(it.producto)}</td>
       <td class="r" style="font-size:12px">${fmtNum(it.cantidad)} ${esc(it.unidad)}</td>
       <td style="font-size:11px;color:#64748b">${esc(it.fecha)}</td>
-    </tr>
-  `).join('');
+      ${esAdmin ? `<td style="white-space:nowrap">
+        <button type="button" class="btn" style="padding:4px 9px;font-size:11px" onclick="editarStock('${it.id}')">Editar</button>
+        <button type="button" class="btn" style="padding:4px 9px;font-size:11px;background:#dc2626" onclick="eliminarStock('${it.id}')">Eliminar</button>
+      </td>` : ''}
+    </tr>`;
+  }).join('');
+}
+
+function editarStock(id) {
+  editingId = id;
+  renderStock(stockItems);
+}
+
+function cancelarEdicionStock() {
+  editingId = null;
+  renderStock(stockItems);
+}
+
+async function guardarEdicionStock(id) {
+  const it = stockItems.find(x => String(x.id) === String(id));
+  if (!it) return;
+  const cantidad = parseFloat(document.getElementById('edit-cantidad').value);
+  const fecha = document.getElementById('edit-fecha').value;
+
+  if (it.unidad === 'un' && !Number.isInteger(cantidad)) {
+    alert(`"${it.producto}" se cuenta en unidades enteras (1, 2, 3...).`);
+    return;
+  }
+
+  try {
+    const resp = await fetch('/api/inventario-food', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id, fecha, cantidad, unidad: it.unidad,
+        tienda: it.tienda, categoria: it.categoria, producto: it.producto,
+        observaciones: it.observaciones || '',
+      }),
+    });
+    const data = await resp.json();
+    if (!data.ok) throw new Error(data.error || 'Error al guardar');
+    loadStock();
+  } catch (e) {
+    alert('Error al guardar: ' + e.message);
+  }
+}
+
+async function eliminarStock(id) {
+  if (!confirm('¿Eliminar este conteo? Esta acción no se puede deshacer.')) return;
+  try {
+    const resp = await fetch('/api/inventario-food', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    });
+    const data = await resp.json();
+    if (!data.ok) throw new Error(data.error || 'Error al eliminar');
+    loadStock();
+  } catch (e) {
+    alert('Error al eliminar: ' + e.message);
+  }
 }
 
 document.getElementById('f-fecha').value = new Date().toISOString().slice(0, 10);

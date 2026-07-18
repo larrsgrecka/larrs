@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Catálogo · Larrs</title>
+<style>
+:root { color-scheme: light; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f2f7; color: #1e293b; padding: 14px; font-size: 14px; }
+.container { max-width: 900px; margin: 0 auto; }
+.header { background: linear-gradient(135deg, #111418, #1e293b); border-radius: 12px; padding: 18px 22px; margin-bottom: 12px; color: #fff; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.logo-img { height: 44px; width: auto; display: block; }
+.header .title { font-size: 15px; font-weight: 700; color: #e2e8f0; margin-top: 10px; }
+.header .subtitle { font-size: 12px; color: #94a3b8; margin-top: 2px; }
+.tabs { display:flex; gap:8px; margin-bottom:12px; }
+.tab-btn { flex:1; background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:10px; font-size:13px; font-weight:700; color:#64748b; cursor:pointer; }
+.tab-btn.active { background:#111418; color:#fff; border-color:#111418; }
+.section-title { font-size:11px; font-weight:700; color:#334155; text-transform:uppercase; letter-spacing:.06em; margin:0 0 8px; }
+.card { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding:14px; margin-bottom: 12px; }
+.note { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 9px 13px; font-size: 12px; color: #1e40af; margin-bottom: 12px; line-height: 1.5; }
+.form-grid { display:grid; grid-template-columns: repeat(4, 1fr); gap:10px; align-items:end; }
+.form-field { display:flex; flex-direction:column; gap:4px; }
+.form-field label { font-size:10px; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:.05em; }
+.form-field input, .form-field select { font-size:13px; border:1px solid #e2e8f0; border-radius:6px; padding:8px 10px; color:#1e293b; background:#f8fafc; }
+.btn { background: #2563eb; color: #fff; border: none; border-radius: 6px; padding: 9px 16px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.btn:disabled { opacity:.5; cursor:not-allowed; }
+.msg { font-size:12px; border-radius:8px; padding:9px 13px; margin-top:10px; display:none; }
+.msg.ok { display:block; background:#f0fdf4; border:1px solid #bbf7d0; color:#15803d; }
+.msg.err { display:block; background:#fef2f2; border:1px solid #fecaca; color:#b91c1c; }
+table { width: 100%; border-collapse: collapse; }
+th { padding: 8px 10px; text-align: left; font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .04em; background: #f8fafc; }
+td { padding: 7px 10px; border-top: 1px solid #f1f5f9; font-size: 13px; vertical-align: middle; }
+tr:hover td { background: #f8fafc; }
+.empty { padding: 20px; text-align: center; color: #94a3b8; font-size: 13px; }
+.remove-btn { background:#fef2f2; color:#dc2626; border:1px solid #fecaca; border-radius:6px; padding:3px 9px; font-size:11px; font-weight:700; cursor:pointer; }
+.badge { display:inline-block; font-size:10px; font-weight:700; padding:2px 8px; border-radius:6px; }
+.badge.incluir { background:#f0fdf4; color:#15803d; }
+.badge.excluir { background:#fef2f2; color:#b91c1c; }
+.cat-group-title { font-size:11px; font-weight:700; color:#334155; padding:8px 10px; background:#f8fafc; border-top:1px solid #e2e8f0; }
+@media (max-width: 640px) { .form-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div>
+      <img class="logo-img" src="https://heladerialarrs.cl/cdn/shop/t/2/assets/logo-footer.png?v=41616879924709803011609269083" alt="Larrs">
+      <div class="title">Catálogo de productos y sabores</div>
+      <div class="subtitle">Agrega o quita artículos de Inventario Food / Recepción y de Producción / Vitrina</div>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab-btn active" id="tab-food" onclick="cambiarTab('food')">Inventario Food</button>
+    <button class="tab-btn" id="tab-sabores" onclick="cambiarTab('sabores')">Sabores de Producción</button>
+  </div>
+
+  <div class="note" id="nota-tab"></div>
+
+  <div class="card">
+    <div class="section-title" id="form-title">Agregar producto</div>
+    <div class="form-grid">
+      <div class="form-field" id="campo-categoria">
+        <label>Categoría</label>
+        <select id="f-categoria"></select>
+      </div>
+      <div class="form-field" id="campo-categoria-nueva" style="display:none">
+        <label>Nueva categoría</label>
+        <input type="text" id="f-categoria-nueva" placeholder="Ej: Insumos de limpieza">
+      </div>
+      <div class="form-field" style="grid-column: span 2">
+        <label id="label-nombre">Producto</label>
+        <input type="text" id="f-nombre" placeholder="Nombre exacto">
+      </div>
+      <div class="form-field" id="campo-unidad">
+        <label>Unidad</label>
+        <select id="f-unidad">
+          <option value="un">un</option>
+          <option value="kg">kg</option>
+          <option value="L">L</option>
+        </select>
+      </div>
+      <div class="form-field">
+        <button class="btn" id="agregar-btn" onclick="agregarArticulo()">Agregar</button>
+      </div>
+    </div>
+    <div class="msg" id="form-msg"></div>
+  </div>
+
+  <div class="section-title">Catálogo actual</div>
+  <div class="card" style="padding:0">
+    <table id="catalogo-table">
+      <tbody id="catalogo-body">
+        <tr><td class="empty">Cargando...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section-title">Overrides activos (agregados/excluidos manualmente)</div>
+  <div class="card" style="padding:0">
+    <table>
+      <thead><tr><th>Tipo</th><th>Categoría</th><th>Nombre</th><th>Por</th><th></th></tr></thead>
+      <tbody id="overrides-body">
+        <tr><td colspan="5" class="empty">Cargando...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+let tabActivo = 'food';
+let catalogoActual = [];   // categorias con productos (food) o array de strings (sabores)
+let overridesActuales = [];
+
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
+}
+
+function cambiarTab(tab) {
+  tabActivo = tab;
+  document.getElementById('tab-food').classList.toggle('active', tab === 'food');
+  document.getElementById('tab-sabores').classList.toggle('active', tab === 'sabores');
+  document.getElementById('campo-categoria').style.display = tab === 'food' ? 'flex' : 'none';
+  document.getElementById('campo-categoria-nueva').style.display = 'none';
+  document.getElementById('campo-unidad').style.display = tab === 'food' ? 'flex' : 'none';
+  document.getElementById('label-nombre').textContent = tab === 'food' ? 'Producto' : 'Sabor';
+  document.getElementById('form-title').textContent = tab === 'food' ? 'Agregar producto' : 'Agregar sabor';
+  document.getElementById('nota-tab').textContent = tab === 'food'
+    ? 'Este catálogo lo usan Inventario Food y Recepción de Productos.'
+    : 'Este catálogo lo usan Pesaje de Producción y Vitrina.';
+  cargarTodo();
+}
+
+async function cargarTodo() {
+  await Promise.all([cargarCatalogo(), cargarOverrides()]);
+}
+
+async function cargarCatalogo() {
+  const body = document.getElementById('catalogo-body');
+  body.innerHTML = '<tr><td class="empty">Cargando...</td></tr>';
+  try {
+    if (tabActivo === 'food') {
+      const resp = await fetch('/api/inventario-food/catalogo');
+      const data = await resp.json();
+      if (!data.ok) throw new Error(data.error);
+      catalogoActual = data.categorias || [];
+      renderCategoriaSelect();
+      renderCatalogoFood();
+    } else {
+      const resp = await fetch('/api/produccion-pesaje/catalogo');
+      const data = await resp.json();
+      if (!data.ok) throw new Error(data.error);
+      catalogoActual = data.sabores || [];
+      renderCatalogoSabores();
+    }
+  } catch (e) {
+    body.innerHTML = `<tr><td class="empty">Error: ${e.message}</td></tr>`;
+  }
+}
+
+function renderCategoriaSelect() {
+  const sel = document.getElementById('f-categoria');
+  const opts = catalogoActual.map(c => `<option value="${esc(c.value)}">${esc(c.label)}</option>`);
+  opts.push('<option value="__nueva__">+ Nueva categoría...</option>');
+  sel.innerHTML = opts.join('');
+  sel.onchange = () => {
+    document.getElementById('campo-categoria-nueva').style.display = sel.value === '__nueva__' ? 'flex' : 'none';
+  };
+}
+
+function renderCatalogoFood() {
+  const body = document.getElementById('catalogo-body');
+  if (!catalogoActual.length) {
+    body.innerHTML = '<tr><td class="empty">Catálogo vacío.</td></tr>';
+    return;
+  }
+  let html = '';
+  catalogoActual.forEach(cat => {
+    html += `<tr><td class="cat-group-title" colspan="1">${esc(cat.label)} <span style="font-weight:400;color:#94a3b8">(${cat.productos.length})</span></td></tr>`;
+    cat.productos.forEach(p => {
+      html += `<tr>
+        <td style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+          <span style="font-size:12px">${esc(p.nombre)} <span style="color:#94a3b8;font-size:11px">[${esc(p.unidad)}]</span></span>
+          <button type="button" class="remove-btn" onclick="excluirArticulo('${esc(cat.value).replace(/'/g,"\\'")}', '${esc(p.nombre).replace(/'/g,"\\'")}')">Quitar</button>
+        </td>
+      </tr>`;
+    });
+  });
+  body.innerHTML = html;
+}
+
+function renderCatalogoSabores() {
+  const body = document.getElementById('catalogo-body');
+  if (!catalogoActual.length) {
+    body.innerHTML = '<tr><td class="empty">Catálogo vacío.</td></tr>';
+    return;
+  }
+  body.innerHTML = catalogoActual.map(s => `
+    <tr>
+      <td style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+        <span style="font-size:12px">${esc(s)}</span>
+        <button type="button" class="remove-btn" onclick="excluirArticulo('', '${esc(s).replace(/'/g,"\\'")}')">Quitar</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+async function cargarOverrides() {
+  const body = document.getElementById('overrides-body');
+  body.innerHTML = '<tr><td colspan="5" class="empty">Cargando...</td></tr>';
+  try {
+    const resp = await fetch('/api/catalogo/overrides?catalogo=' + tabActivo);
+    const data = await resp.json();
+    if (!data.ok) throw new Error(data.error);
+    overridesActuales = data.items || [];
+    renderOverrides();
+  } catch (e) {
+    body.innerHTML = `<tr><td colspan="5" class="empty">Error: ${e.message}</td></tr>`;
+  }
+}
+
+function renderOverrides() {
+  const body = document.getElementById('overrides-body');
+  if (!overridesActuales.length) {
+    body.innerHTML = '<tr><td colspan="5" class="empty">Sin overrides todavía.</td></tr>';
+    return;
+  }
+  body.innerHTML = overridesActuales.map(o => `
+    <tr>
+      <td><span class="badge ${o.tipo}">${o.tipo === 'incluir' ? 'Agregado' : 'Excluido'}</span></td>
+      <td style="font-size:12px">${esc(o.categoria) || '—'}</td>
+      <td style="font-size:12px">${esc(o.nombre)}</td>
+      <td style="font-size:11px;color:#64748b">${esc(o.creado_por) || '—'}</td>
+      <td><button type="button" class="remove-btn" onclick="borrarOverride('${o.id}')">Deshacer</button></td>
+    </tr>
+  `).join('');
+}
+
+async function agregarArticulo() {
+  const msg = document.getElementById('form-msg');
+  msg.className = 'msg'; msg.textContent = '';
+
+  const nombre = document.getElementById('f-nombre').value.trim();
+  if (!nombre) { msg.className = 'msg err'; msg.textContent = 'Ingresa un nombre.'; return; }
+
+  let categoria = '';
+  if (tabActivo === 'food') {
+    const catSel = document.getElementById('f-categoria').value;
+    categoria = catSel === '__nueva__' ? document.getElementById('f-categoria-nueva').value.trim() : catSel;
+    if (!categoria) { msg.className = 'msg err'; msg.textContent = 'Indica una categoría.'; return; }
+  }
+
+  try {
+    const resp = await fetch('/api/catalogo/overrides', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        catalogo: tabActivo, tipo: 'incluir', categoria, nombre,
+        unidad: tabActivo === 'food' ? document.getElementById('f-unidad').value : undefined,
+      }),
+    });
+    const data = await resp.json();
+    if (!data.ok) throw new Error(data.error || 'Error al agregar');
+
+    msg.className = 'msg ok';
+    msg.textContent = `"${nombre}" agregado correctamente.`;
+    document.getElementById('f-nombre').value = '';
+    document.getElementById('f-categoria-nueva').value = '';
+    cargarTodo();
+  } catch (e) {
+    msg.className = 'msg err';
+    msg.textContent = 'Error: ' + e.message;
+  }
+}
+
+async function excluirArticulo(categoria, nombre) {
+  if (!confirm(`¿Quitar "${nombre}" del catálogo?`)) return;
+  try {
+    const resp = await fetch('/api/catalogo/overrides', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ catalogo: tabActivo, tipo: 'excluir', categoria, nombre }),
+    });
+    const data = await resp.json();
+    if (!data.ok) throw new Error(data.error || 'Error al quitar');
+    cargarTodo();
+  } catch (e) {
+    alert('Error: ' + e.message);
+  }
+}
+
+async function borrarOverride(id) {
+  if (!confirm('¿Deshacer este override?')) return;
+  try {
+    const resp = await fetch('/api/catalogo/overrides', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    });
+    const data = await resp.json();
+    if (!data.ok) throw new Error(data.error || 'Error al deshacer');
+    cargarTodo();
+  } catch (e) {
+    alert('Error: ' + e.message);
+  }
+}
+
+cambiarTab('food');
+</script>
+</body>
+</html>

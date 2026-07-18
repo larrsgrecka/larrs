@@ -147,6 +147,22 @@ export default async function Home() {
             </div>
           </Link>
 
+          <Link
+            href="/recepcion"
+            className="block overflow-hidden rounded-2xl shadow-lg transition-transform active:scale-[0.98]"
+          >
+            <div className="flex items-center gap-4 bg-white p-5">
+              <span className="text-3xl">📦</span>
+              <div className="flex-1">
+                <p className="text-lg font-bold text-slate-800">Recepción de productos</p>
+                <p className="text-sm text-gray-500">
+                  Llegada de productos con foto de guía y suma al stock
+                </p>
+              </div>
+              <span className="text-xl text-gray-400">›</span>
+            </div>
+          </Link>
+
           {admin && (
             <Link
               href="/vitrina"
@@ -158,6 +174,24 @@ export default async function Home() {
                   <p className="font-bold">Vitrina por tienda</p>
                   <p className="text-sm text-gray-400">
                     Configurar sabores en exhibición
+                  </p>
+                </div>
+                <span className="text-xl text-gray-300">›</span>
+              </div>
+            </Link>
+          )}
+
+          {admin && (
+            <Link
+              href="/catalogo"
+              className="block overflow-hidden rounded-2xl shadow-sm transition-transform active:scale-[0.98]"
+            >
+              <div className="flex items-center gap-4 rounded-2xl border border-amber-200 bg-amber-50 p-5">
+                <span className="text-3xl">🗂️</span>
+                <div className="flex-1 text-gray-700">
+                  <p className="font-bold">Catálogo de productos</p>
+                  <p className="text-sm text-gray-400">
+                    Agregar/quitar artículos de inventario y sabores
                   </p>
                 </div>
                 <span className="text-xl text-gray-300">›</span>

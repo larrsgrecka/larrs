@@ -1,0 +1,51 @@
+export type Override = {
+  id: string;
+  catalogo: "food" | "sabores";
+  tipo: "incluir" | "excluir";
+  categoria: string;
+  nombre: string;
+  unidad: string;
+  creado_en: string;
+  creado_por: string;
+};
+
+function config() {
+  const url = process.env.CATALOGO_APPS_SCRIPT_URL;
+  const token = process.env.CATALOGO_APPS_SCRIPT_TOKEN;
+  if (!url || !token) return null;
+  return { url, token };
+}
+
+// Cache corta (los overrides cambian poco, pero queremos que un admin vea
+// su cambio reflejado casi al instante en los paneles de conteo).
+let cache: { data: Override[]; ts: number } | null = null;
+const CACHE_TTL_MS = 60 * 1000;
+
+async function fetchOverrides(): Promise<Override[]> {
+  const cfg = config();
+  if (!cfg) return [];
+
+  if (cache && Date.now() - cache.ts < CACHE_TTL_MS) return cache.data;
+
+  const url = new URL(cfg.url);
+  url.searchParams.set("token", cfg.token);
+  url.searchParams.set("action", "list");
+  const resp = await fetch(url.toString());
+  const data = await resp.json();
+  if (!data.ok) return [];
+
+  cache = { data: (data.items ?? []) as Override[], ts: Date.now() };
+  return cache.data;
+}
+
+export async function getOverrides(catalogo: "food" | "sabores"): Promise<{
+  incluir: Override[];
+  excluirNombres: Set<string>;
+}> {
+  const all = await fetchOverrides();
+  const deEsteCatalogo = all.filter((o) => o.catalogo === catalogo);
+  return {
+    incluir: deEsteCatalogo.filter((o) => o.tipo === "incluir"),
+    excluirNombres: new Set(deEsteCatalogo.filter((o) => o.tipo === "excluir").map((o) => o.nombre)),
+  };
+}

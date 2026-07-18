@@ -2,6 +2,7 @@
 // y extrae solo los nombres de sabores terminados (columnas con "#;" en el
 // header) — Bases ("$;") y PreRecetas/insumos ("[;") quedan fuera, igual
 // que en produccion.html.
+import { getOverrides } from "@/utils/catalogo-overrides";
 
 function parseCsvFirstLine(text: string): string[] {
   const rows: string[][] = [];
@@ -38,7 +39,7 @@ function nombreSabor(header: string): string {
 let cache: { sabores: string[]; ts: number } | null = null;
 const CACHE_TTL_MS = 30 * 60 * 1000;
 
-export async function getSaboresProduccion(): Promise<string[]> {
+async function getSaboresBase(): Promise<string[]> {
   if (cache && Date.now() - cache.ts < CACHE_TTL_MS) return cache.sabores;
 
   const url = process.env.PRODUCCION_APPS_SCRIPT_URL;
@@ -56,4 +57,17 @@ export async function getSaboresProduccion(): Promise<string[]> {
 
   cache = { sabores, ts: Date.now() };
   return sabores;
+}
+
+// Los admins pueden agregar/excluir sabores puntuales sin tocar código vía
+// /catalogo (ver catalogo-overrides.ts).
+export async function getSaboresProduccion(): Promise<string[]> {
+  const base = await getSaboresBase();
+  const { incluir, excluirNombres } = await getOverrides("sabores");
+
+  const conExclusiones = base.filter((s) => !excluirNombres.has(s));
+  for (const ov of incluir) {
+    if (!conExclusiones.includes(ov.nombre)) conExclusiones.push(ov.nombre);
+  }
+  return conExclusiones.sort((a, b) => a.localeCompare(b));
 }

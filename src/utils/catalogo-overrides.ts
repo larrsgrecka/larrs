@@ -16,10 +16,11 @@ function config() {
   return { url, token };
 }
 
-// Cache corta (los overrides cambian poco, pero queremos que un admin vea
-// su cambio reflejado casi al instante en los paneles de conteo).
+// Cache muy corta: es una sola llamada liviana al Apps Script (a diferencia
+// del catálogo de ventas de ~12k filas), así que preferimos que un admin vea
+// su cambio reflejado casi al instante en vez de ahorrar esta consulta.
 let cache: { data: Override[]; ts: number } | null = null;
-const CACHE_TTL_MS = 60 * 1000;
+const CACHE_TTL_MS = 5 * 1000;
 
 async function fetchOverrides(): Promise<Override[]> {
   const cfg = config();

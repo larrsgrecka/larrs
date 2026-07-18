@@ -276,7 +276,9 @@ async function agregarArticulo() {
 }
 
 async function excluirArticulo(categoria, nombre) {
-  if (!confirm(`¿Quitar "${nombre}" del catálogo?`)) return;
+  // Sin confirm(): es reversible desde "Overrides activos" (Deshacer) más
+  // abajo, y confirm() se bloquea solo en el navegador si se hacen varias
+  // seguidas (típico al limpiar una lista larga).
   try {
     const resp = await fetch('/api/catalogo/overrides', {
       method: 'POST',
@@ -292,7 +294,6 @@ async function excluirArticulo(categoria, nombre) {
 }
 
 async function borrarOverride(id) {
-  if (!confirm('¿Deshacer este override?')) return;
   try {
     const resp = await fetch('/api/catalogo/overrides', {
       method: 'DELETE',

@@ -22,21 +22,29 @@ function config() {
 let cache: { data: Override[]; ts: number } | null = null;
 const CACHE_TTL_MS = 5 * 1000;
 
+// Los overrides son un extra opcional sobre el catálogo real (ventas/CSV de
+// producción) — cualquier falla acá (red, JSON inválido, Apps Script caído)
+// NUNCA debe tumbar el catálogo base completo, así que todo error se traga
+// y devuelve simplemente "sin overrides" en vez de propagar la excepción.
 async function fetchOverrides(): Promise<Override[]> {
-  const cfg = config();
-  if (!cfg) return [];
+  try {
+    const cfg = config();
+    if (!cfg) return [];
 
-  if (cache && Date.now() - cache.ts < CACHE_TTL_MS) return cache.data;
+    if (cache && Date.now() - cache.ts < CACHE_TTL_MS) return cache.data;
 
-  const url = new URL(cfg.url);
-  url.searchParams.set("token", cfg.token);
-  url.searchParams.set("action", "list");
-  const resp = await fetch(url.toString());
-  const data = await resp.json();
-  if (!data.ok) return [];
+    const url = new URL(cfg.url);
+    url.searchParams.set("token", cfg.token);
+    url.searchParams.set("action", "list");
+    const resp = await fetch(url.toString());
+    const data = await resp.json();
+    if (!data.ok) return [];
 
-  cache = { data: (data.items ?? []) as Override[], ts: Date.now() };
-  return cache.data;
+    cache = { data: (data.items ?? []) as Override[], ts: Date.now() };
+    return cache.data;
+  } catch {
+    return [];
+  }
 }
 
 export async function getOverrides(catalogo: "food" | "sabores"): Promise<{

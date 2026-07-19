@@ -36,7 +36,15 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: data.error || "Error en Apps Script" }, { status: 502 });
   }
 
-  return NextResponse.json(data);
+  // El Apps Script devuelve todo el historial (ordenado por más reciente
+  // primero) — nos quedamos con la config vigente por tienda+slot.
+  const porClave: Record<string, unknown> = {};
+  for (const it of (data.items ?? []) as Record<string, unknown>[]) {
+    const clave = `${it.tienda}||${it.slot}`;
+    if (!(clave in porClave)) porClave[clave] = it;
+  }
+
+  return NextResponse.json({ ok: true, items: Object.values(porClave) });
 }
 
 export async function POST(request: NextRequest) {

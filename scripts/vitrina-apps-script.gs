@@ -1,25 +1,29 @@
 // ─── Code.gs — Apps Script Web App para Vitrina (Larrs) ─────────────────────
-// Guarda la configuración actual de la vitrina de cada tienda (qué sabor va
-// en cada uno de los slots físicos del mostrador). Es un "estado actual"
-// que se reemplaza completo cada vez que se guarda (no un historial de
-// eventos como Mermas/Inventario) — al cambiar la vitrina cada ~2 semanas,
-// se sobrescriben los slots de esa tienda.
+// Guarda el historial de configuraciones de la vitrina de cada tienda (qué
+// sabor va en cada slot del mostrador). Cada vez que se guarda, se agregan
+// filas NUEVAS (no se borra nada) — así queda un historial completo de cómo
+// fue rotando la vitrina en el tiempo. La "configuración actual" es
+// simplemente la fila más reciente por tienda+slot (esa reducción la hace
+// el backend de Next.js, no este script).
+//
+// Esta planilla vive dentro del Sheet compartido "Mermas Larrs" (pestaña
+// "Vitrina"), junto con Inventario, Recepciones y Overrides — así queda
+// todo en un solo archivo. Producción sigue en su propio Sheet aparte (no
+// se toca, está atado al Google Form que ya usan a diario).
 //
 // Despliegue:
-// 1. Crear un Google Sheet nuevo vacío ("Vitrina Larrs").
-// 2. Extensiones → Apps Script → pegar este archivo completo.
-// 3. Implementar → Nueva implementación → Aplicación web → Ejecutar como: tu
-//    cuenta → Acceso: Cualquier usuario.
-// 4. Copiar la URL /exec y guardarla junto al TOKEN en .env.local:
-//      VITRINA_APPS_SCRIPT_URL=<esa URL>
-//      VITRINA_APPS_SCRIPT_TOKEN=larrs-vitrina-2026
+// 1. Abrir el Apps Script YA desplegado de Vitrina (o crear uno nuevo si es
+//    la primera vez) → pegar este archivo completo, reemplazando todo.
+// 2. Guardar → Implementar → Administrar implementaciones → editar (lápiz)
+//    → Nueva versión → Implementar. La URL /exec no cambia.
 
 const TOKEN = 'larrs-vitrina-2026';
+const HUB_SPREADSHEET_ID = '1L952Ivf2eBZh9vQYmAOkJaZszBQUy2Uvmtub3RWifOw'; // Mermas Larrs
 const SHEET_NAME = 'Vitrina';
 const HEADERS = ['tienda', 'slot', 'sabor', 'actualizado_en', 'actualizado_por'];
 
 function ensureSheet_() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss = SpreadsheetApp.openById(HUB_SPREADSHEET_ID);
   let sheet = ss.getSheetByName(SHEET_NAME);
   if (!sheet) {
     sheet = ss.insertSheet(SHEET_NAME);
@@ -34,6 +38,8 @@ function jsonOut_(obj) {
     .setMimeType(ContentService.MimeType.JSON);
 }
 
+// Devuelve TODO el historial (no solo la config actual) — el filtrado a
+// "más reciente por slot" lo hace /api/vitrina en Next.js.
 function doGet(e) {
   if (e.parameter.token !== TOKEN) return jsonOut_({ ok: false, error: 'Token inválido' });
   const sheet = ensureSheet_();
@@ -47,12 +53,12 @@ function doGet(e) {
   }).filter(function (it) { return it.tienda && it.sabor; });
 
   if (tiendaFiltro) items = items.filter(function (it) { return it.tienda === tiendaFiltro; });
-  items.sort(function (a, b) { return Number(a.slot) - Number(b.slot); });
+  items.sort(function (a, b) { return new Date(b.actualizado_en) - new Date(a.actualizado_en); });
 
   return jsonOut_({ ok: true, items: items });
 }
 
-// Reemplaza TODOS los slots de una tienda por los que llegan en el body.
+// Agrega una fila nueva por cada slot con sabor (no borra nada existente).
 function doPost(e) {
   if (e.parameter.token !== TOKEN) return jsonOut_({ ok: false, error: 'Token inválido' });
 
@@ -63,16 +69,7 @@ function doPost(e) {
   if (!body.tienda) return jsonOut_({ ok: false, error: 'Falta campo: tienda' });
   if (!Array.isArray(body.slots)) return jsonOut_({ ok: false, error: 'slots debe ser un array' });
 
-  const sheet = ensureSheet_();
-  const data = sheet.getDataRange().getValues();
   const actualizadoEn = new Date().toISOString();
-
-  // Quitar filas viejas de esta tienda (de abajo hacia arriba para no
-  // desordenar los índices al borrar).
-  for (let r = data.length - 1; r >= 1; r--) {
-    if (data[r][0] === body.tienda) sheet.deleteRow(r + 1);
-  }
-
   const nuevas = body.slots
     .filter(function (s) { return s.sabor; })
     .map(function (s) {
@@ -80,6 +77,7 @@ function doPost(e) {
     });
 
   if (nuevas.length > 0) {
+    const sheet = ensureSheet_();
     const startRow = sheet.getLastRow() + 1;
     sheet.getRange(startRow, 1, nuevas.length, HEADERS.length).setValues(nuevas);
   }

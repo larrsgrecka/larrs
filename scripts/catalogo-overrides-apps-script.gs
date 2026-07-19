@@ -6,22 +6,27 @@
 // oculta un ítem que sí existe en el catálogo real; "incluir" agrega uno
 // que no está ahí (ej. un insumo nuevo).
 //
-// Despliegue:
-// 1. Crear un Google Sheet nuevo vacío ("Catálogo Overrides Larrs").
-// 2. Extensiones → Apps Script → pegar este archivo completo.
-// 3. Implementar → Nueva implementación → Aplicación web → Ejecutar como: tu
-//    cuenta → Acceso: Cualquier usuario.
-// 4. Copiar la URL /exec y guardarla junto al TOKEN en .env.local:
-//      CATALOGO_APPS_SCRIPT_URL=<esa URL>
-//      CATALOGO_APPS_SCRIPT_TOKEN=larrs-catalogo-2026
+// Vive dentro del Sheet compartido "Mermas Larrs" (pestaña "Overrides"),
+// junto con Mermas, Inventario, Vitrina y Recepciones. Producción sigue en
+// su propio Sheet aparte (no se toca).
+//
+// IMPORTANTE: antes de desplegar este cambio, copia manualmente las filas
+// existentes de la planilla vieja "Catálogo Overrides Larrs" (pestaña
+// Overrides) a la nueva pestaña "Overrides" en "Mermas Larrs" — si no, esos
+// overrides ya creados (agregar/excluir) quedan huérfanos y dejan de
+// aplicarse hasta que los vuelvas a crear a mano.
+//
+// Despliegue: Implementar → Administrar implementaciones → editar (lápiz)
+// → Nueva versión → Implementar. La URL /exec no cambia.
 
 const TOKEN = 'larrs-catalogo-2026';
+const HUB_SPREADSHEET_ID = '1L952Ivf2eBZh9vQYmAOkJaZszBQUy2Uvmtub3RWifOw'; // Mermas Larrs
 const SHEET_NAME = 'Overrides';
 const HEADERS = ['id', 'catalogo', 'tipo', 'categoria', 'nombre', 'unidad',
                   'creado_en', 'creado_por'];
 
 function ensureSheet_() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss = SpreadsheetApp.openById(HUB_SPREADSHEET_ID);
   let sheet = ss.getSheetByName(SHEET_NAME);
   if (!sheet) {
     sheet = ss.insertSheet(SHEET_NAME);

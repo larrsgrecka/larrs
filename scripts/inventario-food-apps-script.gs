@@ -1,26 +1,22 @@
 // ─── Code.gs — Apps Script Web App para Inventario Food (Larrs) ─────────────
-// 1. Crear un Google Sheet nuevo y vacío (ej: "Inventario Food Larrs").
-// 2. Extensiones → Apps Script → pegar este archivo completo, reemplazando
-//    cualquier contenido de Code.gs.
-// 3. (Opcional) Cambiar el valor de TOKEN por uno propio.
-// 4. Implementar → Nueva implementación → tipo "Aplicación web".
-//    Ejecutar como: tu cuenta. Quién tiene acceso: Cualquier usuario.
-// 5. Autorizar permisos la primera vez que lo pida.
-// 6. Copiar la URL que termina en /exec y ponerla junto con el TOKEN en
-//    .env.local del proyecto:
-//      INVENTARIO_FOOD_APPS_SCRIPT_URL=<esa URL>
-//      INVENTARIO_FOOD_APPS_SCRIPT_TOKEN=<el TOKEN de abajo>
-// 7. Cada vez que edites este script, hay que ir a
-//    Implementar → Administrar implementaciones → Editar → Nueva versión
-//    para que los cambios se reflejen en la URL /exec ya existente.
+// Vive dentro del Sheet compartido "Mermas Larrs" (pestaña "Inventario"),
+// junto con Mermas, Vitrina, Recepciones y Overrides — todo en un solo
+// archivo. Producción sigue en su propio Sheet aparte (no se toca).
+//
+// Si es la primera vez que despliegas esto: Extensiones → Apps Script desde
+// cualquier Sheet → pegar este archivo → Implementar → Nueva implementación
+// → Aplicación web → Ejecutar como: tu cuenta → Acceso: Cualquier usuario.
+// Cada cambio futuro: Administrar implementaciones → editar → Nueva versión
+// (la URL /exec no cambia).
 
 const TOKEN = 'larrs-inventario-food-2026';
+const HUB_SPREADSHEET_ID = '1L952Ivf2eBZh9vQYmAOkJaZszBQUy2Uvmtub3RWifOw'; // Mermas Larrs
 const SHEET_NAME = 'Inventario';
 const HEADERS = ['id', 'fecha', 'tienda', 'categoria', 'producto', 'cantidad',
                   'unidad', 'observaciones', 'reportado_por', 'reportado_por_id', 'creado_en'];
 
 function ensureSheet_() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss = SpreadsheetApp.openById(HUB_SPREADSHEET_ID);
   let sheet = ss.getSheetByName(SHEET_NAME);
   if (!sheet) {
     sheet = ss.insertSheet(SHEET_NAME);

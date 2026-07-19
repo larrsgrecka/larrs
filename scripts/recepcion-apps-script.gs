@@ -3,26 +3,29 @@
 // despacho guardada en Google Drive) — un evento = una entrega, con varios
 // productos adentro.
 //
+// Vive dentro del Sheet compartido "Mermas Larrs" (pestaña "Recepciones"),
+// junto con Mermas, Inventario, Vitrina y Overrides. Producción sigue en su
+// propio Sheet aparte (no se toca).
+//
 // Despliegue:
-// 1. Crear un Google Sheet nuevo vacío ("Recepciones Larrs").
-// 2. Extensiones → Apps Script → pegar este archivo completo.
-// 3. Implementar → Nueva implementación → Aplicación web → Ejecutar como: tu
+// 1. Implementar → Nueva implementación → Aplicación web → Ejecutar como: tu
 //    cuenta → Acceso: Cualquier usuario.
-// 4. Copiar la URL /exec y guardarla junto al TOKEN en .env.local:
+// 2. Copiar la URL /exec y guardarla junto al TOKEN en .env.local:
 //      RECEPCION_APPS_SCRIPT_URL=<esa URL>
 //      RECEPCION_APPS_SCRIPT_TOKEN=larrs-recepcion-2026
-// 5. La primera vez que se suba una foto, Apps Script va a pedir autorizar
+// 3. La primera vez que se suba una foto, Apps Script va a pedir autorizar
 //    permisos de Google Drive — acéptalos (crea una carpeta "Fotos Guías de
 //    Despacho - Larrs" en el Drive de la cuenta que desplegó el script).
 
 const TOKEN = 'larrs-recepcion-2026';
+const HUB_SPREADSHEET_ID = '1L952Ivf2eBZh9vQYmAOkJaZszBQUy2Uvmtub3RWifOw'; // Mermas Larrs
 const SHEET_NAME = 'Recepciones';
 const DRIVE_FOLDER_NAME = 'Fotos Guías de Despacho - Larrs';
 const HEADERS = ['id', 'fecha', 'tienda', 'proveedor', 'items_json', 'foto_url',
                   'reportado_por', 'reportado_por_id', 'observaciones', 'creado_en'];
 
 function ensureSheet_() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss = SpreadsheetApp.openById(HUB_SPREADSHEET_ID);
   let sheet = ss.getSheetByName(SHEET_NAME);
   if (!sheet) {
     sheet = ss.insertSheet(SHEET_NAME);

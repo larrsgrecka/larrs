@@ -60,10 +60,14 @@ async function getSaboresBase(): Promise<string[]> {
 }
 
 // Los admins pueden agregar/excluir sabores puntuales sin tocar código vía
-// /catalogo (ver catalogo-overrides.ts).
+// /catalogo (ver catalogo-overrides.ts). El CSV de producción es lento de
+// leer (~7s, planilla grande) — se corre en paralelo con los overrides en
+// vez de encadenarlos, para no sumar tiempo extra a un fetch ya lento.
 export async function getSaboresProduccion(): Promise<string[]> {
-  const base = await getSaboresBase();
-  const { incluir, excluirNombres } = await getOverrides("sabores");
+  const [base, { incluir, excluirNombres }] = await Promise.all([
+    getSaboresBase(),
+    getOverrides("sabores"),
+  ]);
 
   const conExclusiones = base.filter((s) => !excluirNombres.has(s));
   for (const ov of incluir) {

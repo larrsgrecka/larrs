@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { getSaboresProduccion } from "@/utils/sabores-produccion";
 
+// El CSV de producción tarda ~7s en leerse (planilla grande) — el default
+// de Vercel (10s) queda muy justo, damos más margen.
+export const maxDuration = 30;
+
 export async function GET() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

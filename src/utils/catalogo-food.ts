@@ -67,9 +67,12 @@ export type CategoriaFood = {
 // se desalinean con el tiempo. Los admins pueden agregar/excluir artículos
 // puntuales sin tocar código vía /catalogo (ver catalogo-overrides.ts).
 export async function getCatalogoFood(): Promise<CategoriaFood[]> {
-  const categorias = await getCatalogoProductos({
-    excluir: ["HELADERIA", "CHOCOLATERIA", "ARTICULOS", "MATERIAS PRIMAS"],
-  });
+  const [categorias, { incluir, excluirNombres }] = await Promise.all([
+    getCatalogoProductos({
+      excluir: ["HELADERIA", "CHOCOLATERIA", "ARTICULOS", "MATERIAS PRIMAS"],
+    }),
+    getOverrides("food"),
+  ]);
   const base: CategoriaFood[] = categorias
     .map((c) => ({
       value: c.value,
@@ -79,8 +82,6 @@ export async function getCatalogoFood(): Promise<CategoriaFood[]> {
         .map((nombre) => ({ nombre, unidad: unidadDe(nombre) })),
     }))
     .filter((c) => c.productos.length > 0);
-
-  const { incluir, excluirNombres } = await getOverrides("food");
 
   const conExclusiones = base.map((c) => ({
     ...c,

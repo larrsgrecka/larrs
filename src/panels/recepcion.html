@@ -76,6 +76,25 @@ tr:hover td { background: #f8fafc; }
           <option value="Otro">Otro</option>
         </select>
       </div>
+    </div>
+
+    <div class="form-field full" style="margin-bottom:12px">
+      <label>Foto de la guía de despacho</label>
+      <input type="file" id="f-foto" accept="image/*" capture="environment" onchange="onFotoChange(event)">
+      <img id="foto-preview" class="foto-preview">
+      <div class="msg" id="lectura-msg"></div>
+    </div>
+
+    <div class="section-title" id="sin-identificar-title" style="display:none">Detectados sin identificar — revisar</div>
+    <div class="card" id="sin-identificar-card" style="margin-bottom:12px; display:none">
+      <table>
+        <thead><tr><th>Texto detectado</th><th>Categoría</th><th>Producto</th><th class="r">Cantidad</th><th></th></tr></thead>
+        <tbody id="sin-identificar-body"></tbody>
+      </table>
+    </div>
+
+    <div class="section-title">Agregar producto manualmente</div>
+    <div class="form-grid" style="margin-bottom:12px; grid-template-columns: 1fr">
       <div class="form-field">
         <label>Categoría</label>
         <select id="f-categoria" onchange="onCategoriaChange()">
@@ -101,12 +120,6 @@ tr:hover td { background: #f8fafc; }
           <tr><td colspan="4" class="empty">Aún no agregas productos.</td></tr>
         </tbody>
       </table>
-    </div>
-
-    <div class="form-field full" style="margin-bottom:12px">
-      <label>Foto de la guía de despacho (opcional)</label>
-      <input type="file" id="f-foto" accept="image/*" capture="environment" onchange="onFotoChange(event)">
-      <img id="foto-preview" class="foto-preview">
     </div>
 
     <div class="form-field full" style="margin-bottom:12px">
@@ -147,6 +160,13 @@ let catalogo = [];
 let carrito = {}; // clave "categoria||producto" -> {categoria, categoriaLabel, producto, cantidad, unidad}
 let fotoBase64 = null;
 let fotoMimetype = null;
+let sinIdentificar = []; // [{texto_detectado, cantidad, unidad}]
+
+function unidadDelCatalogo(categoria, producto) {
+  const cat = catalogo.find(c => c.value === categoria);
+  const p = cat && cat.productos.find(p => p.nombre === producto);
+  return p ? p.unidad : 'un';
+}
 
 function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({
@@ -279,10 +299,111 @@ function onFotoChange(evt) {
       const preview = document.getElementById('foto-preview');
       preview.src = dataUrl;
       preview.style.display = 'block';
+      leerFotoAutomaticamente();
     };
     img.src = e.target.result;
   };
   reader.readAsDataURL(file);
+}
+
+async function leerFotoAutomaticamente() {
+  const msg = document.getElementById('lectura-msg');
+  msg.className = 'msg ok';
+  msg.textContent = 'Leyendo guía de despacho...';
+
+  try {
+    const resp = await fetch('/api/recepcion/leer-foto', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ foto_base64: fotoBase64, foto_mimetype: fotoMimetype }),
+    });
+    const data = await resp.json();
+    if (!data.ok) throw new Error(data.error || 'Error al leer la foto');
+
+    let agregados = 0;
+    sinIdentificar = [];
+    (data.items || []).forEach(it => {
+      if (it.categoria && it.producto) {
+        const clave = it.categoria + '||' + it.producto;
+        carrito[clave] = { categoria: it.categoria, producto: it.producto, cantidad: Number(it.cantidad), unidad: unidadDelCatalogo(it.categoria, it.producto) };
+        agregados++;
+      } else {
+        sinIdentificar.push({ texto_detectado: it.texto_detectado, cantidad: Number(it.cantidad), unidad: it.unidad || 'un' });
+      }
+    });
+
+    msg.className = 'msg ok';
+    msg.textContent = `${agregados} producto(s) agregados automáticamente${sinIdentificar.length ? `, ${sinIdentificar.length} sin identificar (revisa abajo)` : ''}.`;
+
+    renderCarrito();
+    renderSinIdentificar();
+    onCategoriaChange();
+  } catch (e) {
+    msg.className = 'msg err';
+    msg.textContent = 'No se pudo leer la guía automáticamente: ' + e.message + '. Puedes agregar los productos manualmente abajo.';
+  }
+}
+
+function renderSinIdentificar() {
+  const title = document.getElementById('sin-identificar-title');
+  const card = document.getElementById('sin-identificar-card');
+  const body = document.getElementById('sin-identificar-body');
+
+  if (!sinIdentificar.length) {
+    title.style.display = 'none';
+    card.style.display = 'none';
+    return;
+  }
+  title.style.display = 'block';
+  card.style.display = 'block';
+
+  body.innerHTML = sinIdentificar.map((it, idx) => `
+    <tr>
+      <td style="font-size:12px;max-width:160px">${esc(it.texto_detectado)}</td>
+      <td><select id="si-categoria-${idx}" onchange="onSinIdentificarCategoriaChange(${idx})" style="font-size:12px">
+        <option value="">Elegir...</option>
+        ${catalogo.map(c => `<option value="${esc(c.value)}">${esc(c.label)}</option>`).join('')}
+      </select></td>
+      <td><select id="si-producto-${idx}" style="font-size:12px"><option value="">—</option></select></td>
+      <td class="r"><input type="number" id="si-cantidad-${idx}" class="cant-input" value="${it.cantidad}" min="0" step="0.01"></td>
+      <td style="white-space:nowrap">
+        <button type="button" class="btn" style="padding:4px 9px;font-size:11px" onclick="agregarSinIdentificar(${idx})">Agregar</button>
+        <button type="button" class="remove-btn" onclick="descartarSinIdentificar(${idx})" title="Descartar">✕</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function onSinIdentificarCategoriaChange(idx) {
+  const catValue = document.getElementById(`si-categoria-${idx}`).value;
+  const prodSel = document.getElementById(`si-producto-${idx}`);
+  const cat = catalogo.find(c => c.value === catValue);
+  prodSel.innerHTML = cat
+    ? cat.productos.map(p => `<option value="${esc(p.nombre)}">${esc(p.nombre)}</option>`).join('')
+    : '<option value="">—</option>';
+}
+
+function agregarSinIdentificar(idx) {
+  const categoria = document.getElementById(`si-categoria-${idx}`).value;
+  const producto = document.getElementById(`si-producto-${idx}`).value;
+  const cantidad = parseFloat(document.getElementById(`si-cantidad-${idx}`).value);
+
+  if (!categoria || !producto || !(cantidad > 0)) {
+    alert('Elige categoría, producto y una cantidad válida antes de agregar.');
+    return;
+  }
+
+  const clave = categoria + '||' + producto;
+  carrito[clave] = { categoria, producto, cantidad, unidad: unidadDelCatalogo(categoria, producto) };
+  sinIdentificar.splice(idx, 1);
+  renderCarrito();
+  renderSinIdentificar();
+  onCategoriaChange();
+}
+
+function descartarSinIdentificar(idx) {
+  sinIdentificar.splice(idx, 1);
+  renderSinIdentificar();
 }
 
 async function submitRecepcion() {

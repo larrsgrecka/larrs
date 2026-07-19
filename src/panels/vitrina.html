@@ -7,39 +7,41 @@
 :root { color-scheme: light; }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f2f7; color: #1e293b; padding: 14px; font-size: 14px; }
-.container { max-width: 900px; margin: 0 auto; }
-.header { background: linear-gradient(135deg, #111418, #1e293b); border-radius: 12px; padding: 18px 22px; margin-bottom: 12px; color: #fff; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.container { max-width: 1100px; margin: 0 auto; }
+.header { background: linear-gradient(135deg, #111418, #1e293b); border-radius: 12px; padding: 18px 22px; margin-bottom: 12px; color: #fff; }
 .logo-img { height: 44px; width: auto; display: block; }
 .header .title { font-size: 15px; font-weight: 700; color: #e2e8f0; margin-top: 10px; }
 .header .subtitle { font-size: 12px; color: #94a3b8; margin-top: 2px; }
 .toolbar { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .toolbar label { font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .06em; }
 .toolbar select { font-size: 13px; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 9px; color: #1e293b; background: #f8fafc; }
-.section-title { font-size:11px; font-weight:700; color:#334155; text-transform:uppercase; letter-spacing:.06em; margin:0 0 8px; }
 .note { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 9px 13px; font-size: 12px; color: #1e40af; margin-bottom: 12px; line-height: 1.5; }
 .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; margin-bottom: 12px; }
-.grid-vitrina { display:grid; grid-template-columns: repeat(6, 1fr); gap:8px; }
-.slot { display:flex; flex-direction:column; gap:4px; }
-.slot label { font-size:9px; font-weight:700; color:#94a3b8; text-transform:uppercase; }
-.slot select { font-size:11px; border:1px solid #e2e8f0; border-radius:6px; padding:6px; background:#f8fafc; color:#1e293b; }
-.fila-label { font-size:10px; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:.05em; margin:14px 0 8px; }
+.hint { font-size: 11px; color: #94a3b8; margin-bottom: 8px; display: flex; align-items: center; gap: 5px; }
+.caso { display: flex; align-items: stretch; gap: 6px; overflow-x: auto; padding-bottom: 10px; -webkit-overflow-scrolling: touch; }
+.col { flex: 0 0 auto; width: 120px; display: flex; flex-direction: column; gap: 6px; }
+.caja { flex: 0 0 auto; width: 44px; background: #111418; border-radius: 8px; display: flex; align-items: center; justify-content: center; }
+.caja span { writing-mode: vertical-rl; transform: rotate(180deg); font-size: 10px; font-weight: 700; letter-spacing: .18em; color: #e2e8f0; }
+.slot { border-radius: 8px; padding: 7px 7px 8px; min-height: 96px; display: flex; flex-direction: column; gap: 6px; transition: background .15s; }
+.slot.libre { background: #f1f2f5 !important; border: 1px dashed #c4c9d2; }
+.slotnum { font-size: 9px; font-weight: 700; opacity: .85; text-transform: uppercase; letter-spacing: .05em; }
+.slot select { width: 100%; font-size: 11px; border: none; border-radius: 6px; padding: 6px 5px; background: rgba(255,255,255,.92); color: #1e293b; font-weight: 600; }
+.slot.libre select { background: #fff; font-weight: 500; }
+.fila-label { font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .05em; margin: 4px 0 6px; }
 .btn { background: #2563eb; color: #fff; border: none; border-radius: 6px; padding: 9px 16px; font-size: 13px; font-weight: 600; cursor: pointer; }
-.btn:disabled { opacity:.5; cursor:not-allowed; }
-.msg { font-size:12px; border-radius:8px; padding:9px 13px; margin-top:10px; display:none; }
-.msg.ok { display:block; background:#f0fdf4; border:1px solid #bbf7d0; color:#15803d; }
-.msg.err { display:block; background:#fef2f2; border:1px solid #fecaca; color:#b91c1c; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.msg { font-size: 12px; border-radius: 8px; padding: 9px 13px; margin-top: 10px; display: none; }
+.msg.ok { display: block; background: #f0fdf4; border: 1px solid #bbf7d0; color: #15803d; }
+.msg.err { display: block; background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; }
 .last { font-size: 11px; color: #b0bac8; text-align: center; margin-top: 6px; }
-@media (max-width: 640px) { .grid-vitrina { grid-template-columns: repeat(3, 1fr); } }
 </style>
 </head>
 <body>
 <div class="container">
   <div class="header">
-    <div>
-      <img class="logo-img" src="https://heladerialarrs.cl/cdn/shop/t/2/assets/logo-footer.png?v=41616879924709803011609269083" alt="Larrs">
-      <div class="title">Vitrina por tienda</div>
-      <div class="subtitle">Configura los 24 sabores en exhibición — se actualiza aprox. cada 2 semanas</div>
-    </div>
+    <img class="logo-img" src="https://heladerialarrs.cl/cdn/shop/t/2/assets/logo-footer.png?v=41616879924709803011609269083" alt="Larrs">
+    <div class="title">Vitrina por tienda</div>
+    <div class="subtitle">Configura los 24 sabores en exhibición — se actualiza aprox. cada 2 semanas</div>
   </div>
 
   <div class="toolbar">
@@ -47,13 +49,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
     <select id="tienda-select" onchange="loadVitrina()"></select>
   </div>
 
-  <div class="note">Deja 1 o 2 slots en "— Libre —" si quieres reservarlos para un sabor fuera de la lista habitual (se pesa igual desde el formulario de producción buscándolo por nombre).</div>
+  <div class="note">Cada ficha se pinta con el color del sabor para que veas cómo queda la vitrina. Deja slots en "— Libre —" para reservarlos a un sabor fuera de la lista habitual (se pesa igual buscándolo por nombre en producción).</div>
 
   <div class="card">
-    <div class="fila-label">Fila superior (slots 1–12)</div>
-    <div class="grid-vitrina" id="fila-superior"></div>
-    <div class="fila-label">Fila inferior (slots 13–24)</div>
-    <div class="grid-vitrina" id="fila-inferior"></div>
+    <div class="hint"><span id="caja-hint">Caja al costado</span> · desliza de lado para ver toda la vitrina</div>
+    <div class="fila-label">Fila superior (slots 1–12) · Fila inferior (slots 13–24)</div>
+    <div class="caso" id="caso"></div>
   </div>
 
   <button class="btn" id="submit-btn" onclick="guardarVitrina()">Guardar vitrina</button>
@@ -63,6 +64,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 
 <script>
 const TIENDAS = ['Costanera', 'Dominicos', 'Trapenses'];
+// Lado de la caja según la vitrina física (ver PDF de referencia).
+const CAJA_LADO = { Dominicos: 'right', Trapenses: 'left', Costanera: 'left' };
 let sabores = [];
 let vitrinaActual = {}; // slot -> sabor
 
@@ -72,9 +75,28 @@ function esc(s) {
   }[c]));
 }
 
-function initTiendaSelect() {
-  const sel = document.getElementById('tienda-select');
-  sel.innerHTML = TIENDAS.map(t => `<option value="${t}">${t}</option>`).join('');
+function colorSabor(n) {
+  const s = (n || '').toLowerCase();
+  if (!s) return '#f1f2f5';
+  if (s.includes('cielo azul') || s.includes('azul')) return '#3d8fd6';
+  if (s.includes('pistacho')) return '#6f8f2e';
+  if (s.includes('frutos') || s.includes('bosque')) return '#7b3fa0';
+  if (s.includes('limón') || s.includes('limon')) return '#a9c73f';
+  if (s.includes('banana') || s.includes('vainilla francesa')) return '#e8c33a';
+  if (s.includes('maracuy') || s.includes('carrot') || s.includes('naranja')) return '#e08a1e';
+  if (s.includes('granizado') || s.includes('frambuesa') || s.includes('fresa') || s.includes('frutilla')) return '#b0442c';
+  if (s.includes('yogurt')) return '#eef1f4';
+  if (s.includes('menta')) return '#8fd0b0';
+  if (s.includes('cookies') || s.includes('gianduia') || s.includes('veteado') || s.includes('amarena') || s.includes('crema')) return '#cdb389';
+  if (s.includes('choc') || s.includes('café') || s.includes('cafe') || s.includes('ferrero') || s.includes('snicker') || s.includes('avellana') || s.includes('biscottino') || s.includes('dulce leche') || s.includes('lúcuma') || s.includes('lucuma') || s.includes('coco')) return '#5a3a24';
+  if (s.includes('vainilla') || s.includes('s/a')) return '#e6a92e';
+  return '#8a8a86';
+}
+
+function textoSobre(hex) {
+  if (!hex || hex.length < 7) return '#1f2430';
+  const r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
+  return (0.299 * r + 0.587 * g + 0.114 * b) > 150 ? '#1f2430' : '#ffffff';
 }
 
 function opcionesSabor(seleccionado) {
@@ -83,24 +105,45 @@ function opcionesSabor(seleccionado) {
   return opts.join('');
 }
 
-function renderGrid() {
-  const superior = document.getElementById('fila-superior');
-  const inferior = document.getElementById('fila-inferior');
-  const filas = [
-    { el: superior, desde: 1, hasta: 12 },
-    { el: inferior, desde: 13, hasta: 24 },
-  ];
-  filas.forEach(f => {
-    let html = '';
-    for (let slot = f.desde; slot <= f.hasta; slot++) {
-      html += `
-        <div class="slot">
-          <label>Slot ${slot}</label>
-          <select data-slot="${slot}">${opcionesSabor(vitrinaActual[slot] || '')}</select>
-        </div>`;
-    }
-    f.el.innerHTML = html;
-  });
+function slotHtml(slot) {
+  const sabor = vitrinaActual[slot] || '';
+  const color = colorSabor(sabor);
+  const txt = textoSobre(color);
+  const libre = sabor ? '' : ' libre';
+  return `
+    <div class="slot${libre}" data-slot-tile="${slot}" style="background:${color}">
+      <span class="slotnum" style="color:${txt}">Slot ${slot}</span>
+      <select data-slot="${slot}" onchange="onSlotChange(this)">${opcionesSabor(sabor)}</select>
+    </div>`;
+}
+
+function onSlotChange(sel) {
+  const slot = sel.dataset.slot;
+  const sabor = sel.value;
+  vitrinaActual[Number(slot)] = sabor;
+  const tile = document.querySelector(`[data-slot-tile="${slot}"]`);
+  const color = colorSabor(sabor);
+  tile.style.background = color;
+  tile.classList.toggle('libre', !sabor);
+  tile.querySelector('.slotnum').style.color = textoSobre(color);
+}
+
+function renderCaso() {
+  const tienda = document.getElementById('tienda-select').value;
+  const lado = CAJA_LADO[tienda] || 'left';
+  document.getElementById('caja-hint').textContent = lado === 'right' ? 'Caja a la derecha' : 'Caja a la izquierda';
+
+  let cols = '';
+  for (let i = 1; i <= 12; i++) {
+    cols += `<div class="col">${slotHtml(i)}${slotHtml(i + 12)}</div>`;
+  }
+  const caja = '<div class="caja"><span>CAJA</span></div>';
+  document.getElementById('caso').innerHTML = lado === 'right' ? cols + caja : caja + cols;
+}
+
+function initTiendaSelect() {
+  const sel = document.getElementById('tienda-select');
+  sel.innerHTML = TIENDAS.map(t => `<option value="${t}">${t}</option>`).join('');
 }
 
 async function loadCatalogo() {
@@ -119,7 +162,7 @@ async function loadVitrina() {
       (data.items || []).forEach(it => { vitrinaActual[Number(it.slot)] = it.sabor; });
     }
   } catch (e) { /* deja la grilla vacía si falla */ }
-  renderGrid();
+  renderCaso();
   document.getElementById('last-update').textContent = `Cargado: ${new Date().toLocaleString('es-CL')}`;
 }
 
@@ -129,7 +172,7 @@ async function guardarVitrina() {
   msg.className = 'msg'; msg.textContent = '';
 
   const tienda = document.getElementById('tienda-select').value;
-  const slots = [...document.querySelectorAll('#fila-superior select, #fila-inferior select')]
+  const slots = [...document.querySelectorAll('#caso select')]
     .map(sel => ({ slot: Number(sel.dataset.slot), sabor: sel.value }))
     .filter(s => s.sabor);
 

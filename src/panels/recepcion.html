@@ -83,6 +83,7 @@ tr:hover td { background: #f8fafc; }
       <input type="file" id="f-foto" accept="image/*" capture="environment" onchange="onFotoChange(event)">
       <img id="foto-preview" class="foto-preview">
       <div class="msg" id="lectura-msg"></div>
+      <button type="button" class="btn" id="btn-reintentar-lectura" style="display:none;margin-top:8px" onclick="leerFotoAutomaticamente()">Reintentar lectura de la foto</button>
     </div>
 
     <div class="section-title" id="sin-identificar-title" style="display:none">Detectados sin identificar — revisar</div>
@@ -308,6 +309,8 @@ function onFotoChange(evt) {
 
 async function leerFotoAutomaticamente() {
   const msg = document.getElementById('lectura-msg');
+  const btnReintentar = document.getElementById('btn-reintentar-lectura');
+  btnReintentar.style.display = 'none';
   msg.className = 'msg ok';
   msg.textContent = 'Leyendo guía de despacho...';
 
@@ -332,15 +335,22 @@ async function leerFotoAutomaticamente() {
       }
     });
 
-    msg.className = 'msg ok';
-    msg.textContent = `${agregados} producto(s) agregados automáticamente${sinIdentificar.length ? `, ${sinIdentificar.length} sin identificar (revisa abajo)` : ''}.`;
-
     renderCarrito();
     renderSinIdentificar();
     onCategoriaChange();
+
+    if (agregados === 0 && sinIdentificar.length === 0) {
+      msg.className = 'msg err';
+      msg.textContent = 'No se detectó ningún producto en la foto. Puede estar borrosa, inclinada o con poca luz — prueba tomarla de nuevo bien derecha y de cerca, o agrega los productos manualmente abajo.';
+      btnReintentar.style.display = 'inline-block';
+    } else {
+      msg.className = 'msg ok';
+      msg.textContent = `${agregados} producto(s) agregados automáticamente${sinIdentificar.length ? `, ${sinIdentificar.length} sin identificar (revisa abajo)` : ''}.`;
+    }
   } catch (e) {
     msg.className = 'msg err';
     msg.textContent = 'No se pudo leer la guía automáticamente: ' + e.message + '. Puedes agregar los productos manualmente abajo.';
+    btnReintentar.style.display = 'inline-block';
   }
 }
 

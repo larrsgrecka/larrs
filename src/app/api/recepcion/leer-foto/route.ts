@@ -99,7 +99,7 @@ export async function POST(request: NextRequest) {
             },
             {
               type: "text",
-              text: `Esta es una foto de una guía de despacho de productos que llegaron a una heladería. Extrae CADA línea de producto con su cantidad recibida.
+              text: `Esta es una foto de una guía de despacho de productos que llegaron a una heladería. Extrae CADA línea de producto con su cantidad recibida, incluso si la foto está borrosa, inclinada o con mala luz — haz tu mejor esfuerzo, nunca devuelvas la lista vacía si se alcanza a distinguir aunque sea una tabla o listado de productos.
 
 Para cada línea detectada, intenta hacer match contra este catálogo real de productos (formato "CATEGORIA: producto1, producto2, ..."):
 
@@ -107,9 +107,11 @@ ${catalogoTexto}
 
 Reglas:
 - Si el producto de la guía corresponde con confianza a uno del catálogo (aunque el nombre no sea idéntico letra por letra), usa el valor EXACTO de "categoria" y "producto" tal como aparecen arriba.
-- Si NO hay un match confiable (producto no está en el catálogo, o no estás seguro), deja "categoria" y "producto" como string vacío "" — igual incluye "texto_detectado" y "cantidad" para que una persona lo revise a mano.
+- Si NO hay un match confiable (producto no está en el catálogo, no estás seguro, o es un insumo/materia prima que no aparece en este catálogo), deja "categoria" y "producto" como string vacío "" — igual incluye "texto_detectado" y "cantidad" para que una persona lo revise a mano. Es preferible incluir una línea sin match confiable a omitirla.
 - No inventes productos que no aparecen en la foto.
-- Si la cantidad no es clara, usa tu mejor estimación pero prioriza precisión.`,
+- Si la cantidad aparece como un check/marca (✓) en vez de un número, usa 1 como cantidad.
+- Si el número de cantidad es difícil de leer, usa tu mejor estimación — es mejor una estimación aproximada que omitir la línea.
+- Ignora columnas de precio, código interno o total — solo interesa el nombre del producto y la cantidad recibida.`,
             },
           ],
         },

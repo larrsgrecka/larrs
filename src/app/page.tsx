@@ -36,21 +36,23 @@ export default async function Home() {
       {/* Cards */}
       <div className="-mt-8 mx-auto w-full max-w-sm flex-1 px-4">
         <div className="flex flex-col gap-3">
-          <Link
-            href="/produccion"
-            className="block overflow-hidden rounded-2xl shadow-lg transition-transform active:scale-[0.98]"
-          >
-            <div className="flex items-center gap-4 bg-white p-5">
-              <span className="text-3xl">🍦</span>
-              <div className="flex-1">
-                <p className="text-lg font-bold text-slate-800">Producción</p>
-                <p className="text-sm text-gray-500">
-                  Kg producidos, merma, sabores y costos
-                </p>
+          {!operador && (
+            <Link
+              href="/produccion"
+              className="block overflow-hidden rounded-2xl shadow-lg transition-transform active:scale-[0.98]"
+            >
+              <div className="flex items-center gap-4 bg-white p-5">
+                <span className="text-3xl">🍦</span>
+                <div className="flex-1">
+                  <p className="text-lg font-bold text-slate-800">Producción</p>
+                  <p className="text-sm text-gray-500">
+                    Kg producidos, merma, sabores y costos
+                  </p>
+                </div>
+                <span className="text-xl text-gray-400">›</span>
               </div>
-              <span className="text-xl text-gray-400">›</span>
-            </div>
-          </Link>
+            </Link>
+          )}
 
           {!operador && (
             <Link

@@ -26,6 +26,18 @@ const EXCLUIR_EXACTO = new Set([
   "NATURAL",
 ]);
 
+// Excepciones a la regla "PACK* = combo de productos ya contados por
+// separado": estos "PACK" son en realidad el único formato en que ese
+// producto existe (no hay una versión individual del mismo artículo en
+// otra parte del catálogo), así que sí son stock contable propio.
+const PACK_CONTABLE = new Set([
+  "PACK BARQUILLOS RELLENO NUTELLA",
+  "PACK GALLETAS CHIP CHOCOLATE",
+  "PACK GALLETAS CHIP CHOCOLATE 30G.",
+  "PACK GALLETAS DANESAS LÄRRS",
+  "PACK MINI GALLETAS DANESAS LÄRRS",
+]);
+
 // Unidad por defecto: "un" (se cuenta en paquetes/unidades enteras). Solo el
 // café vendido/pesado suelto por kilo admite decimales — los demás formatos
 // de café (340 gramos, 0,5 kg, 250 gr.) son bolsas cerradas, se cuentan de a una.
@@ -45,6 +57,7 @@ function esContable(grupo: string, nombre: string): boolean {
   if (n.startsWith("HUEVO")) return false; // huevos revueltos, preparación al momento
   if (n.startsWith("SANDWICH")) return false; // se arman al pedido
   if (n.startsWith("TOSTADA")) return false; // se arman al pedido
+  if (PACK_CONTABLE.has(nombre)) return true;
   if (n.startsWith("PACK")) return false; // pack/combo de productos ya contados por separado
   if (n.startsWith("CAJA")) return false; // caja multi-unidad de productos ya contados por separado
   if (n.startsWith("GOOD BAG")) return false; // bolsa sorpresa antidesperdicio, no stock propio

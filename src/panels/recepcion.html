@@ -264,10 +264,22 @@ function renderCarrito() {
     <tr>
       <td><span class="cat-badge">${esc(labelCategoria(it.categoria))}</span></td>
       <td style="font-size:12px">${esc(it.producto)}</td>
-      <td class="r" style="font-size:12px">${fmtNum(it.cantidad)} ${esc(it.unidad)}</td>
+      <td class="r">
+        <input type="number" class="cant-input" style="width:70px" min="0" step="0.01"
+          value="${it.cantidad}" data-clave="${esc(clave)}" onchange="onCantidadCarritoChange(this)">
+        ${esc(it.unidad)}
+      </td>
       <td class="r"><button type="button" class="remove-btn" onclick="quitarDelCarrito('${clave.replace(/'/g, "\\'")}')" title="Quitar">✕</button></td>
     </tr>
   `).join('');
+}
+
+function onCantidadCarritoChange(input) {
+  const clave = input.dataset.clave;
+  const cantidad = parseFloat(input.value);
+  if (!carrito[clave]) return;
+  if (!(cantidad >= 0)) { input.value = carrito[clave].cantidad; return; }
+  carrito[clave].cantidad = cantidad;
 }
 
 function quitarDelCarrito(clave) {

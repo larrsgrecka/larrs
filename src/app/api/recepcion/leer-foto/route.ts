@@ -120,15 +120,31 @@ Reglas:
 
     const toolUse = resp.content.find((b) => b.type === "tool_use" && b.name === TOOL_NAME);
     if (!toolUse || toolUse.type !== "tool_use") {
-      return NextResponse.json({ error: "No se pudo interpretar la foto" }, { status: 502 });
+      const textBlock = resp.content.find((b) => b.type === "text");
+      console.error("[recepcion/leer-foto] Sin tool_use. stop_reason:", resp.stop_reason, "texto:", textBlock && "text" in textBlock ? textBlock.text : null);
+      return NextResponse.json({
+        error: "No se pudo interpretar la foto",
+        debug: { stop_reason: resp.stop_reason, texto: textBlock && "text" in textBlock ? textBlock.text : null },
+      }, { status: 502 });
     }
 
-    const items = ((toolUse.input as { items?: ItemDetectado[] }).items ?? []).filter(
-      (it) => it.texto_detectado && Number(it.cantidad) > 0
+    const rawItems = (toolUse.input as { items?: ItemDetectado[] }).items ?? [];
+    const items = rawItems.filter((it) => it.texto_detectado && Number(it.cantidad) > 0);
+
+    console.log(
+      "[recepcion/leer-foto] stop_reason:", resp.stop_reason,
+      "| items crudos:", rawItems.length,
+      "| items tras filtro:", items.length,
+      "| crudos:", JSON.stringify(rawItems).slice(0, 2000)
     );
 
-    return NextResponse.json({ ok: true, items });
+    return NextResponse.json({
+      ok: true,
+      items,
+      debug: { raw_count: rawItems.length, filtered_count: items.length, stop_reason: resp.stop_reason },
+    });
   } catch (e) {
+    console.error("[recepcion/leer-foto] Error:", e);
     return NextResponse.json({ error: "Error al leer la foto: " + (e as Error).message }, { status: 500 });
   }
 }

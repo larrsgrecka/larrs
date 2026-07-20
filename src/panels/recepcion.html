@@ -341,7 +341,9 @@ async function leerFotoAutomaticamente() {
 
     if (agregados === 0 && sinIdentificar.length === 0) {
       msg.className = 'msg err';
-      msg.textContent = 'No se detectó ningún producto en la foto. Puede estar borrosa, inclinada o con poca luz — prueba tomarla de nuevo bien derecha y de cerca, o agrega los productos manualmente abajo.';
+      const d = data.debug || {};
+      msg.textContent = 'No se detectó ningún producto en la foto. Puede estar borrosa, inclinada o con poca luz — prueba tomarla de nuevo bien derecha y de cerca, o agrega los productos manualmente abajo.'
+        + ` [debug: crudos=${d.raw_count ?? '?'}, filtrados=${d.filtered_count ?? '?'}, stop=${d.stop_reason ?? '?'}]`;
       btnReintentar.style.display = 'inline-block';
     } else {
       msg.className = 'msg ok';

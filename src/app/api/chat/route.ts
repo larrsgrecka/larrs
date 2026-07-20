@@ -6,6 +6,8 @@ import { getProfile } from "@/utils/auth";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
+export const maxDuration = 30;
+
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -17,7 +19,7 @@ export async function POST(request: NextRequest) {
   const admin = createAdminClient();
   const tiendaFiltro = profile?.role === "jefe_tienda" ? profile.tienda : tienda;
 
-  const { data: historial } = await admin
+  const { data: historial, error: historialError } = await admin
     .from("ventas_grecka")
     .select("fecha, sku, descripcion, grupo, cantidad, unidad, precio_unitario, neto, tienda")
     .eq("tienda", tiendaFiltro || "Costanera")
@@ -25,6 +27,10 @@ export async function POST(request: NextRequest) {
     .gte("fecha", new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10))
     .order("fecha", { ascending: false })
     .limit(400);
+
+  if (historialError) {
+    console.error("[api/chat] Error consultando ventas_grecka:", historialError.message);
+  }
 
   // Agrupar historial por producto
   const porProducto: Record<string, {
@@ -135,25 +141,39 @@ INSTRUCCIONES GENERALES:
 - Sé directo — el equipo usa esto en tiempo real`;
   }
 
-  const stream = await anthropic.messages.stream({
-    model: "claude-haiku-4-5-20251001",
-    max_tokens: mode === "alertas" ? 600 : 1024,
-    system: systemPrompt,
-    messages: messages.map((m: { role: string; content: string }) => ({
-      role: m.role,
-      content: m.content,
-    })),
-  });
+  let stream;
+  try {
+    stream = await anthropic.messages.stream({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: mode === "alertas" ? 600 : 1024,
+      system: systemPrompt,
+      messages: messages.map((m: { role: string; content: string }) => ({
+        role: m.role,
+        content: m.content,
+      })),
+    });
+  } catch (e) {
+    console.error("[api/chat] Error al iniciar el stream de Anthropic:", e);
+    return NextResponse.json(
+      { error: "Error al conectar con el asistente: " + (e as Error).message },
+      { status: 502 }
+    );
+  }
 
   const encoder = new TextEncoder();
   const readable = new ReadableStream({
     async start(controller) {
-      for await (const chunk of stream) {
-        if (chunk.type === "content_block_delta" && chunk.delta.type === "text_delta") {
-          controller.enqueue(encoder.encode(chunk.delta.text));
+      try {
+        for await (const chunk of stream) {
+          if (chunk.type === "content_block_delta" && chunk.delta.type === "text_delta") {
+            controller.enqueue(encoder.encode(chunk.delta.text));
+          }
         }
+        controller.close();
+      } catch (e) {
+        console.error("[api/chat] Error durante el streaming:", e);
+        controller.error(e);
       }
-      controller.close();
     },
   });
 

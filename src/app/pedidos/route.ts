@@ -57,6 +57,9 @@ export async function GET(request: NextRequest) {
   }
 
   const profile = await getProfile();
+  if (profile?.role === "operador") {
+    return NextResponse.redirect(new URL("/", request.url));
+  }
   const tienda =
     profile?.role === "jefe_tienda" && profile.tienda ? profile.tienda : null;
 

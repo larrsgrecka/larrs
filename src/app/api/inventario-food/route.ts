@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
   if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
   const profile = await getProfile();
-  if (profile?.role !== "jefe_tienda" && profile?.role !== "admin") {
+  if (profile?.role !== "jefe_tienda" && profile?.role !== "admin" && profile?.role !== "operador") {
     return NextResponse.json({ error: "Sin permiso" }, { status: 403 });
   }
 
@@ -28,7 +28,9 @@ export async function POST(request: NextRequest) {
 
   const body = await request.json();
   const tienda =
-    profile.role === "jefe_tienda" && profile.tienda ? profile.tienda : body.tienda;
+    (profile.role === "jefe_tienda" || profile.role === "operador") && profile.tienda
+      ? profile.tienda
+      : body.tienda;
 
   if (!tienda) {
     return NextResponse.json({ error: "tienda es requerida" }, { status: 400 });
@@ -54,12 +56,17 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const nombreOperador = typeof body.nombre_operador === "string" ? body.nombre_operador.trim() : "";
+  if (profile.role === "operador" && !nombreOperador) {
+    return NextResponse.json({ error: "nombre_operador es requerido para la cuenta compartida de tienda" }, { status: 400 });
+  }
+
   const payload = {
     fecha: body.fecha,
     tienda,
     categoria: body.categoria,
     observaciones: body.observaciones || "",
-    reportado_por: profile.name || user.email || "",
+    reportado_por: nombreOperador || profile.name || user.email || "",
     reportado_por_id: user.id,
     items: validItems.map((it) => ({
       producto: it.producto,
@@ -181,7 +188,9 @@ export async function GET(request: NextRequest) {
   const profile = await getProfile();
   const sp = request.nextUrl.searchParams;
   const tienda =
-    profile?.role === "jefe_tienda" && profile.tienda ? profile.tienda : sp.get("tienda");
+    (profile?.role === "jefe_tienda" || profile?.role === "operador") && profile.tienda
+      ? profile.tienda
+      : sp.get("tienda");
 
   const url = new URL(config.url);
   url.searchParams.set("token", config.token);

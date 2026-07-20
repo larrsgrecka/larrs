@@ -13,7 +13,9 @@ export async function GET(request: NextRequest) {
 
   const profile = await getProfile();
   const tienda =
-    profile?.role === "jefe_tienda" && profile.tienda ? profile.tienda : null;
+    (profile?.role === "jefe_tienda" || profile?.role === "operador") && profile.tienda
+      ? profile.tienda
+      : null;
   const inject = `<script>window._LARRS_TIENDA=${JSON.stringify(tienda)};</script>
 <script src="/larrs-nav.js" defer></script>
 <style>.larrs-ventas-sec{display:none!important}</style>`;

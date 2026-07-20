@@ -80,6 +80,11 @@ tr:hover td { background: #f8fafc; }
       </table>
     </div>
 
+    <div class="form-field full" id="campo-nombre-operador" style="margin-bottom:12px;display:none">
+      <label>Nombre de quien hace este registro</label>
+      <input type="text" id="f-nombre-operador" placeholder="Ej: María Pérez">
+    </div>
+
     <div class="form-field full" style="margin-bottom:12px">
       <label>Observaciones generales (opcional)</label>
       <textarea id="f-observaciones" placeholder="Ej: faltó contar la bodega chica..."></textarea>
@@ -221,11 +226,18 @@ async function submitConteo() {
     msg.textContent = `"${conDecimalIndebido.producto}" se cuenta en unidades enteras (1, 2, 3...).`;
     return;
   }
+  const nombreOperador = window._LARRS_IS_OPERADOR
+    ? document.getElementById('f-nombre-operador').value.trim()
+    : '';
+  if (window._LARRS_IS_OPERADOR && !nombreOperador) {
+    msg.className = 'msg err'; msg.textContent = 'Escribe el nombre de quien hace este registro.'; return;
+  }
 
   const payload = {
     fecha, tienda, categoria,
     observaciones: document.getElementById('f-observaciones').value.trim(),
     items,
+    nombre_operador: nombreOperador || undefined,
   };
 
   btn.disabled = true;
@@ -374,6 +386,9 @@ document.getElementById('f-fecha').value = new Date().toISOString().slice(0, 10)
 initHeader();
 loadCatalogo();
 loadStock();
+if (window._LARRS_IS_OPERADOR) {
+  document.getElementById('campo-nombre-operador').style.display = '';
+}
 </script>
 </body>
 </html>

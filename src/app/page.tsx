@@ -11,6 +11,7 @@ export default async function Home() {
 
   const profile = await getProfile();
   const admin = profile?.role === "admin";
+  const operador = profile?.role === "operador";
 
   return (
     <div className="flex min-h-screen flex-col bg-gray-50">
@@ -51,69 +52,77 @@ export default async function Home() {
             </div>
           </Link>
 
-          <Link
-            href="/ventas"
-            className="block overflow-hidden rounded-2xl shadow-lg transition-transform active:scale-[0.98]"
-          >
-            <div className="flex items-center gap-4 bg-white p-5">
-              <span className="text-3xl">📈</span>
-              <div className="flex-1">
-                <p className="text-lg font-bold text-slate-800">Ventas</p>
-                <p className="text-sm text-gray-500">
-                  Ventas diarias, presupuesto y cumplimiento
-                </p>
+          {!operador && (
+            <Link
+              href="/ventas"
+              className="block overflow-hidden rounded-2xl shadow-lg transition-transform active:scale-[0.98]"
+            >
+              <div className="flex items-center gap-4 bg-white p-5">
+                <span className="text-3xl">📈</span>
+                <div className="flex-1">
+                  <p className="text-lg font-bold text-slate-800">Ventas</p>
+                  <p className="text-sm text-gray-500">
+                    Ventas diarias, presupuesto y cumplimiento
+                  </p>
+                </div>
+                <span className="text-xl text-gray-400">›</span>
               </div>
-              <span className="text-xl text-gray-400">›</span>
-            </div>
-          </Link>
+            </Link>
+          )}
 
-          <Link
-            href="/analisis-ventas"
-            className="block overflow-hidden rounded-2xl shadow-lg transition-transform active:scale-[0.98]"
-          >
-            <div className="flex items-center gap-4 bg-white p-5">
-              <span className="text-3xl">📊</span>
-              <div className="flex-1">
-                <p className="text-lg font-bold text-slate-800">Análisis de ventas</p>
-                <p className="text-sm text-gray-500">
-                  Comparativo mensual y anual por tienda
-                </p>
+          {!operador && (
+            <Link
+              href="/analisis-ventas"
+              className="block overflow-hidden rounded-2xl shadow-lg transition-transform active:scale-[0.98]"
+            >
+              <div className="flex items-center gap-4 bg-white p-5">
+                <span className="text-3xl">📊</span>
+                <div className="flex-1">
+                  <p className="text-lg font-bold text-slate-800">Análisis de ventas</p>
+                  <p className="text-sm text-gray-500">
+                    Comparativo mensual y anual por tienda
+                  </p>
+                </div>
+                <span className="text-xl text-gray-400">›</span>
               </div>
-              <span className="text-xl text-gray-400">›</span>
-            </div>
-          </Link>
+            </Link>
+          )}
 
-          <Link
-            href="/pedidos"
-            className="block overflow-hidden rounded-2xl shadow-md transition-transform active:scale-[0.98]"
-          >
-            <div className="flex items-center gap-4 bg-slate-700 p-5">
-              <span className="text-3xl">📦</span>
-              <div className="flex-1 text-white">
-                <p className="text-lg font-bold">Pedidos sugeridos</p>
-                <p className="text-sm text-white/70">
-                  Pedido semanal a Grecka por tienda · copiar para SAP
-                </p>
+          {!operador && (
+            <Link
+              href="/pedidos"
+              className="block overflow-hidden rounded-2xl shadow-md transition-transform active:scale-[0.98]"
+            >
+              <div className="flex items-center gap-4 bg-slate-700 p-5">
+                <span className="text-3xl">📦</span>
+                <div className="flex-1 text-white">
+                  <p className="text-lg font-bold">Pedidos sugeridos</p>
+                  <p className="text-sm text-white/70">
+                    Pedido semanal a Grecka por tienda · copiar para SAP
+                  </p>
+                </div>
+                <span className="text-xl text-white/40">›</span>
               </div>
-              <span className="text-xl text-white/40">›</span>
-            </div>
-          </Link>
+            </Link>
+          )}
 
-          <Link
-            href="/mermas"
-            className="block overflow-hidden rounded-2xl shadow-lg transition-transform active:scale-[0.98]"
-          >
-            <div className="flex items-center gap-4 bg-white p-5">
-              <span className="text-3xl">⚠️</span>
-              <div className="flex-1">
-                <p className="text-lg font-bold text-slate-800">Mermas</p>
-                <p className="text-sm text-gray-500">
-                  Registro de mermas puntuales por tienda
-                </p>
+          {!operador && (
+            <Link
+              href="/mermas"
+              className="block overflow-hidden rounded-2xl shadow-lg transition-transform active:scale-[0.98]"
+            >
+              <div className="flex items-center gap-4 bg-white p-5">
+                <span className="text-3xl">⚠️</span>
+                <div className="flex-1">
+                  <p className="text-lg font-bold text-slate-800">Mermas</p>
+                  <p className="text-sm text-gray-500">
+                    Registro de mermas puntuales por tienda
+                  </p>
+                </div>
+                <span className="text-xl text-gray-400">›</span>
               </div>
-              <span className="text-xl text-gray-400">›</span>
-            </div>
-          </Link>
+            </Link>
+          )}
 
           <Link
             href="/inventario-food"
@@ -163,7 +172,7 @@ export default async function Home() {
             </div>
           </Link>
 
-          {admin && (
+          {(admin || profile?.role === "jefe_tienda") && (
             <Link
               href="/vitrina"
               className="block overflow-hidden rounded-2xl shadow-sm transition-transform active:scale-[0.98]"
@@ -173,7 +182,7 @@ export default async function Home() {
                 <div className="flex-1 text-gray-700">
                   <p className="font-bold">Vitrina por tienda</p>
                   <p className="text-sm text-gray-400">
-                    Configurar sabores en exhibición
+                    {admin ? "Configurar sabores en exhibición" : "Ver sabores en exhibición"}
                   </p>
                 </div>
                 <span className="text-xl text-gray-300">›</span>

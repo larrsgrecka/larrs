@@ -90,6 +90,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
                 <select name="role" className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-slate-400">
                   <option value="viewer">Viewer</option>
                   <option value="jefe_tienda">Jefe de tienda</option>
+                  <option value="operador">Operador (recepción/pesaje/inventario)</option>
                   <option value="admin">Admin</option>
                 </select>
               </div>
@@ -120,9 +121,12 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
                   <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
                     u.role === "admin" ? "bg-amber-100 text-amber-700" :
                     u.role === "jefe_tienda" ? "bg-blue-100 text-blue-700" :
+                    u.role === "operador" ? "bg-emerald-100 text-emerald-700" :
                     "bg-gray-100 text-gray-500"
                   }`}>
-                    {u.role === "jefe_tienda" ? `Jefe · ${u.tienda || "—"}` : u.role}
+                    {u.role === "jefe_tienda" ? `Jefe · ${u.tienda || "—"}` :
+                     u.role === "operador" ? `Operador · ${u.tienda || "—"}` :
+                     u.role}
                   </span>
                   <span className="text-gray-300 text-sm group-open:rotate-180 transition-transform">▾</span>
                 </summary>

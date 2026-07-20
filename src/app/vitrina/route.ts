@@ -12,11 +12,15 @@ export async function GET(request: NextRequest) {
   }
 
   const profile = await getProfile();
-  if (!isAdmin(profile)) {
+  if (!isAdmin(profile) && profile?.role !== "jefe_tienda") {
     return NextResponse.redirect(new URL("/", request.url));
   }
 
-  const inject = `<script src="/larrs-nav.js" defer></script>`;
+  const tienda =
+    profile?.role === "jefe_tienda" && profile.tienda ? profile.tienda : null;
+
+  const inject = `<script>window._LARRS_TIENDA=${JSON.stringify(tienda)};window._LARRS_IS_ADMIN=${isAdmin(profile)};</script>
+<script src="/larrs-nav.js" defer></script>`;
 
   let html = readFileSync(
     join(process.cwd(), "src", "panels", "vitrina.html"),

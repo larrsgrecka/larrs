@@ -123,6 +123,11 @@ tr:hover td { background: #f8fafc; }
       </table>
     </div>
 
+    <div class="form-field full" id="campo-nombre-operador" style="margin-bottom:12px;display:none">
+      <label>Nombre de quien hace este registro</label>
+      <input type="text" id="f-nombre-operador" placeholder="Ej: María Pérez">
+    </div>
+
     <div class="form-field full" style="margin-bottom:12px">
       <label>Observaciones (opcional)</label>
       <textarea id="f-observaciones" placeholder="Ej: llegó un producto dañado, faltante..."></textarea>
@@ -449,6 +454,12 @@ async function submitRecepcion() {
   if (items.length === 0) {
     msg.className = 'msg err'; msg.textContent = 'Agrega al menos un producto recibido.'; return;
   }
+  const nombreOperador = window._LARRS_IS_OPERADOR
+    ? document.getElementById('f-nombre-operador').value.trim()
+    : '';
+  if (window._LARRS_IS_OPERADOR && !nombreOperador) {
+    msg.className = 'msg err'; msg.textContent = 'Escribe el nombre de quien hace este registro.'; return;
+  }
 
   const payload = {
     fecha, tienda, proveedor,
@@ -456,6 +467,7 @@ async function submitRecepcion() {
     items: items.map(it => ({ categoria: it.categoria, producto: it.producto, cantidad: it.cantidad, unidad: it.unidad })),
     foto_base64: fotoBase64 || undefined,
     foto_mimetype: fotoMimetype || undefined,
+    nombre_operador: nombreOperador || undefined,
   };
 
   btn.disabled = true;
@@ -476,6 +488,7 @@ async function submitRecepcion() {
     document.getElementById('f-foto').value = '';
     document.getElementById('foto-preview').style.display = 'none';
     document.getElementById('f-observaciones').value = '';
+    if (!window._LARRS_IS_OPERADOR) document.getElementById('f-nombre-operador').value = '';
     renderCarrito();
     onCategoriaChange();
     loadHistorial();
@@ -538,6 +551,9 @@ document.getElementById('f-fecha').value = new Date().toISOString().slice(0, 10)
 initHeader();
 loadCatalogo();
 loadHistorial();
+if (window._LARRS_IS_OPERADOR) {
+  document.getElementById('campo-nombre-operador').style.display = '';
+}
 </script>
 </body>
 </html>

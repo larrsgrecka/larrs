@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
   if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
   const profile = await getProfile();
-  if (profile?.role !== "jefe_tienda" && profile?.role !== "admin") {
+  if (profile?.role !== "jefe_tienda" && profile?.role !== "admin" && profile?.role !== "operador") {
     return NextResponse.json({ error: "Sin permiso" }, { status: 403 });
   }
 
@@ -28,7 +28,9 @@ export async function POST(request: NextRequest) {
 
   const body = await request.json();
   const tienda =
-    profile.role === "jefe_tienda" && profile.tienda ? profile.tienda : body.tienda;
+    (profile.role === "jefe_tienda" || profile.role === "operador") && profile.tienda
+      ? profile.tienda
+      : body.tienda;
 
   if (!tienda) {
     return NextResponse.json({ error: "tienda es requerida" }, { status: 400 });
@@ -52,12 +54,17 @@ export async function POST(request: NextRequest) {
     ? `[Corrección] ${body.observaciones || ""}`.trim()
     : body.observaciones || "";
 
+  const nombreOperador = typeof body.nombre_operador === "string" ? body.nombre_operador.trim() : "";
+  if (profile.role === "operador" && !nombreOperador) {
+    return NextResponse.json({ error: "nombre_operador es requerido para la cuenta compartida de tienda" }, { status: 400 });
+  }
+
   const payload = {
     fecha: body.fecha,
     tienda,
     observaciones,
     reportado_por_email: user.email || "",
-    reportado_por_nombre: profile.name || user.email || "",
+    reportado_por_nombre: nombreOperador || profile.name || user.email || "",
     items: validItems.map((it) => ({ sabor: it.sabor, cantidad: Number(it.cantidad) })),
   };
 

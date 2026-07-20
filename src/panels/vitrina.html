@@ -66,6 +66,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 const TIENDAS = ['Costanera', 'Dominicos', 'Trapenses'];
 // Lado de la caja según la vitrina física (ver PDF de referencia).
 const CAJA_LADO = { Dominicos: 'right', Trapenses: 'left', Costanera: 'left' };
+const tiendaFija = window._LARRS_TIENDA || null;
+const soloVer = !window._LARRS_IS_ADMIN;
 let sabores = [];
 let vitrinaActual = {}; // slot -> sabor
 
@@ -113,7 +115,7 @@ function slotHtml(slot) {
   return `
     <div class="slot${libre}" data-slot-tile="${slot}" style="background:${color}">
       <span class="slotnum" style="color:${txt}">Slot ${slot}</span>
-      <select data-slot="${slot}" onchange="onSlotChange(this)">${opcionesSabor(sabor)}</select>
+      <select data-slot="${slot}" onchange="onSlotChange(this)" ${soloVer ? 'disabled' : ''}>${opcionesSabor(sabor)}</select>
     </div>`;
 }
 
@@ -143,7 +145,12 @@ function renderCaso() {
 
 function initTiendaSelect() {
   const sel = document.getElementById('tienda-select');
-  sel.innerHTML = TIENDAS.map(t => `<option value="${t}">${t}</option>`).join('');
+  if (tiendaFija) {
+    sel.innerHTML = `<option value="${esc(tiendaFija)}">${esc(tiendaFija)}</option>`;
+    sel.disabled = true;
+  } else {
+    sel.innerHTML = TIENDAS.map(t => `<option value="${t}">${t}</option>`).join('');
+  }
 }
 
 async function loadCatalogo() {
@@ -196,6 +203,10 @@ async function guardarVitrina() {
 }
 
 (async function init() {
+  if (soloVer) {
+    document.getElementById('submit-btn').style.display = 'none';
+    document.querySelector('.subtitle').textContent = 'Vista de solo lectura — la configura un admin';
+  }
   initTiendaSelect();
   await loadCatalogo();
   await loadVitrina();

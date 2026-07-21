@@ -70,6 +70,8 @@ export type CostoSabor = { codigo: string; costoKg: number };
 // corresponden a la misma receta con otro nombre.
 const ALIAS_SABOR: Record<string, string> = {
   "Chocolate BIG o S/A": "Chocolate BIG",
+  "Pistacho Larrs(Pasta Natura 20/80 Qbo)": "Pistacho Larrs (Pasta Natura 20/80 Frutos Secos)",
+  "Yogurt Vet. Guinda (Megamarena)": "Yogurt Vet. Guinda",
 };
 
 // Empareja nombres de sabor (del CSV de producción, que no siempre calzan

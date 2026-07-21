@@ -86,6 +86,23 @@ tr:hover td { background: #f8fafc; }
     <button class="btn" style="background:#0f766e" onclick="downloadExcel(this)" title="Descargar el pedido en Excel para enviar a Grecka">⬇ Excel</button>
   </div>
   <div class="note">Pedido de la <b>semana seleccionada</b> (entrega el lunes), en <b>unidades enteras</b>. Base: venta de Grecka a esta tienda el <b>mismo mes de 2025</b> ÷ semanas del mes, <b>+10% margen</b> y <b>ajuste por meta de ventas 2026</b>. Ítems de baja frecuencia se muestran como «1 c/N sem».</div>
+  <div class="card" style="padding:12px;margin-bottom:12px">
+    <div class="section-title" style="cursor:pointer" onclick="toggleAgregarManual()">➕ Agregar producto nuevo (sin historial) <span id="agregar-manual-arrow">▾</span></div>
+    <div id="agregar-manual-form" style="display:none;margin-top:8px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+        <input id="am-sku" type="text" placeholder="Código" style="flex:1;min-width:110px;font-size:13px;border:1px solid #e2e8f0;border-radius:6px;padding:6px 9px">
+        <input id="am-desc" type="text" placeholder="Descripción del artículo" style="flex:2;min-width:200px;font-size:13px;border:1px solid #e2e8f0;border-radius:6px;padding:6px 9px">
+        <input id="am-cant" type="number" min="0" step="1" placeholder="Cantidad" style="width:90px;font-size:13px;border:1px solid #e2e8f0;border-radius:6px;padding:6px 9px">
+        <input id="am-um" type="text" placeholder="Unidad (un, kg...)" style="width:120px;font-size:13px;border:1px solid #e2e8f0;border-radius:6px;padding:6px 9px">
+        <select id="am-grupo" style="font-size:13px;border:1px solid #e2e8f0;border-radius:6px;padding:6px 9px">
+          <option value="Insumos">Insumos</option>
+          <option value="Accesorios">Accesorios</option>
+        </select>
+        <button class="btn" onclick="agregarProductoManual()">Agregar</button>
+      </div>
+      <div id="am-msg" style="font-size:12px;display:none"></div>
+    </div>
+  </div>
   <div class="fac" id="fac"></div>
   <div class="kpis" id="kpis"></div>
   <div class="chart-card"><div class="section-title">Historial de compras a Grecka (mensual $)</div><div style="height:180px"><canvas id="hist"></canvas></div></div>
@@ -206,6 +223,43 @@ function copyCol(btn,type){
   if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(txt).then(done).catch(()=>fallback(txt,done)); } else fallback(txt,done);
 }
 function fallback(txt,done){ const ta=document.createElement('textarea'); ta.value=txt; ta.style.position='fixed'; ta.style.opacity='0'; document.body.appendChild(ta); ta.select(); try{document.execCommand('copy');}catch(e){} ta.remove(); done(); }
+function toggleAgregarManual(){
+  const f=document.getElementById('agregar-manual-form');
+  const abierto = f.style.display!=='none';
+  f.style.display = abierto ? 'none' : 'block';
+  document.getElementById('agregar-manual-arrow').textContent = abierto ? '▾' : '▴';
+}
+function agregarProductoManual(){
+  const msg=document.getElementById('am-msg');
+  msg.style.display='none';
+  const sku=document.getElementById('am-sku').value.trim();
+  const desc=document.getElementById('am-desc').value.trim();
+  const cant=document.getElementById('am-cant').value.trim();
+  const um=document.getElementById('am-um').value.trim()||'un';
+  const grupo=document.getElementById('am-grupo').value;
+  if(!sku||!desc||!cant||!(+cant>0)){
+    msg.style.display='block'; msg.style.color='#b91c1c';
+    msg.textContent='Completa código, descripción y una cantidad mayor a 0.';
+    return;
+  }
+  if(typeof window.larrsAgregarProducto!=='function'){
+    msg.style.display='block'; msg.style.color='#b91c1c';
+    msg.textContent='Aún está cargando el asistente, intenta de nuevo en un segundo.';
+    return;
+  }
+  const resultado=window.larrsAgregarProducto(sku, desc, cant, um, grupo);
+  if(resultado==='exists'){
+    msg.style.display='block'; msg.style.color='#b91c1c';
+    msg.textContent='Ese código ya está en el pedido.';
+    return;
+  }
+  msg.style.display='block'; msg.style.color='#15803d';
+  msg.textContent='"'+desc+'" agregado al pedido.';
+  document.getElementById('am-sku').value='';
+  document.getElementById('am-desc').value='';
+  document.getElementById('am-cant').value='';
+  document.getElementById('am-um').value='';
+}
 (function(){ const locSel=document.getElementById('loc'); locSel.innerHTML=LOCS.filter(l=>PED[l]).map(l=>'<option value="'+l+'">'+l+'</option>').join(''); if(window._LARRS_TIENDA){ locSel.value=window._LARRS_TIENDA; locSel.disabled=true; } onLoc(); })();
 </script>
 </body>

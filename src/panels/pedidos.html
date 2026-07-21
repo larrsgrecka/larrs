@@ -194,6 +194,18 @@ function getQtyMap(){
   document.querySelectorAll('.qty-input').forEach(inp=>{ m[inp.dataset.sku]=Math.max(0,parseInt(inp.value)||0); });
   return m;
 }
+function buildPedidoItems(){
+  const it=window._ord||[];
+  const qtyMap=getQtyMap();
+  const pedidoItems=[];
+  it.forEach(x=>{ const cant=qtyMap[x.sku]??( x.sem>=1?x.sem:1); if(cant>0) pedidoItems.push({sku:x.sku, descripcion:x.desc, cantidad:cant, um:x.um, grupo:x.grupo}); });
+  return pedidoItems;
+}
+function guardarHistorialPedido(pedidoItems){
+  if(!pedidoItems.length) return;
+  const loc=document.getElementById("loc").value;
+  fetch('/api/pedidos-historial',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tienda:loc, semanaLunes:weekMonday.toISOString().slice(0,10), items:pedidoItems})}).catch(()=>{});
+}
 function downloadExcel(btn){
   const it=window._ord||[];
   if(!it.length){ btn.textContent="Nada"; setTimeout(()=>btn.textContent="⬇ Excel",1400); return; }
@@ -201,9 +213,7 @@ function downloadExcel(btn){
   const loc=document.getElementById("loc").value;
   const sun=new Date(weekMonday); sun.setDate(sun.getDate()+6);
   const wl=fmtD(weekMonday)+" al "+fmtD(sun);
-  const qtyMap=getQtyMap();
-  const pedidoItems=[];
-  it.forEach(x=>{ const cant=qtyMap[x.sku]??( x.sem>=1?x.sem:1); if(cant>0) pedidoItems.push({sku:x.sku, descripcion:x.desc, cantidad:cant, um:x.um, grupo:x.grupo}); });
+  const pedidoItems=buildPedidoItems();
   const rows=[["Pedido Larrs -> Grecka"],["Local:",loc],["Semana:",wl],["Entrega:","Lunes "+fmtD(weekMonday)],[],["Codigo","Descripcion","Cantidad","Unidad","Grupo"]];
   pedidoItems.forEach(p=> rows.push([p.sku, p.descripcion, p.cantidad, p.um, p.grupo]));
   const ws=XLSX.utils.aoa_to_sheet(rows);
@@ -211,7 +221,7 @@ function downloadExcel(btn){
   const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"Pedido");
   XLSX.writeFile(wb, "pedido_"+loc+"_"+weekMonday.toISOString().slice(0,10)+".xlsx");
   const t="⬇ Excel"; btn.textContent="✓ Descargado"; setTimeout(()=>btn.textContent=t,1600);
-  fetch('/api/pedidos-historial',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tienda:loc, semanaLunes:weekMonday.toISOString().slice(0,10), items:pedidoItems})}).catch(()=>{});
+  guardarHistorialPedido(pedidoItems);
 }
 function copyCol(btn,type){
   const it=window._ord||[];
@@ -221,6 +231,7 @@ function copyCol(btn,type){
   const txt=it.map(x=> type==='sku' ? x.sku : (qtyMap[x.sku]??(x.sem>=1?x.sem:1))).join('\n');
   const done=()=>{ btn.textContent='✓ '+it.length; setTimeout(()=>btn.textContent=label,1600); };
   if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(txt).then(done).catch(()=>fallback(txt,done)); } else fallback(txt,done);
+  guardarHistorialPedido(buildPedidoItems());
 }
 function fallback(txt,done){ const ta=document.createElement('textarea'); ta.value=txt; ta.style.position='fixed'; ta.style.opacity='0'; document.body.appendChild(ta); ta.select(); try{document.execCommand('copy');}catch(e){} ta.remove(); done(); }
 function toggleAgregarManual(){

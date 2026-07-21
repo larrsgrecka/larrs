@@ -128,15 +128,12 @@ function textoSobre(hex) {
 }
 
 function opcionesSabor(seleccionado) {
-  // El código va como prefijo (no al final) para que se alcance a ver
-  // aunque el <select> recorte el texto por ancho — el navegador clipea
-  // desde el final, no agrega "...", así que lo que importa va primero.
+  // El código ya se muestra en el subtítulo bajo el select — acá solo el
+  // nombre, para no competir por espacio y que se lea mejor el sabor.
   const opts = ['<option value="">— Libre —</option>']
-    .concat(sabores.map(s => {
-      const c = costosSabores[s];
-      const label = c ? `[${c.codigo}] ${s}` : s;
-      return `<option value="${esc(s)}" ${s === seleccionado ? 'selected' : ''}>${esc(label)}</option>`;
-    }));
+    .concat(sabores.map(s =>
+      `<option value="${esc(s)}" ${s === seleccionado ? 'selected' : ''}>${esc(s)}</option>`
+    ));
   return opts.join('');
 }
 

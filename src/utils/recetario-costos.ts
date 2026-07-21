@@ -53,3 +53,42 @@ export async function getRecetarioCostos(
   cache = { data: recetas, sincronizadoEn, expiresAt: Date.now() + CACHE_TTL_MS };
   return { recetas, sincronizadoEn };
 }
+
+function normalizarNombre(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+export type CostoSabor = { codigo: string; costoKg: number };
+
+// Empareja nombres de sabor (del CSV de producción, que no siempre calzan
+// letra por letra con "Nombre Receta" del Recetario) contra el costo real
+// por kilo de cada receta.
+export function matchCostos(sabores: string[], recetas: RecetaCosto[]): Record<string, CostoSabor> {
+  const porNombreNorm = new Map(recetas.map((r) => [normalizarNombre(r.nombre), r]));
+  const out: Record<string, CostoSabor> = {};
+  for (const s of sabores) {
+    const receta = porNombreNorm.get(normalizarNombre(s));
+    if (receta) out[s] = { codigo: receta.codigo, costoKg: receta.costoKg };
+  }
+  return out;
+}
+
+// Trae el Recetario y hace el match — nunca lanza, si el Recetario no está
+// disponible (SharePoint caído, credenciales, etc.) devuelve un mapa vacío
+// en vez de romper el catálogo de sabores que sí funciona. Cuando el
+// caller también necesita hacer fetch de los sabores, mejor correr
+// getRecetarioCostos() en paralelo (Promise.all) y llamar matchCostos()
+// directo, para no encadenar dos fetches lentos uno tras otro.
+export async function getCostosPorSabor(sabores: string[]): Promise<Record<string, CostoSabor>> {
+  try {
+    const { recetas } = await getRecetarioCostos();
+    return matchCostos(sabores, recetas);
+  } catch {
+    return {};
+  }
+}

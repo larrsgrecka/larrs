@@ -153,6 +153,12 @@ const esAdmin = window._LARRS_IS_ADMIN === true;
 let sabores = [];
 let vitrinaSabores = []; // sabores de la vitrina actual de la tienda activa
 let cantidades = {}; // sabor -> valor string ingresado (se conserva al filtrar)
+let costosSabores = {}; // sabor -> {codigo, costoKg} (del Recetario, si hay match)
+
+function codigoTxt(s) {
+  const c = costosSabores[s];
+  return c ? `<span style="color:#94a3b8;font-size:10px">[${esc(c.codigo)}]</span>` : '';
+}
 
 function tiendaActiva() {
   return tiendaFija || document.getElementById('tienda-select').value;
@@ -220,7 +226,7 @@ function renderVitrina() {
 
   body.innerHTML = vitrinaSabores.map(s => `
     <tr>
-      <td style="font-size:12px">${esc(s)}</td>
+      <td style="font-size:12px">${esc(s)} ${codigoTxt(s)}</td>
       <td class="r"><input type="number" class="cant-input" data-sabor="${esc(s)}" min="0" step="0.01" placeholder="—" value="${cantidades[s] || ''}"></td>
     </tr>
   `).join('');
@@ -234,6 +240,8 @@ async function loadSabores() {
     const data = await resp.json();
     if (!data.ok) throw new Error(data.error || 'Error al cargar sabores');
     sabores = data.sabores || [];
+    costosSabores = data.costos || {};
+    renderVitrina();
     renderSabores();
     if (esAdmin) {
       document.getElementById('correccion-sabores-list').innerHTML =
@@ -317,7 +325,7 @@ function renderSabores() {
 
   body.innerHTML = filtrados.map(s => `
     <tr>
-      <td style="font-size:12px">${esc(s)}</td>
+      <td style="font-size:12px">${esc(s)} ${codigoTxt(s)}</td>
       <td class="r"><input type="number" class="cant-input" data-sabor="${esc(s)}" min="0" step="0.01" placeholder="—" value="${cantidades[s] || ''}"></td>
     </tr>
   `).join('');

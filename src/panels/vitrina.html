@@ -51,6 +51,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 
   <div class="note">Cada ficha se pinta con el color del sabor para que veas cómo queda la vitrina. Deja slots en "— Libre —" para reservarlos a un sabor fuera de la lista habitual (se pesa igual buscándolo por nombre en producción).</div>
 
+  <div class="card" id="costo-resumen" style="margin-bottom:12px; display:none">
+    <div class="hint" style="margin-bottom:2px">Costo promedio de la vitrina actual (por kilo)</div>
+    <div style="font-size:22px;font-weight:700;color:#1e293b" id="costo-promedio-valor">—</div>
+    <div style="font-size:10px;color:#94a3b8;margin-top:2px" id="costo-promedio-sub"></div>
+  </div>
+
   <div class="card">
     <div class="hint"><span id="caja-hint">Caja al costado</span> · desliza de lado para ver toda la vitrina</div>
     <div class="fila-label">Fila superior (slots 1–12) · Fila inferior (slots 13–24)</div>
@@ -70,6 +76,25 @@ const tiendaFija = window._LARRS_TIENDA || null;
 const soloVer = !window._LARRS_IS_ADMIN;
 let sabores = [];
 let vitrinaActual = {}; // slot -> sabor
+let costosSabores = {}; // sabor -> {codigo, costoKg}
+
+function costoTxt(sabor) {
+  const c = costosSabores[sabor];
+  return c ? `$${Math.round(c.costoKg).toLocaleString('es-CL')}/kg` : '';
+}
+
+function actualizarCostoPromedio() {
+  const card = document.getElementById('costo-resumen');
+  const asignados = Object.values(vitrinaActual).filter(Boolean);
+  const conCosto = asignados.filter(s => costosSabores[s]).map(s => costosSabores[s].costoKg);
+  if (!conCosto.length) { card.style.display = 'none'; return; }
+  const promedio = conCosto.reduce((a, b) => a + b, 0) / conCosto.length;
+  card.style.display = 'block';
+  document.getElementById('costo-promedio-valor').textContent =
+    `$${Math.round(promedio).toLocaleString('es-CL')} / kg`;
+  document.getElementById('costo-promedio-sub').textContent =
+    `${conCosto.length} de ${asignados.length} sabores con costo conocido (Recetario)`;
+}
 
 function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({
@@ -103,7 +128,11 @@ function textoSobre(hex) {
 
 function opcionesSabor(seleccionado) {
   const opts = ['<option value="">— Libre —</option>']
-    .concat(sabores.map(s => `<option value="${esc(s)}" ${s === seleccionado ? 'selected' : ''}>${esc(s)}</option>`));
+    .concat(sabores.map(s => {
+      const c = costosSabores[s];
+      const label = c ? `${s} [${c.codigo}]` : s;
+      return `<option value="${esc(s)}" ${s === seleccionado ? 'selected' : ''}>${esc(label)}</option>`;
+    }));
   return opts.join('');
 }
 
@@ -112,10 +141,12 @@ function slotHtml(slot) {
   const color = colorSabor(sabor);
   const txt = textoSobre(color);
   const libre = sabor ? '' : ' libre';
+  const costo = costoTxt(sabor);
   return `
     <div class="slot${libre}" data-slot-tile="${slot}" style="background:${color}">
       <span class="slotnum" style="color:${txt}">Slot ${slot}</span>
       <select data-slot="${slot}" onchange="onSlotChange(this)" ${soloVer ? 'disabled' : ''}>${opcionesSabor(sabor)}</select>
+      <span class="slot-costo" style="font-size:9px;font-weight:700;color:${txt};opacity:.85">${costo}</span>
     </div>`;
 }
 
@@ -128,6 +159,8 @@ function onSlotChange(sel) {
   tile.style.background = color;
   tile.classList.toggle('libre', !sabor);
   tile.querySelector('.slotnum').style.color = textoSobre(color);
+  tile.querySelector('.slot-costo').textContent = costoTxt(sabor);
+  actualizarCostoPromedio();
 }
 
 function renderCaso() {
@@ -156,7 +189,10 @@ function initTiendaSelect() {
 async function loadCatalogo() {
   const resp = await fetch('/api/vitrina/catalogo');
   const data = await resp.json();
-  if (data.ok) sabores = data.sabores || [];
+  if (data.ok) {
+    sabores = data.sabores || [];
+    costosSabores = data.costos || {};
+  }
 }
 
 async function loadVitrina() {
@@ -170,6 +206,7 @@ async function loadVitrina() {
     }
   } catch (e) { /* deja la grilla vacía si falla */ }
   renderCaso();
+  actualizarCostoPromedio();
   document.getElementById('last-update').textContent = `Cargado: ${new Date().toLocaleString('es-CL')}`;
 }
 

@@ -110,6 +110,7 @@ tr:hover td { background: #f8fafc; }
 <script>
 let tabActivo = 'food';
 let catalogoActual = [];   // categorias con productos (food) o array de strings (sabores)
+let costosSabores = {};    // sabor -> {codigo, costoKg} (del Recetario, solo tab sabores)
 let overridesActuales = [];
 
 function esc(s) {
@@ -153,6 +154,7 @@ async function cargarCatalogo() {
       const data = await resp.json();
       if (!data.ok) throw new Error(data.error);
       catalogoActual = data.sabores || [];
+      costosSabores = data.costos || {};
       renderCatalogoSabores();
     }
   } catch (e) {
@@ -197,14 +199,17 @@ function renderCatalogoSabores() {
     body.innerHTML = '<tr><td class="empty">Catálogo vacío.</td></tr>';
     return;
   }
-  body.innerHTML = catalogoActual.map(s => `
+  body.innerHTML = catalogoActual.map(s => {
+    const c = costosSabores[s];
+    const codigoTxt = c ? `<span style="color:#94a3b8;font-size:11px">[${esc(c.codigo)}]</span>` : '';
+    return `
     <tr>
       <td style="display:flex;justify-content:space-between;align-items:center;gap:8px">
-        <span style="font-size:12px">${esc(s)}</span>
+        <span style="font-size:12px">${esc(s)} ${codigoTxt}</span>
         <button type="button" class="remove-btn" onclick="excluirArticulo('', '${esc(s).replace(/'/g,"\\'")}')">Quitar</button>
       </td>
-    </tr>
-  `).join('');
+    </tr>`;
+  }).join('');
 }
 
 async function cargarOverrides() {

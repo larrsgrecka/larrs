@@ -74,20 +74,27 @@ tr:hover td { background: #f8fafc; }
       </table>
     </div>
 
-    <div class="section-title">Otros sabores</div>
-    <div class="form-field full" style="margin-bottom:8px">
-      <input type="text" id="f-buscar" placeholder="Buscar sabor fuera de vitrina (ej: chocolate, banana...)" oninput="renderSabores()">
+    <div id="otros-sabores-admin" style="display:none">
+      <div class="section-title">Otros sabores</div>
+      <div class="form-field full" style="margin-bottom:8px">
+        <input type="text" id="f-buscar" placeholder="Buscar sabor fuera de vitrina (ej: chocolate, banana...)" oninput="renderSabores()">
+      </div>
+
+      <div class="card" id="sabores-card" style="margin-bottom:12px">
+        <table>
+          <thead><tr><th>Sabor</th><th class="r">Kg pesados</th></tr></thead>
+          <tbody id="sabores-body" class="scroll-body">
+            <tr><td colspan="2" class="empty">Cargando sabores...</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="contador" id="contador">0 sabores con cantidad ingresada</div>
     </div>
 
-    <div class="card" id="sabores-card" style="margin-bottom:12px">
-      <table>
-        <thead><tr><th>Sabor</th><th class="r">Kg pesados</th></tr></thead>
-        <tbody id="sabores-body" class="scroll-body">
-          <tr><td colspan="2" class="empty">Cargando sabores...</td></tr>
-        </tbody>
-      </table>
+    <div class="form-field full" id="otros-sabores-comentario" style="margin-bottom:12px;display:none">
+      <label>Otros sabores (si pesaste algo fuera de la vitrina, descríbelo aquí: nombre y kg)</label>
+      <textarea id="f-otros-sabores-texto" placeholder="Ej: Pistacho 2.5 kg, Frutilla 1 kg"></textarea>
     </div>
-    <div class="contador" id="contador">0 sabores con cantidad ingresada</div>
 
     <div class="form-field full" id="campo-nombre-operador" style="margin:12px 0;display:none">
       <label>Nombre de quien hace este registro</label>
@@ -342,9 +349,13 @@ async function submitPesaje() {
     .map(([sabor, valor]) => ({ sabor, cantidad: parseFloat(valor) }))
     .filter(it => it.cantidad > 0);
 
+  const otrosSaboresTexto = !window._LARRS_IS_ADMIN
+    ? document.getElementById('f-otros-sabores-texto').value.trim()
+    : '';
+
   if (items.length === 0) {
     msg.className = 'msg err';
-    msg.textContent = 'Ingresa el peso de al menos un sabor.';
+    msg.textContent = 'Ingresa el peso de al menos un sabor de la vitrina.';
     return;
   }
   const nombreOperador = window._LARRS_IS_OPERADOR
@@ -354,9 +365,14 @@ async function submitPesaje() {
     msg.className = 'msg err'; msg.textContent = 'Escribe el nombre de quien hace este registro.'; return;
   }
 
+  const observacionesBase = document.getElementById('f-observaciones').value.trim();
+  const observaciones = otrosSaboresTexto
+    ? `[Otros sabores: ${otrosSaboresTexto}] ${observacionesBase}`.trim()
+    : observacionesBase;
+
   const payload = {
     fecha, tienda,
-    observaciones: document.getElementById('f-observaciones').value.trim(),
+    observaciones,
     items,
     nombre_operador: nombreOperador || undefined,
   };
@@ -393,6 +409,11 @@ loadSabores();
 document.getElementById('last-update').textContent = `Cargado: ${new Date().toLocaleString('es-CL')}`;
 if (window._LARRS_IS_OPERADOR) {
   document.getElementById('campo-nombre-operador').style.display = '';
+}
+if (window._LARRS_IS_ADMIN) {
+  document.getElementById('otros-sabores-admin').style.display = '';
+} else {
+  document.getElementById('otros-sabores-comentario').style.display = '';
 }
 </script>
 </body>

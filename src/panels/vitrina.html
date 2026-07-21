@@ -74,11 +74,13 @@ const TIENDAS = ['Costanera', 'Dominicos', 'Trapenses'];
 const CAJA_LADO = { Dominicos: 'right', Trapenses: 'left', Costanera: 'left' };
 const tiendaFija = window._LARRS_TIENDA || null;
 const soloVer = !window._LARRS_IS_ADMIN;
+const ocultarCostos = window._LARRS_IS_OPERADOR === true;
 let sabores = [];
 let vitrinaActual = {}; // slot -> sabor
 let costosSabores = {}; // sabor -> {codigo, costoKg}
 
 function costoTxt(sabor) {
+  if (ocultarCostos) return '';
   const c = costosSabores[sabor];
   if (!c) return '';
   return `${c.codigo} · $${Math.round(c.costoKg).toLocaleString('es-CL')}/kg`;
@@ -86,6 +88,7 @@ function costoTxt(sabor) {
 
 function actualizarCostoPromedio() {
   const card = document.getElementById('costo-resumen');
+  if (ocultarCostos) { card.style.display = 'none'; return; }
   const asignados = Object.values(vitrinaActual).filter(Boolean);
   const conCosto = asignados.filter(s => costosSabores[s]).map(s => costosSabores[s].costoKg);
   if (!conCosto.length) { card.style.display = 'none'; return; }

@@ -174,7 +174,7 @@ export default async function Home() {
             </div>
           </Link>
 
-          {(admin || profile?.role === "jefe_tienda") && (
+          {(admin || profile?.role === "jefe_tienda" || profile?.role === "operador") && (
             <Link
               href="/vitrina"
               className="block overflow-hidden rounded-2xl shadow-sm transition-transform active:scale-[0.98]"

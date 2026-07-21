@@ -12,14 +12,17 @@ export async function GET(request: NextRequest) {
   }
 
   const profile = await getProfile();
-  if (!isAdmin(profile) && profile?.role !== "jefe_tienda") {
+  if (!isAdmin(profile) && profile?.role !== "jefe_tienda" && profile?.role !== "operador") {
     return NextResponse.redirect(new URL("/", request.url));
   }
 
   const tienda =
-    profile?.role === "jefe_tienda" && profile.tienda ? profile.tienda : null;
+    (profile?.role === "jefe_tienda" || profile?.role === "operador") && profile.tienda
+      ? profile.tienda
+      : null;
+  const esOperador = profile?.role === "operador";
 
-  const inject = `<script>window._LARRS_TIENDA=${JSON.stringify(tienda)};window._LARRS_IS_ADMIN=${isAdmin(profile)};</script>
+  const inject = `<script>window._LARRS_TIENDA=${JSON.stringify(tienda)};window._LARRS_IS_ADMIN=${isAdmin(profile)};window._LARRS_IS_OPERADOR=${esOperador};</script>
 <script src="/larrs-nav.js" defer></script>`;
 
   let html = readFileSync(

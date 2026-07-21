@@ -24,7 +24,9 @@ export async function GET(request: NextRequest) {
   const profile = await getProfile();
   const sp = request.nextUrl.searchParams;
   const tienda =
-    profile?.role === "jefe_tienda" && profile.tienda ? profile.tienda : sp.get("tienda");
+    (profile?.role === "jefe_tienda" || profile?.role === "operador") && profile.tienda
+      ? profile.tienda
+      : sp.get("tienda");
 
   const url = new URL(config.url);
   url.searchParams.set("token", config.token);

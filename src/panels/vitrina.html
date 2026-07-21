@@ -80,7 +80,8 @@ let costosSabores = {}; // sabor -> {codigo, costoKg}
 
 function costoTxt(sabor) {
   const c = costosSabores[sabor];
-  return c ? `$${Math.round(c.costoKg).toLocaleString('es-CL')}/kg` : '';
+  if (!c) return '';
+  return `${c.codigo} · $${Math.round(c.costoKg).toLocaleString('es-CL')}/kg`;
 }
 
 function actualizarCostoPromedio() {
@@ -127,10 +128,13 @@ function textoSobre(hex) {
 }
 
 function opcionesSabor(seleccionado) {
+  // El código va como prefijo (no al final) para que se alcance a ver
+  // aunque el <select> recorte el texto por ancho — el navegador clipea
+  // desde el final, no agrega "...", así que lo que importa va primero.
   const opts = ['<option value="">— Libre —</option>']
     .concat(sabores.map(s => {
       const c = costosSabores[s];
-      const label = c ? `${s} [${c.codigo}]` : s;
+      const label = c ? `[${c.codigo}] ${s}` : s;
       return `<option value="${esc(s)}" ${s === seleccionado ? 'selected' : ''}>${esc(label)}</option>`;
     }));
   return opts.join('');

@@ -65,6 +65,13 @@ function normalizarNombre(s: string): string {
 
 export type CostoSabor = { codigo: string; costoKg: number };
 
+// Sabores del CSV de producción que no matchean ni siquiera normalizados
+// contra "Nombre Receta" del Recetario, pero se confirmó a mano que
+// corresponden a la misma receta con otro nombre.
+const ALIAS_SABOR: Record<string, string> = {
+  "Chocolate BIG o S/A": "Chocolate BIG",
+};
+
 // Empareja nombres de sabor (del CSV de producción, que no siempre calzan
 // letra por letra con "Nombre Receta" del Recetario) contra el costo real
 // por kilo de cada receta.
@@ -72,7 +79,8 @@ export function matchCostos(sabores: string[], recetas: RecetaCosto[]): Record<s
   const porNombreNorm = new Map(recetas.map((r) => [normalizarNombre(r.nombre), r]));
   const out: Record<string, CostoSabor> = {};
   for (const s of sabores) {
-    const receta = porNombreNorm.get(normalizarNombre(s));
+    const nombreBuscado = ALIAS_SABOR[s] || s;
+    const receta = porNombreNorm.get(normalizarNombre(nombreBuscado));
     if (receta) out[s] = { codigo: receta.codigo, costoKg: receta.costoKg };
   }
   return out;

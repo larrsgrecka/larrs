@@ -1752,8 +1752,6 @@ function render(data, prevData) {
     <!-- Insight -->
     <div class="insight">${insightText}</div>
 
-    ${buildFlavorAlertsSection()}
-
     <!-- Chart: kg por tienda -->
     <div class="chart-card">
       <div class="section-title">Kg por tienda</div>
@@ -1847,6 +1845,8 @@ function render(data, prevData) {
       <p style="font-size:10px;color:#94a3b8;margin:0 0 6px">Barras = kg producidos (eje izq.). Línea = ventas totales en $ (eje der.).</p>
       <div style="height:220px"><canvas id="chart-prod-vs-ventas"></canvas></div>
     </div>
+
+    ${buildFlavorAlertsSection()}
 
     </div><!-- end larrs-prod-sec -->
     <div class="larrs-ventas-sec">

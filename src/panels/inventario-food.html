@@ -121,6 +121,12 @@ const tiendaFija = window._LARRS_TIENDA || null;
 const esAdmin = window._LARRS_IS_ADMIN === true;
 let tiendaActiva = tiendaFija || 'Todas';
 let catalogo = [];
+
+function codigoTxt(categoria, producto) {
+  const cat = catalogo.find(c => c.value === categoria);
+  const p = cat && cat.productos.find(p => p.nombre === producto);
+  return p && p.codigo ? `<span style="color:#94a3b8;font-size:10px">[${esc(p.codigo)}]</span>` : '';
+}
 let stockItems = [];
 let editingId = null;
 
@@ -182,7 +188,7 @@ function onCategoriaChange() {
   // grano se cuenta en bolsas/"un", pero el café por kilo admite decimales).
   body.innerHTML = cat.productos.map(p => `
     <tr>
-      <td style="font-size:12px">${esc(p.nombre)}</td>
+      <td style="font-size:12px">${esc(p.nombre)} ${p.codigo ? `<span style="color:#94a3b8;font-size:10px">[${esc(p.codigo)}]</span>` : ''}</td>
       <td style="font-size:11px;color:#64748b">${esc(p.unidad)}</td>
       <td class="r"><input type="number" class="cant-input" data-producto="${esc(p.nombre)}" data-unidad="${esc(p.unidad)}" min="0" step="${p.unidad === 'un' ? '1' : '0.01'}" placeholder="—"></td>
     </tr>
@@ -316,7 +322,7 @@ function renderStock(items) {
     <tr>
       ${showTienda ? `<td style="font-size:12px">${esc(it.tienda)}</td>` : ''}
       <td><span class="cat-badge">${esc(labelCategoria(it.categoria))}</span></td>
-      <td style="font-size:12px">${esc(it.producto)}</td>
+      <td style="font-size:12px">${esc(it.producto)} ${codigoTxt(it.categoria, it.producto)}</td>
       <td class="r" style="font-size:12px">${fmtNum(it.cantidad)} ${esc(it.unidad)}</td>
       <td style="font-size:11px;color:#64748b">${esc(it.fecha)}</td>
       ${esAdmin ? `<td style="white-space:nowrap">

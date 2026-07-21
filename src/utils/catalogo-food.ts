@@ -1,4 +1,4 @@
-import { getCatalogoProductos } from "@/utils/catalogo-productos";
+import { getCatalogoProductos, getCodigosProductos } from "@/utils/catalogo-productos";
 import { getOverrides } from "@/utils/catalogo-overrides";
 
 // En Cafetería casi todo son preparaciones al momento (americano, latte, tés,
@@ -72,7 +72,7 @@ function esContable(grupo: string, nombre: string): boolean {
 export type CategoriaFood = {
   value: string;
   label: string;
-  productos: { nombre: string; unidad: string }[];
+  productos: { nombre: string; unidad: string; codigo?: string }[];
 };
 
 // Catálogo de productos "food" contables (usado por Inventario Food y
@@ -80,11 +80,12 @@ export type CategoriaFood = {
 // se desalinean con el tiempo. Los admins pueden agregar/excluir artículos
 // puntuales sin tocar código vía /catalogo (ver catalogo-overrides.ts).
 export async function getCatalogoFood(): Promise<CategoriaFood[]> {
-  const [categorias, { incluir, excluirNombres }] = await Promise.all([
+  const [categorias, { incluir, excluirNombres }, codigos] = await Promise.all([
     getCatalogoProductos({
       excluir: ["HELADERIA", "CHOCOLATERIA", "ARTICULOS", "MATERIAS PRIMAS"],
     }),
     getOverrides("food"),
+    getCodigosProductos(),
   ]);
   const base: CategoriaFood[] = categorias
     .map((c) => ({
@@ -92,7 +93,7 @@ export async function getCatalogoFood(): Promise<CategoriaFood[]> {
       label: c.label,
       productos: c.productos
         .filter((p) => esContable(c.value, p))
-        .map((nombre) => ({ nombre, unidad: unidadDe(nombre) })),
+        .map((nombre) => ({ nombre, unidad: unidadDe(nombre), codigo: codigos[nombre] })),
     }))
     .filter((c) => c.productos.length > 0);
 

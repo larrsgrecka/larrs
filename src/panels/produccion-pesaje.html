@@ -57,6 +57,16 @@ tr:hover td { background: #f8fafc; }
     <select id="tienda-select" onchange="onTiendaChange()"></select>
   </div>
 
+  <div class="form-card" id="recetas-disp-card" style="display:none">
+    <div class="section-title">Recetas disponibles <span style="font-weight:400;color:#94a3b8">(recibidas del Centro de Producción − consumidas al pesar)</span></div>
+    <div class="card" style="margin-bottom:0">
+      <table>
+        <thead><tr><th>Sabor</th><th class="r">Recibido</th><th class="r">Consumido</th><th class="r">Saldo</th></tr></thead>
+        <tbody id="recetas-disp-body"></tbody>
+      </table>
+    </div>
+  </div>
+
   <div class="form-card">
     <div class="section-title">Nuevo pesaje</div>
     <div class="form-grid" style="margin-bottom:12px">
@@ -196,6 +206,33 @@ function initHeader() {
 function onTiendaChange() {
   loadVitrina();
   renderSabores();
+  loadRecetasDisponibles();
+}
+
+async function loadRecetasDisponibles() {
+  const tienda = tiendaActiva();
+  const card = document.getElementById('recetas-disp-card');
+  const body = document.getElementById('recetas-disp-body');
+  if (!tienda) { card.style.display = 'none'; return; }
+  try {
+    const resp = await fetch('/api/produccion-pesaje/recetas-disponibles?tienda=' + encodeURIComponent(tienda));
+    const data = await resp.json();
+    if (!data.ok) throw new Error(data.error || 'Error al cargar recetas disponibles');
+    const items = data.items || [];
+    if (!items.length) { card.style.display = 'none'; return; }
+    card.style.display = 'block';
+    body.innerHTML = items.map(it => {
+      const color = it.saldo < 0 ? '#dc2626' : (it.saldo > 0 ? '#16a34a' : '#64748b');
+      return `<tr>
+        <td style="font-size:12px">${esc(it.sabor)} ${it.codigo ? `<span style="color:#94a3b8;font-size:10px">[${esc(it.codigo)}]</span>` : ''}</td>
+        <td class="r" style="font-size:12px">${it.recibido}</td>
+        <td class="r" style="font-size:12px">${it.consumido}</td>
+        <td class="r" style="font-size:12px;font-weight:700;color:${color}">${it.saldo}</td>
+      </tr>`;
+    }).join('');
+  } catch (e) {
+    card.style.display = 'none';
+  }
 }
 
 async function loadVitrina() {
@@ -414,6 +451,7 @@ initHeader();
 initCorreccion();
 loadVitrina();
 loadSabores();
+loadRecetasDisponibles();
 document.getElementById('last-update').textContent = `Cargado: ${new Date().toLocaleString('es-CL')}`;
 if (window._LARRS_IS_OPERADOR) {
   document.getElementById('campo-nombre-operador').style.display = '';

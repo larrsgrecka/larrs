@@ -148,7 +148,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: data.error || "Error en Apps Script de recepción" }, { status: 502 });
   }
 
-  const stockResult = await sumarAlStock(tienda, payload.items, reportadoPor, reportadoPorId);
+  // Heladería (recetas del Centro de Producción) no es stock de Inventario
+  // Food — alimenta el saldo de "recetas disponibles" en Pesaje de
+  // producción, calculado aparte a partir del historial de Recepciones.
+  const itemsFood = payload.items.filter((it) => it.categoria !== "HELADERIA");
+  const stockResult = itemsFood.length
+    ? await sumarAlStock(tienda, itemsFood, reportadoPor, reportadoPorId)
+    : { ok: true };
   if (!stockResult.ok) {
     return NextResponse.json({
       ok: true,

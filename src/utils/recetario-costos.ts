@@ -63,7 +63,7 @@ function normalizarNombre(s: string): string {
     .trim();
 }
 
-export type CostoSabor = { codigo: string; costoKg: number };
+export type CostoSabor = { codigo: string; costoKg: number; kilosReceta: number };
 
 // Sabores del CSV de producción que no matchean ni siquiera normalizados
 // contra "Nombre Receta" del Recetario, pero se confirmó a mano que
@@ -83,7 +83,7 @@ export function matchCostos(sabores: string[], recetas: RecetaCosto[]): Record<s
   for (const s of sabores) {
     const nombreBuscado = ALIAS_SABOR[s] || s;
     const receta = porNombreNorm.get(normalizarNombre(nombreBuscado));
-    if (receta) out[s] = { codigo: receta.codigo, costoKg: receta.costoKg };
+    if (receta) out[s] = { codigo: receta.codigo, costoKg: receta.costoKg, kilosReceta: receta.kilosReceta };
   }
   return out;
 }

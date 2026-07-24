@@ -514,7 +514,7 @@ function buildFlavorDoughnut(data) {
     data: { labels, datasets: [{ data: vals, backgroundColor: labels.map((_,i) => pal[i % pal.length]), borderWidth: 1.5, borderColor: '#fff' }] },
     options: { responsive: true, maintainAspectRatio: false, cutout: '58%',
       plugins: { legend: { position: 'right', labels: { font:{size:10}, padding: 7, boxWidth: 10 } },
-        tooltip: { callbacks: { label: c => ` ${c.label}: ${c.parsed} kg (${(c.parsed / data.totalKg * 100).toFixed(1)}%)` } } } }
+        tooltip: { callbacks: { label: c => ` ${c.label}: ${c.parsed} kg (${(c.parsed / data.totalKg * 100).toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})}%)` } } } }
   });
 }
 
@@ -566,7 +566,7 @@ function buildProyeccionDemanda(data) {
     const real = prodDow[dowIdx[i]] || 0;
     const dl = real - sug;
     const col = Math.abs(dl) < sug * 0.25 ? '#16a34a' : (dl > 0 ? '#2563eb' : '#dc2626');
-    return `<tr><td style="font-size:12px;font-weight:600">${dia}</td><td class="r" style="font-size:12px">${(sh*100).toFixed(0)}%</td><td class="r" style="font-size:12px">${sug.toFixed(1)} kg</td><td class="r" style="font-size:12px">${real>0?real.toFixed(1)+' kg':'<span style=\"color:#cbd5e1\">—</span>'}</td><td class="r" style="font-size:12px;color:${col};font-weight:600">${dl>=0?'+':''}${dl.toFixed(0)} kg</td></tr>`;
+    return `<tr><td style="font-size:12px;font-weight:600">${dia}</td><td class="r" style="font-size:12px">${(sh*100).toFixed(0)}%</td><td class="r" style="font-size:12px">${sug.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})} kg</td><td class="r" style="font-size:12px">${real>0?real.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})+' kg':'<span style=\"color:#cbd5e1\">—</span>'}</td><td class="r" style="font-size:12px;color:${col};font-weight:600">${dl>=0?'+':''}${dl.toFixed(0)} kg</td></tr>`;
   }).join('');
   return `
   <div class="section-title">Proyección de producción vs demanda</div>
@@ -612,7 +612,7 @@ function buildMermaAcumulada() {
   const MESES3 = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
   const rowsTienda = T_ORDEN.map(t => `<tr>
     <td><div class="tienda-cell"><span class="dot" style="background:${T_COLOR[t]}"></span>${t}</div></td>
-    <td class="r">${pt[t].kg.toFixed(1)} kg</td>
+    <td class="r">${pt[t].kg.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})} kg</td>
     <td class="r" style="color:#dc2626;font-weight:600">${fmtCLP(pt[t].clp)}</td>
     <td class="r" style="font-size:11px;color:#64748b">${clpTot>0?(pt[t].clp/clpTot*100).toFixed(0):0}%</td>
   </tr>`).join('');
@@ -620,7 +620,7 @@ function buildMermaAcumulada() {
     const [,mNum] = ym.split('-');
     return `<tr>
       <td style="font-size:12px;padding:5px 10px">${MESES3[+mNum]}</td>
-      <td class="r" style="font-size:12px;padding:5px 10px">${byMesKg[ym].toFixed(1)} kg</td>
+      <td class="r" style="font-size:12px;padding:5px 10px">${byMesKg[ym].toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})} kg</td>
       <td class="r" style="font-size:12px;padding:5px 10px;color:#dc2626;font-weight:600">${fmtCLP(byMesCLP[ym])}</td>
       <td class="r" style="font-size:11px;padding:5px 10px;color:#64748b">${clpTot>0?(byMesCLP[ym]/clpTot*100).toFixed(0):0}%</td>
     </tr>`;
@@ -628,7 +628,7 @@ function buildMermaAcumulada() {
   return `
   <div class="section-title">Costo de merma acumulado <span style="font-weight:400;color:#94a3b8;font-size:11px">· ${fechaInicio} → ${fechaFin} · ${acc.length} sem.</span></div>
   <div class="kpi-grid" style="grid-template-columns:repeat(2,1fr);margin-bottom:8px">
-    <div class="kpi"><div class="label">Merma acumulada</div><div class="value" style="font-size:18px">${kgTot.toFixed(0)} kg</div><div class="sub">${(kgTot/acc.length*4.33).toFixed(1)} kg/mes promedio</div></div>
+    <div class="kpi"><div class="label">Merma acumulada</div><div class="value" style="font-size:18px">${kgTot.toFixed(0)} kg</div><div class="sub">${(kgTot/acc.length*4.33).toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})} kg/mes promedio</div></div>
     <div class="kpi"><div class="label">Costo merma acum.</div><div class="value" style="font-size:18px;color:#dc2626">${fmtCLP(clpTot)}</div><div class="sub">${fmtCLP(Math.round(clpTot/acc.length*4.33))}/mes promedio</div></div>
   </div>
   <div class="card" style="margin-bottom:12px">
@@ -673,8 +673,8 @@ function buildFlavorAcumuladoSection() {
           <div class="flavor-bar-wrap" style="max-width:80px"><div class="flavor-bar-fill" style="width:${pct}%"></div></div>
         </div>
       </td>
-      <td class="r" style="font-size:12px;white-space:nowrap">${kg.toFixed(1)} kg</td>
-      <td class="r" style="font-size:11px;color:#64748b;white-space:nowrap">${(kg/totalAcum*100).toFixed(1)}%</td>
+      <td class="r" style="font-size:12px;white-space:nowrap">${kg.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})} kg</td>
+      <td class="r" style="font-size:11px;color:#64748b;white-space:nowrap">${(kg/totalAcum*100).toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})}%</td>
     </tr>`;
   }).join('');
   return `
@@ -839,7 +839,7 @@ function buildSalesChart(salesArr) {
       scales: {
         x: { grid:{display:false}, ticks:{font:{size:9}, maxRotation:0, maxTicksLimit:10} },
         y: { beginAtZero:true, grid:{color:'#f1f5f9'}, ticks:{font:{size:10},
-          callback: v => v>=1000000 ? `$${(v/1e6).toFixed(1)}M` : v>=1000 ? `$${(v/1000).toFixed(0)}K` : `$${v}`
+          callback: v => v>=1000000 ? `$${(v/1e6).toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})}M` : v>=1000 ? `$${(v/1000).toFixed(0)}K` : `$${v}`
         }}
       }
     }
@@ -920,7 +920,7 @@ function buildSalesSection() {
 
   // ── Barra de participación mes actual ──
   const barras = mTotals.Total > 0 ? T_ORDEN.map(t => {
-    const pct = (mTotals[t] / mTotals.Total * 100).toFixed(1);
+    const pct = (mTotals[t] / mTotals.Total * 100).toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1});
     return `<div style="flex:${mTotals[t]||0.01};background:${T_COLOR[t]};height:6px;min-width:2px" title="${t}: ${pct}%"></div>`;
   }).join('') : '';
 
@@ -1281,7 +1281,7 @@ function buildFlavorByTiendaSection(data) {
             <div class="flavor-bar-wrap" style="max-width:60px"><div class="flavor-bar-fill" style="width:${pct}%;background:linear-gradient(90deg,${T_COLOR[t]},${T_COLOR[t]}88)"></div></div>
           </div>
         </td>
-        <td class="r" style="font-size:12px;padding:5px 10px">${kg.toFixed(1)} kg</td>
+        <td class="r" style="font-size:12px;padding:5px 10px">${kg.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})} kg</td>
       </tr>`;
     }).join('');
     return `<details open style="border-bottom:1px solid #f1f5f9">
@@ -1341,12 +1341,12 @@ function buildFlavorAlertsSection() {
   };
   const items = top.map(a => {
     const c = cfg[a.kind];
-    const pctTxt = a.kind === 'nuevo' ? `${a.last.toFixed(1)} kg` : `${a.deltaPct>=0?'+':''}${a.deltaPct.toFixed(0)}%`;
+    const pctTxt = a.kind === 'nuevo' ? `${a.last.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})} kg` : `${a.deltaPct>=0?'+':''}${a.deltaPct.toFixed(0)}%`;
     return `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;background:${c.bg};margin-bottom:6px">
       <span style="font-size:15px">${c.icon}</span>
       <div style="flex:1;min-width:0">
         <div style="font-size:12px;font-weight:700;color:#1e293b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${a.name}">${a.name}</div>
-        <div style="font-size:10px;color:#64748b">${a.t} · ${c.label} · ${a.prev.toFixed(1)}→${a.last.toFixed(1)} kg</div>
+        <div style="font-size:10px;color:#64748b">${a.t} · ${c.label} · ${a.prev.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})}→${a.last.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})} kg</div>
       </div>
       <div style="font-size:13px;font-weight:700;color:${c.color};white-space:nowrap">${pctTxt}</div>
     </div>`;
@@ -1403,8 +1403,8 @@ function buildFlavorEvolutionSection() {
         : `<span style="color:${delta>=0?'#16a34a':'#dc2626'};font-weight:700">${delta>=0?'▲':'▼'} ${Math.abs(delta).toFixed(0)}%</span>`;
       return `<tr>
         <td style="font-size:12px;padding:5px 10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:140px" title="${name}">${name}</td>
-        <td class="r" style="font-size:11px;padding:5px 10px;color:#94a3b8">${first.toFixed(1)} kg</td>
-        <td class="r" style="font-size:11px;padding:5px 10px">${last.toFixed(1)} kg</td>
+        <td class="r" style="font-size:11px;padding:5px 10px;color:#94a3b8">${first.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})} kg</td>
+        <td class="r" style="font-size:11px;padding:5px 10px">${last.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})} kg</td>
         <td class="r" style="font-size:11px;padding:5px 10px">${trendTxt}</td>
       </tr>`;
     }).join('');
@@ -1505,9 +1505,9 @@ function buildCostSection(data) {
       <td><div class="tienda-cell"><span class="dot" style="background:${T_COLOR[p.t]}"></span>${p.t}</div></td>
       <td class="r" style="font-weight:600">${fmtCLP(p.costoKg)}</td>
       <td class="r">${fmtCLP(p.costoTienda)}</td>
-      <td class="r">${p.mermaKg.toFixed(1)} kg<br><span style="font-size:10px;color:${mCol}">${p.r.merma_pct.toFixed(1)}%</span></td>
+      <td class="r">${p.mermaKg.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})} kg<br><span style="font-size:10px;color:${mCol}">${p.r.merma_pct.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})}%</span></td>
       <td class="r" style="color:${mCol};font-weight:600">${fmtCLP(p.mermaCLP)}</td>
-      <td class="r" style="font-size:11px;color:#64748b">${pctCosto.toFixed(1)}%</td>
+      <td class="r" style="font-size:11px;color:#64748b">${pctCosto.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})}%</td>
     </tr>`;
   }).join('');
 
@@ -1529,7 +1529,7 @@ function buildCostSection(data) {
     <div class="kpi">
       <div class="label">Costo merma${exacto ? '' : '*'}</div>
       <div class="value" style="font-size:17px;color:#dc2626">${fmtCLP(mermaTotalCLP)}</div>
-      <div class="sub">${mermaTotalKg.toFixed(1)} kg perdidos</div>
+      <div class="sub">${mermaTotalKg.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})} kg perdidos</div>
     </div>
   </div>
   <div class="section-title">Costos y merma por tienda${exacto ? '' : ' (estimado)'}</div>
@@ -1545,7 +1545,7 @@ function buildCostSection(data) {
         <td style="font-weight:700;font-size:12px">Total</td>
         <td class="r" style="font-weight:700;font-size:12px">${fmtCLP(avgCostoKg)}</td>
         <td class="r" style="font-weight:700;font-size:12px">${fmtCLP(costoTotalSemana)}</td>
-        <td class="r" style="font-weight:700;font-size:12px">${mermaTotalKg.toFixed(1)} kg</td>
+        <td class="r" style="font-weight:700;font-size:12px">${mermaTotalKg.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})} kg</td>
         <td class="r" style="font-weight:700;font-size:12px;color:#dc2626">${fmtCLP(mermaTotalCLP)}</td>
         <td class="r" style="font-weight:700;font-size:12px">100%</td>
       </tr></tfoot>
@@ -1616,7 +1616,7 @@ function render(data, prevData) {
     const total = dailyTotal[dk] || 0;
     const tiendaCols = T_ORDEN.map(t => {
       const kg = semStats[t].daily?.[dk] || 0;
-      return `<td class="r" style="font-size:12px">${kg > 0 ? kg.toFixed(1) : '<span style="color:#cbd5e1">—</span>'}</td>`;
+      return `<td class="r" style="font-size:12px">${kg > 0 ? kg.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1}) : '<span style="color:#cbd5e1">—</span>'}</td>`;
     }).join('');
     const label = isCurrentWeek && dk === todayStr ? 'Hoy'
                 : isCurrentWeek && dk === ayerStr  ? 'Ayer'
@@ -1624,7 +1624,7 @@ function render(data, prevData) {
     return `<tr style="${total>0?'':'opacity:0.4'}">
       <td style="font-size:12px;font-weight:${total>0?'600':'400'}">${label} <span style="color:#94a3b8;font-weight:400">${fmtDate(d)}</span></td>
       ${tiendaCols}
-      <td class="r" style="font-weight:700;font-size:12px">${total > 0 ? total.toFixed(1) : '—'}</td>
+      <td class="r" style="font-weight:700;font-size:12px">${total > 0 ? total.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1}) : '—'}</td>
     </tr>`;
   }).join('');
 
@@ -1635,7 +1635,7 @@ function render(data, prevData) {
   const ayerRows = T_ORDEN.map(t => {
     const d = ayerAcc[t];
     const estado = d.reported
-      ? `<span class="reporto">✓</span> ${d.kg.toFixed(1)} kg`
+      ? `<span class="reporto">✓</span> ${d.kg.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})} kg`
       : `<span class="sin-reporte">Sin reporte</span>`;
     return `<tr>
       <td><div class="tienda-cell"><span class="dot" style="background:${T_COLOR[t]}"></span>${t}</div></td>
@@ -1659,11 +1659,11 @@ function render(data, prevData) {
     const mColT = mermaColor(rAc.merma_pct || 0);
     return `<tr>
       <td><div class="tienda-cell"><span class="dot" style="background:${T_COLOR[t]}"></span>${t}</div></td>
-      <td class="r">${s.kg.toFixed(1)} kg ${dlt}</td>
+      <td class="r">${s.kg.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})} kg ${dlt}</td>
       <td class="r">${s.dias} día${s.dias!==1?'s':''}</td>
       <td class="r"><span class="badge blue">${pct}%</span></td>
       <td class="r" style="font-size:12px">${s.kg > 0 ? fmtCLP(costoEstT) : '—'}</td>
-      <td class="r" style="font-size:12px;color:${mColT}">${s.kg > 0 ? mermaEstT.toFixed(1)+' kg' : '—'}</td>
+      <td class="r" style="font-size:12px;color:${mColT}">${s.kg > 0 ? mermaEstT.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})+' kg' : '—'}</td>
     </tr>`;
   }).join('');
 
@@ -1686,10 +1686,10 @@ function render(data, prevData) {
           <div class="flavor-bar-wrap" style="max-width:80px"><div class="flavor-bar-fill" style="width:${pctVol}%"></div></div>
         </div>
       </td>
-      <td class="r" style="font-size:12px;white-space:nowrap">${stat.kg.toFixed(1)} kg</td>
-      <td class="r" style="font-size:11px;color:#64748b;white-space:nowrap">${pctVolTotal.toFixed(1)}%</td>
+      <td class="r" style="font-size:12px;white-space:nowrap">${stat.kg.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})} kg</td>
+      <td class="r" style="font-size:11px;color:#64748b;white-space:nowrap">${pctVolTotal.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})}%</td>
       <td class="r" style="font-size:11px;color:#475569;white-space:nowrap">${fmtCLP(costoSabor)}</td>
-      <td class="r" style="font-size:11px;color:#64748b;white-space:nowrap">${pctCosto.toFixed(1)}%</td>
+      <td class="r" style="font-size:11px;color:#64748b;white-space:nowrap">${pctCosto.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})}%</td>
     </tr>`;
   }).join('');
 
@@ -1702,8 +1702,8 @@ function render(data, prevData) {
       const color = delta >= 0 ? '#16a34a' : '#dc2626';
       return `<tr>
         <td><div class="tienda-cell"><span class="dot" style="background:${T_COLOR[t]}"></span>${t}</div></td>
-        <td class="r">${curr.toFixed(1)} kg</td>
-        <td class="r" style="color:#94a3b8">${prev.toFixed(1)} kg</td>
+        <td class="r">${curr.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})} kg</td>
+        <td class="r" style="color:#94a3b8">${prev.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})} kg</td>
         <td class="r" style="color:${color};font-weight:700">${delta>=0?'+':''}${delta.toFixed(0)} kg</td>
       </tr>`;
     }).join('');
@@ -1812,7 +1812,7 @@ function render(data, prevData) {
         <tbody>${flavorRows}</tbody>
         <tfoot style="background:#f8fafc"><tr>
           <td style="font-weight:700;font-size:11px;padding:6px 12px">Total ${flavorRanking.length} sabores</td>
-          <td class="r" style="font-weight:700;font-size:11px">${totalKg.toFixed(1)} kg</td>
+          <td class="r" style="font-weight:700;font-size:11px">${totalKg.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})} kg</td>
           <td class="r" style="font-weight:700;font-size:11px">100%</td>
           <td class="r" style="font-weight:700;font-size:11px">${fmtCLP(costoTotalRank)}</td>
           <td class="r" style="font-weight:700;font-size:11px">100%</td>

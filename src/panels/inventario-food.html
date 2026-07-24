@@ -94,8 +94,14 @@ tr:hover td { background: #f8fafc; }
     <div class="msg" id="form-msg"></div>
   </div>
 
-  <div class="section-title">Stock actual (último conteo por producto)</div>
-  <div class="card">
+  <div class="section-title" style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+    <span>Stock actual (último conteo por producto)</span>
+    <div id="vista-todas-toggle" style="display:none;gap:6px">
+      <button type="button" class="btn" id="btn-vista-lista" style="padding:4px 10px;font-size:11px" onclick="cambiarVistaTodas('lista')">Lista</button>
+      <button type="button" class="btn" id="btn-vista-comparar" style="padding:4px 10px;font-size:11px;background:#64748b" onclick="cambiarVistaTodas('comparar')">Comparar por tienda</button>
+    </div>
+  </div>
+  <div class="card" id="stock-lista-card">
     <table>
       <thead>
         <tr>
@@ -112,6 +118,20 @@ tr:hover td { background: #f8fafc; }
       </tbody>
     </table>
   </div>
+  <div class="card" id="stock-comparativo-card" style="display:none">
+    <table>
+      <thead>
+        <tr>
+          <th>Categoría</th>
+          <th>Producto</th>
+          <th class="r">Costanera</th>
+          <th class="r">Dominicos</th>
+          <th class="r">Trapenses</th>
+        </tr>
+      </thead>
+      <tbody id="stock-comparativo-body"></tbody>
+    </table>
+  </div>
   <div class="last" id="last-update"></div>
 </div>
 
@@ -120,6 +140,7 @@ const TIENDAS = ['Costanera', 'Dominicos', 'Trapenses'];
 const tiendaFija = window._LARRS_TIENDA || null;
 const esAdmin = window._LARRS_IS_ADMIN === true;
 let tiendaActiva = tiendaFija || 'Todas';
+let vistaTodas = 'lista'; // 'lista' | 'comparar' — solo aplica cuando tiendaActiva === 'Todas'
 let catalogo = [];
 
 function codigoTxt(categoria, producto) {
@@ -156,7 +177,55 @@ function initHeader() {
 
 function onTiendaChange() {
   tiendaActiva = document.getElementById('tienda-select').value;
+  vistaTodas = 'lista';
+  actualizarVisibilidadVistas();
   loadStock();
+}
+
+function cambiarVistaTodas(v) {
+  vistaTodas = v;
+  actualizarVisibilidadVistas();
+  renderStock(stockItems);
+  renderStockComparativo(stockItems);
+}
+
+function actualizarVisibilidadVistas() {
+  const enTodas = tiendaActiva === 'Todas';
+  document.getElementById('vista-todas-toggle').style.display = enTodas ? 'flex' : 'none';
+  const comparando = enTodas && vistaTodas === 'comparar';
+  document.getElementById('stock-lista-card').style.display = comparando ? 'none' : 'block';
+  document.getElementById('stock-comparativo-card').style.display = comparando ? 'block' : 'none';
+  document.getElementById('btn-vista-lista').style.background = comparando ? '#64748b' : '#2563eb';
+  document.getElementById('btn-vista-comparar').style.background = comparando ? '#2563eb' : '#64748b';
+}
+
+function renderStockComparativo(items) {
+  const tbody = document.getElementById('stock-comparativo-body');
+  if (!items.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="empty">Sin conteos todavía.</td></tr>';
+    return;
+  }
+  const porClave = {};
+  items.forEach(it => {
+    const clave = it.categoria + '||' + it.producto;
+    if (!porClave[clave]) porClave[clave] = { categoria: it.categoria, producto: it.producto, porTienda: {} };
+    porClave[clave].porTienda[it.tienda] = it;
+  });
+  const filas = Object.values(porClave).sort((a, b) => {
+    if (a.categoria !== b.categoria) return String(a.categoria).localeCompare(String(b.categoria));
+    return String(a.producto).localeCompare(String(b.producto));
+  });
+  tbody.innerHTML = filas.map(f => {
+    const celdas = TIENDAS.map(t => {
+      const it = f.porTienda[t];
+      return `<td class="r" style="font-size:12px">${it ? fmtNum(it.cantidad) + ' ' + esc(it.unidad) : '<span style="color:#cbd5e1">—</span>'}</td>`;
+    }).join('');
+    return `<tr>
+      <td><span class="cat-badge">${esc(labelCategoria(f.categoria))}</span></td>
+      <td style="font-size:12px">${esc(f.producto)} ${codigoTxt(f.categoria, f.producto)}</td>
+      ${celdas}
+    </tr>`;
+  }).join('');
 }
 
 async function loadCatalogo() {
@@ -280,6 +349,7 @@ async function loadStock() {
     stockItems = data.items || [];
     editingId = null;
     renderStock(stockItems);
+    renderStockComparativo(stockItems);
   } catch (e) {
     tbody.innerHTML = `<tr><td colspan="${esAdmin ? 6 : 5}" class="empty">Error: ${e.message}</td></tr>`;
   }
@@ -390,6 +460,7 @@ async function eliminarStock(id) {
 
 document.getElementById('f-fecha').value = new Date().toISOString().slice(0, 10);
 initHeader();
+actualizarVisibilidadVistas();
 loadCatalogo();
 loadStock();
 if (window._LARRS_IS_OPERADOR) {

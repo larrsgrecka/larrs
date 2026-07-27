@@ -22,21 +22,37 @@ export type Categoria = { value: string; label: string; productos: string[] };
 
 // Catálogo real de ventas (~12k filas): cambia poco, se cachea en memoria
 // para no repaginar la tabla completa en cada carga de los paneles que lo usan.
-let cache: { data: Categoria[]; codigos: Record<string, string>; ts: number } | null = null;
-let inFlight: Promise<{ categorias: Categoria[]; codigos: Record<string, string> }> | null = null;
+type CacheData = {
+  data: Categoria[];
+  codigos: Record<string, string>;
+  preciosPromedio: Record<string, number>;
+  ts: number;
+};
+let cache: CacheData | null = null;
+let inFlight: Promise<{
+  categorias: Categoria[];
+  codigos: Record<string, string>;
+  preciosPromedio: Record<string, number>;
+}> | null = null;
 const CACHE_TTL_MS = 30 * 60 * 1000;
 
-async function fetchCatalogo(): Promise<{ categorias: Categoria[]; codigos: Record<string, string> }> {
+async function fetchCatalogo(): Promise<{
+  categorias: Categoria[];
+  codigos: Record<string, string>;
+  preciosPromedio: Record<string, number>;
+}> {
   const supabase = await createClient();
   const porGrupo = new Map<string, Set<string>>();
   const codigos: Record<string, string> = {};
+  const sumaImporte: Record<string, number> = {};
+  const sumaCantidad: Record<string, number> = {};
 
   let offset = 0;
   const pageSize = 1000;
   while (true) {
     const { data, error } = await supabase
       .from("ventas_mensuales_articulo")
-      .select("grupo, nombre, codigo")
+      .select("grupo, nombre, codigo, cantidad, importe_neto")
       .order("grupo", { ascending: true })
       .range(offset, offset + pageSize - 1);
     if (error) throw new Error(error.message);
@@ -44,10 +60,17 @@ async function fetchCatalogo(): Promise<{ categorias: Categoria[]; codigos: Reco
 
     for (const row of data) {
       const grupo = (row.grupo as string | null)?.trim() || "OTROS";
+      const nombre = row.nombre as string;
       if (!porGrupo.has(grupo)) porGrupo.set(grupo, new Set());
-      porGrupo.get(grupo)!.add(row.nombre as string);
-      if (row.codigo && !codigos[row.nombre as string]) {
-        codigos[row.nombre as string] = row.codigo as string;
+      porGrupo.get(grupo)!.add(nombre);
+      if (row.codigo && !codigos[nombre]) {
+        codigos[nombre] = row.codigo as string;
+      }
+      const cantidad = Number(row.cantidad) || 0;
+      const importe = Number(row.importe_neto) || 0;
+      if (cantidad > 0 && importe > 0) {
+        sumaImporte[nombre] = (sumaImporte[nombre] || 0) + importe;
+        sumaCantidad[nombre] = (sumaCantidad[nombre] || 0) + cantidad;
       }
     }
 
@@ -69,7 +92,12 @@ async function fetchCatalogo(): Promise<{ categorias: Categoria[]; codigos: Reco
     productos: [...porGrupo.get(grupo)!].sort((a, b) => a.localeCompare(b)),
   }));
 
-  return { categorias, codigos };
+  const preciosPromedio: Record<string, number> = {};
+  for (const nombre of Object.keys(sumaCantidad)) {
+    preciosPromedio[nombre] = sumaImporte[nombre] / sumaCantidad[nombre];
+  }
+
+  return { categorias, codigos, preciosPromedio };
 }
 
 // Deduplica llamadas concurrentes (ej. getCatalogoProductos() y
@@ -80,8 +108,8 @@ async function getCache() {
   if (!inFlight) {
     inFlight = fetchCatalogo().finally(() => { inFlight = null; });
   }
-  const { categorias, codigos } = await inFlight;
-  cache = { data: categorias, codigos, ts: Date.now() };
+  const { categorias, codigos, preciosPromedio } = await inFlight;
+  cache = { data: categorias, codigos, preciosPromedio, ts: Date.now() };
   return cache;
 }
 
@@ -98,4 +126,13 @@ export async function getCatalogoProductos(opts?: { excluir?: string[] }): Promi
 export async function getCodigosProductos(): Promise<Record<string, string>> {
   const c = await getCache();
   return c.codigos;
+}
+
+// Precio de venta promedio por producto (importe_neto / cantidad, sumado
+// sobre todo el historial de ventas) — nombre -> precio unitario. Es precio
+// de VENTA, no costo — sirve para valorizar stock a precio de venta, no
+// para márgenes ni costos reales.
+export async function getPreciosPromedioPorProducto(): Promise<Record<string, number>> {
+  const c = await getCache();
+  return c.preciosPromedio;
 }

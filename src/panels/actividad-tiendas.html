@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Actividad por tienda · Larrs</title>
+<style>
+:root { color-scheme: light; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f2f7; color: #1e293b; padding: 14px; font-size: 14px; }
+.container { max-width: 900px; margin: 0 auto; }
+.header { background: linear-gradient(135deg, #111418, #1e293b); border-radius: 12px; padding: 18px 22px; margin-bottom: 12px; color: #fff; }
+.logo-img { height: 44px; width: auto; display: block; }
+.header .title { font-size: 15px; font-weight: 700; color: #e2e8f0; margin-top: 10px; }
+.header .subtitle { font-size: 12px; color: #94a3b8; margin-top: 2px; }
+.note { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 9px 13px; font-size: 12px; color: #1e40af; margin-bottom: 12px; line-height: 1.5; }
+.card { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; margin-bottom: 12px; }
+table { width: 100%; border-collapse: collapse; }
+th { padding: 8px 10px; text-align: left; font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .04em; background: #f8fafc; }
+th.r, td.r { text-align: center; }
+td { padding: 10px; border-top: 1px solid #f1f5f9; font-size: 13px; vertical-align: middle; }
+.tienda-cell { font-weight: 700; }
+.piloto { display: inline-block; font-size: 9px; font-weight: 800; background: #fef3c7; color: #92400e; padding: 1px 7px; border-radius: 8px; margin-left: 6px; vertical-align: middle; }
+.estado { display: inline-block; font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 8px; }
+.estado.ok { background: #f0fdf4; color: #15803d; }
+.estado.alerta { background: #fffbeb; color: #b45309; }
+.estado.mal { background: #fef2f2; color: #b91c1c; }
+.estado.nunca { background: #f1f5f9; color: #64748b; }
+.leyenda { font-size: 11px; color: #94a3b8; margin-top: 10px; display: flex; gap: 14px; flex-wrap: wrap; }
+.leyenda span { display: flex; align-items: center; gap: 4px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.empty { padding: 20px; text-align: center; color: #94a3b8; font-size: 13px; }
+.last { font-size: 11px; color: #b0bac8; text-align: center; margin-top: 6px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <img class="logo-img" src="https://heladerialarrs.cl/cdn/shop/t/2/assets/logo-footer.png?v=41616879924709803011609269083" alt="Larrs">
+    <div class="title">Actividad por tienda</div>
+    <div class="subtitle">Última fecha de registro en cada módulo — para ver quién está al día</div>
+  </div>
+
+  <div class="note">Costanera es la primera tienda usando todos los módulos — por eso va primero en la tabla. Verde = registrado hoy o ayer, amarillo = 2 a 6 días, rojo = 7 días o más, gris = todavía sin ningún registro.</div>
+
+  <div class="card">
+    <table>
+      <thead>
+        <tr>
+          <th>Tienda</th>
+          <th class="r">Mermas</th>
+          <th class="r">Inventario Food</th>
+          <th class="r">Pesaje producción</th>
+          <th class="r">Recepción</th>
+        </tr>
+      </thead>
+      <tbody id="tbody">
+        <tr><td colspan="5" class="empty">Cargando...</td></tr>
+      </tbody>
+    </table>
+    <div class="leyenda">
+      <span><span class="dot" style="background:#16a34a"></span> Al día (0-1 día)</span>
+      <span><span class="dot" style="background:#d97706"></span> Atrasando (2-6 días)</span>
+      <span><span class="dot" style="background:#dc2626"></span> Sin actividad reciente (7+ días)</span>
+      <span><span class="dot" style="background:#94a3b8"></span> Nunca registrado</span>
+    </div>
+  </div>
+  <div class="last" id="last-update"></div>
+</div>
+
+<script>
+const ORDEN_TIENDAS = ['Costanera', 'Dominicos', 'Trapenses'];
+const MODULOS = [
+  { key: 'mermas', label: 'Mermas' },
+  { key: 'inventario', label: 'Inventario Food' },
+  { key: 'pesaje', label: 'Pesaje producción' },
+  { key: 'recepcion', label: 'Recepción' },
+];
+
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
+}
+
+function diasDesde(fechaStr) {
+  if (!fechaStr) return null;
+  const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+  const [y, m, d] = fechaStr.split('-').map(Number);
+  const fecha = new Date(y, m - 1, d);
+  return Math.round((hoy - fecha) / 86400000);
+}
+
+function celdaEstado(fechaStr) {
+  const dias = diasDesde(fechaStr);
+  if (dias === null) return `<span class="estado nunca">Sin registros</span>`;
+  let clase = 'ok';
+  if (dias >= 7) clase = 'mal';
+  else if (dias >= 2) clase = 'alerta';
+  const txt = dias === 0 ? 'Hoy' : dias === 1 ? 'Ayer' : `Hace ${dias} días`;
+  return `<span class="estado ${clase}">${txt}</span>`;
+}
+
+async function cargar() {
+  const tbody = document.getElementById('tbody');
+  try {
+    const resp = await fetch('/api/actividad-tiendas');
+    const data = await resp.json();
+    if (!data.ok) throw new Error(data.error || 'Error al cargar');
+    const actividad = data.actividad || {};
+
+    tbody.innerHTML = ORDEN_TIENDAS.map((t, idx) => {
+      const a = actividad[t] || {};
+      const celdas = MODULOS.map(m => `<td class="r">${celdaEstado(a[m.key])}</td>`).join('');
+      const piloto = idx === 0 ? '<span class="piloto">Piloto</span>' : '';
+      return `<tr>
+        <td class="tienda-cell">${esc(t)}${piloto}</td>
+        ${celdas}
+      </tr>`;
+    }).join('');
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="5" class="empty">Error: ${e.message}</td></tr>`;
+  }
+  document.getElementById('last-update').textContent = `Actualizado: ${new Date().toLocaleString('es-CL')}`;
+}
+
+cargar();
+</script>
+</body>
+</html>

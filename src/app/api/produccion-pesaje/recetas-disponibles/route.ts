@@ -40,6 +40,8 @@ async function getRecibidoPorSabor(tienda: string): Promise<Record<string, numbe
   return recibido;
 }
 
+const TIENDAS = ["Costanera", "Dominicos", "Trapenses"];
+
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -57,6 +59,37 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    if (tienda === "Todas") {
+      if (profile?.role !== "admin") {
+        return NextResponse.json({ error: "Solo un admin puede ver todas las tiendas" }, { status: 403 });
+      }
+
+      const [recetario, recibidoPorTienda] = await Promise.all([
+        getRecetarioCostos().catch(() => ({ recetas: [], sincronizadoEn: "" })),
+        Promise.all(TIENDAS.map((t) => getRecibidoPorSabor(t))),
+      ]);
+      const consumidoPorTienda = await getRecetasConsumidasPorTiendaYSabor(recetario.recetas);
+
+      const sabores = new Set<string>();
+      TIENDAS.forEach((_, i) => Object.keys(recibidoPorTienda[i]).forEach((s) => sabores.add(s)));
+      TIENDAS.forEach((t) => Object.keys(consumidoPorTienda[t] || {}).forEach((s) => sabores.add(s)));
+      const costosPorSabor = matchCostos([...sabores], recetario.recetas);
+
+      const items = [...sabores].map((sabor) => {
+        const porTienda: Record<string, { recibido: number; consumido: number; saldo: number }> = {};
+        let saldoTotal = 0;
+        TIENDAS.forEach((t, i) => {
+          const rec = recibidoPorTienda[i][sabor] || 0;
+          const con = (consumidoPorTienda[t] || {})[sabor] || 0;
+          porTienda[t] = { recibido: rec, consumido: con, saldo: rec - con };
+          saldoTotal += rec - con;
+        });
+        return { sabor, codigo: costosPorSabor[sabor]?.codigo || "", porTienda, saldoTotal };
+      }).sort((a, b) => a.saldoTotal - b.saldoTotal);
+
+      return NextResponse.json({ ok: true, tiendas: TIENDAS, items });
+    }
+
     const [recetario, recibido] = await Promise.all([
       getRecetarioCostos().catch(() => ({ recetas: [], sincronizadoEn: "" })),
       getRecibidoPorSabor(tienda),

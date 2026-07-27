@@ -66,6 +66,24 @@ tr:hover td { background: #f8fafc; }
     <div style="font-size:11px;color:#94a3b8;margin-top:8px" id="valorizado-nota"></div>
   </div>
 
+  <div class="form-card" id="recetas-stock-card" style="display:none">
+    <div class="section-title">Stock de recetas de helado <span style="font-weight:400;color:#94a3b8">(recibidas del Centro de Producción − consumidas al pesar)</span></div>
+    <div class="kpis" id="recetas-stock-kpis" style="margin-bottom:10px"></div>
+    <div style="max-height:340px;overflow-y:auto">
+      <table>
+        <thead>
+          <tr>
+            <th>Sabor</th>
+            <th class="r">Costanera</th>
+            <th class="r">Dominicos</th>
+            <th class="r">Trapenses</th>
+          </tr>
+        </thead>
+        <tbody id="recetas-stock-body"></tbody>
+      </table>
+    </div>
+  </div>
+
   <div class="form-card">
     <div class="section-title">Nuevo conteo</div>
     <div class="form-grid" style="margin-bottom:12px; grid-template-columns: repeat(2, 1fr)">
@@ -194,6 +212,39 @@ async function loadValorizado() {
       tiles + `<div class="kpi" style="background:#eff6ff;border-color:#bfdbfe"><div class="v">${fmtCLP(total)}</div><div class="l">Total</div></div>`;
     document.getElementById('valorizado-nota').textContent =
       `Valorizado a precio de venta promedio (no es costo). ${sinPrecioTotal} conteo(s) sin precio histórico de venta no se incluyen.`;
+    card.style.display = 'block';
+  } catch (e) {
+    card.style.display = 'none';
+  }
+}
+
+async function loadRecetasStock() {
+  if (!esAdmin) return;
+  const card = document.getElementById('recetas-stock-card');
+  try {
+    const resp = await fetch('/api/produccion-pesaje/recetas-disponibles?tienda=Todas');
+    const data = await resp.json();
+    if (!data.ok) throw new Error(data.error || 'Error al cargar recetas disponibles');
+    const items = data.items || [];
+    if (!items.length) { card.style.display = 'none'; return; }
+
+    const totales = { Costanera: 0, Dominicos: 0, Trapenses: 0 };
+    items.forEach(it => TIENDAS.forEach(t => { totales[t] += it.porTienda[t].saldo; }));
+    document.getElementById('recetas-stock-kpis').innerHTML = TIENDAS.map(t =>
+      `<div class="kpi"><div class="v" style="color:${totales[t] < 0 ? '#dc2626' : '#16a34a'}">${totales[t]}</div><div class="l">${esc(t)}</div></div>`
+    ).join('');
+
+    document.getElementById('recetas-stock-body').innerHTML = items.map(it => {
+      const celdas = TIENDAS.map(t => {
+        const s = it.porTienda[t].saldo;
+        const color = s < 0 ? '#dc2626' : (s > 0 ? '#16a34a' : '#64748b');
+        return `<td class="r" style="font-size:12px;font-weight:700;color:${color}">${s}</td>`;
+      }).join('');
+      return `<tr>
+        <td style="font-size:12px">${esc(it.sabor)} ${it.codigo ? `<span style="color:#94a3b8;font-size:10px">[${esc(it.codigo)}]</span>` : ''}</td>
+        ${celdas}
+      </tr>`;
+    }).join('');
     card.style.display = 'block';
   } catch (e) {
     card.style.display = 'none';
@@ -503,6 +554,7 @@ actualizarVisibilidadVistas();
 loadCatalogo();
 loadStock();
 loadValorizado();
+loadRecetasStock();
 if (window._LARRS_IS_OPERADOR) {
   document.getElementById('campo-nombre-operador').style.display = '';
 }

@@ -1,18 +1,27 @@
 // Recorre el CSV histórico de Producción (mismo Apps Script que usa
-// /produccion) y calcula cuántas "recetas" de cada sabor se consumieron en
-// cada tienda, convirtiendo kg pesados -> recetas usando el rendimiento por
-// receta del Recetario (kilosReceta). El redondeo se hace por fila (cada
-// evento de pesaje), no sobre el total agregado, para que una corrección en
-// kg negativo también reste recetas consumidas correctamente.
+// /produccion) y calcula, por fila, cuántas "recetas" de cada sabor se
+// consumieron en cada tienda, convirtiendo kg pesados -> recetas usando el
+// rendimiento por receta del Recetario (kilosReceta). El redondeo se hace
+// por fila (cada evento de pesaje), no sobre el total agregado, para que una
+// corrección en kg negativo también reste recetas consumidas correctamente.
+//
+// El consumo histórico (de antes de que existiera "recetas recibidas" en
+// Recepción) NO debe restar del saldo — por eso esto solo cachea las filas
+// crudas (tienda, sabor, fecha, recetas de esa fila); el filtro por fecha de
+// corte (primera recepción registrada, por tienda+sabor) se aplica después,
+// en cada request, para no tener que rehacer el parseo pesado del CSV cada
+// vez que cambia el corte.
 //
 // Reimplementa en TS la misma lógica de parseo que ya usa
 // src/panels/produccion.html (parseCSV/processCSV) — mismas columnas y
-// mismos criterios de fila válida — pero sin acotar a una semana.
+// mismos criterios de fila válida.
 
 import { matchCostos, type RecetaCosto } from "./recetario-costos";
 
-const TIENDAS = new Set(["Costanera", "Dominicos", "Trapenses"]);
+const TIENDAS = ["Costanera", "Dominicos", "Trapenses"] as const;
 const CACHE_TTL_MS = 20 * 60 * 1000;
+
+type FilaConsumo = { tienda: string; sabor: string; fecha: string; recetas: number };
 
 function parseCSV(raw: string): string[][] {
   const text = raw.replace(/\r/g, "");
@@ -50,11 +59,20 @@ function toKg(v: number): number {
   return v >= 100 ? v / 1000 : v;
 }
 
-type RecetasConsumidas = Record<string, Record<string, number>>; // tienda -> sabor -> recetas
+// Convierte "dd/mm/yyyy ..." a "yyyy-mm-dd" para poder comparar como texto.
+function parseFechaDMY(s: string): string | null {
+  if (!s) return null;
+  const part = s.trim().split(" ")[0];
+  const [d, m, y] = part.split("/");
+  if (!d || !m || !y) return null;
+  const yr = Number(y);
+  if (!yr || yr < 2000 || yr > 2100) return null;
+  return `${yr}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+}
 
-let cache: { data: RecetasConsumidas; ts: number } | null = null;
+let cache: { filas: FilaConsumo[]; ts: number } | null = null;
 
-async function calcular(recetas: RecetaCosto[]): Promise<RecetasConsumidas> {
+async function calcularFilas(recetas: RecetaCosto[]): Promise<FilaConsumo[]> {
   const url = process.env.PRODUCCION_APPS_SCRIPT_URL;
   const token = process.env.PRODUCCION_APPS_SCRIPT_TOKEN;
   if (!url || !token) throw new Error("Apps Script de producción no configurado");
@@ -62,7 +80,7 @@ async function calcular(recetas: RecetaCosto[]): Promise<RecetasConsumidas> {
   const resp = await fetch(`${url}?token=${encodeURIComponent(token)}`);
   const text = await resp.text();
   const rows = parseCSV(text);
-  if (rows.length < 2) return {};
+  if (rows.length < 2) return [];
   const headers = rows[0];
 
   const flavorCols: { idx: number; name: string }[] = [];
@@ -77,43 +95,61 @@ async function calcular(recetas: RecetaCosto[]): Promise<RecetasConsumidas> {
     }
   }
 
-  // kilosReceta por nombre de columna (mismo matching/alias que ya usa el
-  // resto de la app para código y costo/kg — así un sabor que no matchea
-  // ahí tampoco intenta convertirse acá).
   const costos = matchCostos(flavorCols.map((fc) => fc.name), recetas);
-
-  const out: RecetasConsumidas = {};
-  for (const t of TIENDAS) out[t] = {};
+  const filas: FilaConsumo[] = [];
 
   for (let r = 1; r < rows.length; r++) {
     const row = rows[r];
     if (row.length < 6) continue;
     const tienda = (row[2] || "").trim();
-    if (!TIENDAS.has(tienda)) continue;
+    if (!(TIENDAS as readonly string[]).includes(tienda)) continue;
     const tipo = (row[5] || "").toLowerCase();
     if (!tipo.includes("fabricaci")) continue;
+    const fecha = parseFechaDMY(row[3] || "");
+    if (!fecha) continue;
 
     for (const fc of flavorCols) {
       if (fc.idx >= row.length) continue;
       const val = parseFloat((row[fc.idx] || "").replace(",", "."));
       if (!val || val === 0) continue;
       const kilos = costos[fc.name]?.kilosReceta;
-      if (!kilos) continue; // sin receta conocida en el Recetario, no se puede convertir
+      if (!kilos) continue;
       const kg = toKg(val);
       const recetasConsumidas = Math.round(kg / kilos);
       if (recetasConsumidas === 0) continue;
-      out[tienda][fc.name] = (out[tienda][fc.name] || 0) + recetasConsumidas;
+      filas.push({ tienda, sabor: fc.name, fecha, recetas: recetasConsumidas });
     }
   }
 
-  return out;
+  return filas;
 }
 
+async function getFilas(recetas: RecetaCosto[]): Promise<FilaConsumo[]> {
+  if (cache && Date.now() - cache.ts < CACHE_TTL_MS) return cache.filas;
+  const filas = await calcularFilas(recetas);
+  cache = { filas, ts: Date.now() };
+  return filas;
+}
+
+// cortePorTiendaYSabor: tienda -> sabor -> fecha (yyyy-mm-dd) de la PRIMERA
+// recepción registrada para ese sabor en esa tienda. Solo se cuenta consumo
+// de esa fecha en adelante — el consumo de antes (previo a que existiera
+// "recetas recibidas") no debe restar del saldo. Si no hay corte para un
+// sabor+tienda (nunca se ha recibido nada), el consumo de ese sabor en esa
+// tienda no se cuenta (queda en 0, no en negativo).
 export async function getRecetasConsumidasPorTiendaYSabor(
-  recetas: RecetaCosto[]
-): Promise<RecetasConsumidas> {
-  if (cache && Date.now() - cache.ts < CACHE_TTL_MS) return cache.data;
-  const data = await calcular(recetas);
-  cache = { data, ts: Date.now() };
-  return data;
+  recetas: RecetaCosto[],
+  cortePorTiendaYSabor: Record<string, Record<string, string>>
+): Promise<Record<string, Record<string, number>>> {
+  const filas = await getFilas(recetas);
+  const out: Record<string, Record<string, number>> = {};
+  for (const t of TIENDAS) out[t] = {};
+
+  for (const fila of filas) {
+    const corte = cortePorTiendaYSabor[fila.tienda]?.[fila.sabor];
+    if (!corte || fila.fecha < corte) continue;
+    out[fila.tienda][fila.sabor] = (out[fila.tienda][fila.sabor] || 0) + fila.recetas;
+  }
+
+  return out;
 }

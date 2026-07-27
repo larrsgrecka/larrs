@@ -40,3 +40,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 *.xlsx
+
+# exports sueltos de análisis de ventas (datos de clientes, no van al repo)
+/*.txt

@@ -38,6 +38,11 @@ function nombreSabor(header: string): string {
 
 let cache: { sabores: string[]; ts: number } | null = null;
 const CACHE_TTL_MS = 30 * 60 * 1000;
+// Normalmente hay ~166 sabores — si el fetch trae bastante menos, no fue el
+// CSV real (Apps Script caído, página de error, redirect, etc.), fue una
+// falla disfrazada de éxito. No hay que cachear eso ni devolverlo como si
+// fuera la lista completa (rompería Vitrina/Pesaje/Inventario Food a la vez).
+const MIN_SABORES_ESPERADOS = 50;
 
 async function getSaboresBase(): Promise<string[]> {
   if (cache && Date.now() - cache.ts < CACHE_TTL_MS) return cache.sabores;
@@ -54,6 +59,15 @@ async function getSaboresBase(): Promise<string[]> {
     .filter((h) => h.includes("#;"))
     .map(nombreSabor)
     .sort((a, b) => a.localeCompare(b));
+
+  if (sabores.length < MIN_SABORES_ESPERADOS) {
+    console.error(
+      `[sabores-produccion] Fetch sospechoso: solo ${sabores.length} sabores (esperados ${MIN_SABORES_ESPERADOS}+). ` +
+      `HTTP ${resp.status}, primeros 200 chars: ${text.slice(0, 200)}`
+    );
+    if (cache) return cache.sabores; // sirve el cache viejo (aunque esté vencido) antes que una lista vacía
+    throw new Error("El CSV de producción no devolvió sabores válidos (falla temporal del Apps Script)");
+  }
 
   cache = { sabores, ts: Date.now() };
   return sabores;

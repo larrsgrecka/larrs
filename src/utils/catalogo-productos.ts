@@ -22,10 +22,14 @@ export type Categoria = { value: string; label: string; productos: string[] };
 
 // Catálogo real de ventas (~12k filas): cambia poco, se cachea en memoria
 // para no repaginar la tabla completa en cada carga de los paneles que lo usan.
+// tienda -> nombre -> "yyyy-mm" -> cantidad vendida ese mes.
+export type VentasMensuales = Record<string, Record<string, Record<string, number>>>;
+
 type CacheData = {
   data: Categoria[];
   codigos: Record<string, string>;
   preciosPromedio: Record<string, number>;
+  ventasPorTiendaProductoMes: VentasMensuales;
   ts: number;
 };
 let cache: CacheData | null = null;
@@ -33,6 +37,7 @@ let inFlight: Promise<{
   categorias: Categoria[];
   codigos: Record<string, string>;
   preciosPromedio: Record<string, number>;
+  ventasPorTiendaProductoMes: VentasMensuales;
 }> | null = null;
 const CACHE_TTL_MS = 30 * 60 * 1000;
 
@@ -40,19 +45,21 @@ async function fetchCatalogo(): Promise<{
   categorias: Categoria[];
   codigos: Record<string, string>;
   preciosPromedio: Record<string, number>;
+  ventasPorTiendaProductoMes: VentasMensuales;
 }> {
   const supabase = await createClient();
   const porGrupo = new Map<string, Set<string>>();
   const codigos: Record<string, string> = {};
   const sumaImporte: Record<string, number> = {};
   const sumaCantidad: Record<string, number> = {};
+  const ventasPorTiendaProductoMes: VentasMensuales = {};
 
   let offset = 0;
   const pageSize = 1000;
   while (true) {
     const { data, error } = await supabase
       .from("ventas_mensuales_articulo")
-      .select("grupo, nombre, codigo, cantidad, importe_neto")
+      .select("grupo, nombre, codigo, cantidad, importe_neto, tienda, anio, mes")
       .order("grupo", { ascending: true })
       .range(offset, offset + pageSize - 1);
     if (error) throw new Error(error.message);
@@ -71,6 +78,17 @@ async function fetchCatalogo(): Promise<{
       if (cantidad > 0 && importe > 0) {
         sumaImporte[nombre] = (sumaImporte[nombre] || 0) + importe;
         sumaCantidad[nombre] = (sumaCantidad[nombre] || 0) + cantidad;
+      }
+
+      const tienda = (row.tienda as string | null)?.trim();
+      const anio = Number(row.anio);
+      const mes = Number(row.mes);
+      if (tienda && anio && mes && cantidad > 0) {
+        const clavePeriodo = `${anio}-${String(mes).padStart(2, "0")}`;
+        if (!ventasPorTiendaProductoMes[tienda]) ventasPorTiendaProductoMes[tienda] = {};
+        if (!ventasPorTiendaProductoMes[tienda][nombre]) ventasPorTiendaProductoMes[tienda][nombre] = {};
+        ventasPorTiendaProductoMes[tienda][nombre][clavePeriodo] =
+          (ventasPorTiendaProductoMes[tienda][nombre][clavePeriodo] || 0) + cantidad;
       }
     }
 
@@ -97,7 +115,7 @@ async function fetchCatalogo(): Promise<{
     preciosPromedio[nombre] = sumaImporte[nombre] / sumaCantidad[nombre];
   }
 
-  return { categorias, codigos, preciosPromedio };
+  return { categorias, codigos, preciosPromedio, ventasPorTiendaProductoMes };
 }
 
 // Deduplica llamadas concurrentes (ej. getCatalogoProductos() y
@@ -108,8 +126,8 @@ async function getCache() {
   if (!inFlight) {
     inFlight = fetchCatalogo().finally(() => { inFlight = null; });
   }
-  const { categorias, codigos, preciosPromedio } = await inFlight;
-  cache = { data: categorias, codigos, preciosPromedio, ts: Date.now() };
+  const { categorias, codigos, preciosPromedio, ventasPorTiendaProductoMes } = await inFlight;
+  cache = { data: categorias, codigos, preciosPromedio, ventasPorTiendaProductoMes, ts: Date.now() };
   return cache;
 }
 
@@ -135,4 +153,11 @@ export async function getCodigosProductos(): Promise<Record<string, string>> {
 export async function getPreciosPromedioPorProducto(): Promise<Record<string, number>> {
   const c = await getCache();
   return c.preciosPromedio;
+}
+
+// Cantidad vendida por mes ("yyyy-mm" -> cantidad), por tienda y producto —
+// base para calcular un stock mínimo sugerido a partir de la venta histórica.
+export async function getVentasPorTiendaProductoMes(): Promise<VentasMensuales> {
+  const c = await getCache();
+  return c.ventasPorTiendaProductoMes;
 }

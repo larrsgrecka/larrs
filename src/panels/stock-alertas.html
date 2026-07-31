@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stock y alertas · Larrs</title>
+<style>
+:root { color-scheme: light; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f2f7; color: #1e293b; padding: 14px; font-size: 14px; }
+.container { max-width: 1000px; margin: 0 auto; }
+.header { background: linear-gradient(135deg, #111418, #1e293b); border-radius: 12px; padding: 18px 22px; margin-bottom: 12px; color: #fff; }
+.logo-img { height: 44px; width: auto; display: block; }
+.header .title { font-size: 15px; font-weight: 700; color: #e2e8f0; margin-top: 10px; }
+.header .subtitle { font-size: 12px; color: #94a3b8; margin-top: 2px; }
+.note { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 9px 13px; font-size: 12px; color: #1e40af; margin-bottom: 12px; line-height: 1.5; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 12px; }
+.kpi { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 14px; }
+.kpi .n { font-size: 22px; font-weight: 800; }
+.kpi .n.alerta { color: #dc2626; }
+.kpi .lbl { font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: .04em; margin-top: 2px; }
+.toolbar { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.toolbar label { font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .06em; }
+.toolbar select { font-size: 13px; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 9px; color: #1e293b; background: #f8fafc; }
+.check-lbl { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #334155; font-weight: 500; text-transform: none; letter-spacing: 0; }
+.card { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; margin-bottom: 12px; }
+table { width: 100%; border-collapse: collapse; }
+th { padding: 8px 10px; text-align: left; font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .04em; background: #f8fafc; position: sticky; top: 0; }
+th.r, td.r { text-align: right; }
+td { padding: 8px 10px; border-top: 1px solid #f1f5f9; font-size: 13px; vertical-align: middle; }
+tr:hover td { background: #f8fafc; }
+.empty { padding: 30px; text-align: center; color: #94a3b8; font-size: 13px; }
+.estado { display: inline-block; font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 8px; white-space: nowrap; }
+.estado.bajo_minimo { background: #fef2f2; color: #b91c1c; }
+.estado.ok { background: #f0fdf4; color: #15803d; }
+.estado.sin_conteo { background: #f1f5f9; color: #64748b; }
+.estado.sin_datos_venta { background: #f1f5f9; color: #64748b; }
+.scroll-body { max-height: 600px; overflow-y: auto; }
+.last { font-size: 11px; color: #b0bac8; text-align: center; margin-top: 6px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <img class="logo-img" src="https://heladerialarrs.cl/cdn/shop/t/2/assets/logo-footer.png?v=41616879924709803011609269083" alt="Larrs">
+    <div class="title">Stock y alertas</div>
+    <div class="subtitle">Stock actual vs. mínimo sugerido por venta histórica</div>
+  </div>
+
+  <div class="note">
+    El "mínimo sugerido" se calcula solo: promedio de venta semanal de los últimos 6 meses completos × 2 semanas de respaldo — no es un umbral que alguien cargue a mano, se recalcula con más meses de datos. Solo aplica a productos que se venden por POS (café, bebidas, etc.) — envases/insumos no tienen venta registrada, aparecen sin ese cálculo. El stock actual es el último conteo manual de Inventario Food (no un saldo en tiempo real) — un producto que nunca ha sido contado en Inventario Food se marca "Sin conteo" en vez de asumir que hay 0 en stock, así no se alerta sobre algo que simplemente nunca se ha registrado.
+  </div>
+
+  <div class="kpis" id="kpis"></div>
+
+  <div class="toolbar">
+    <label>Tienda</label>
+    <select id="f-tienda" onchange="render()">
+      <option value="Todas">Todas</option>
+      <option value="Costanera">Costanera</option>
+      <option value="Dominicos">Dominicos</option>
+      <option value="Trapenses">Trapenses</option>
+    </select>
+    <label class="check-lbl"><input type="checkbox" id="f-solo-alertas" onchange="render()" checked> Solo mostrar bajo el mínimo</label>
+  </div>
+
+  <div class="card">
+    <div class="scroll-body">
+      <table>
+        <thead>
+          <tr>
+            <th>Tienda</th><th>Categoría</th><th>Producto</th>
+            <th class="r">Stock actual</th><th class="r">Venta sem. prom.</th><th class="r">Mínimo sugerido</th>
+            <th>Estado</th><th>Último conteo</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"><tr><td colspan="8" class="empty">Cargando...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+  <div class="last" id="last-update"></div>
+</div>
+
+<script>
+let items = [];
+
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
+}
+
+function num(v, dec) {
+  return Number(v || 0).toLocaleString('es-CL', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+}
+
+function etiquetaEstado(estado) {
+  if (estado === 'bajo_minimo') return 'Bajo mínimo';
+  if (estado === 'ok') return 'OK';
+  if (estado === 'sin_conteo') return 'Sin conteo';
+  return 'Sin datos de venta';
+}
+
+function renderKpis() {
+  const tiendas = ['Costanera', 'Dominicos', 'Trapenses'];
+  const kpis = document.getElementById('kpis');
+  kpis.innerHTML = tiendas.map(t => {
+    const n = items.filter(it => it.tienda === t && it.estado === 'bajo_minimo').length;
+    return `<div class="kpi"><div class="n ${n > 0 ? 'alerta' : ''}">${n}</div><div class="lbl">${esc(t)} bajo mínimo</div></div>`;
+  }).join('');
+}
+
+function render() {
+  const tbody = document.getElementById('tbody');
+  const tienda = document.getElementById('f-tienda').value;
+  const soloAlertas = document.getElementById('f-solo-alertas').checked;
+
+  let filtrados = items;
+  if (tienda !== 'Todas') filtrados = filtrados.filter(it => it.tienda === tienda);
+  if (soloAlertas) filtrados = filtrados.filter(it => it.estado === 'bajo_minimo');
+
+  if (!filtrados.length) {
+    tbody.innerHTML = `<tr><td colspan="8" class="empty">${soloAlertas ? 'Ningún producto está bajo el mínimo sugerido ahora mismo.' : 'Sin datos.'}</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtrados.map(it => `
+    <tr>
+      <td>${esc(it.tienda)}</td>
+      <td style="font-size:12px;color:#64748b">${esc(it.categoria)}</td>
+      <td>${esc(it.producto)}</td>
+      <td class="r">${num(it.stockActual, 0)}</td>
+      <td class="r">${it.mesesConDatos ? num(it.ventaSemanalPromedio, 1) : '—'}</td>
+      <td class="r">${it.mesesConDatos ? num(it.stockMinimoSugerido, 1) : '—'}</td>
+      <td><span class="estado ${esc(it.estado)}">${etiquetaEstado(it.estado)}</span></td>
+      <td style="font-size:12px;color:#94a3b8">${esc(it.fechaUltimoConteo) || 'Nunca'}</td>
+    </tr>
+  `).join('');
+}
+
+async function cargar() {
+  try {
+    const resp = await fetch('/api/stock-alertas');
+    const data = await resp.json();
+    if (!data.ok) throw new Error(data.error || 'Error al cargar');
+    items = data.items || [];
+    renderKpis();
+    render();
+  } catch (e) {
+    document.getElementById('tbody').innerHTML = `<tr><td colspan="8" class="empty">Error: ${esc(e.message)}</td></tr>`;
+  }
+  document.getElementById('last-update').textContent = `Actualizado: ${new Date().toLocaleString('es-CL')}`;
+}
+
+cargar();
+</script>
+</body>
+</html>

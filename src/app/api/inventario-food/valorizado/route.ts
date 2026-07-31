@@ -2,28 +2,13 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { getProfile } from "@/utils/auth";
 import { getPreciosPromedioPorProducto } from "@/utils/catalogo-productos";
+import { getStockActualPorClave } from "@/utils/inventario-food-stock";
 
 // Pagina ~12k filas de ventas en Supabase (vía getPreciosPromedioPorProducto)
 // — puede tardar varios segundos, damos margen extra.
 export const maxDuration = 30;
 
 const TIENDAS = ["Costanera", "Dominicos", "Trapenses"];
-
-function appsScriptConfig() {
-  const url = process.env.INVENTARIO_FOOD_APPS_SCRIPT_URL;
-  const token = process.env.INVENTARIO_FOOD_APPS_SCRIPT_TOKEN;
-  if (!url || !token) return null;
-  return { url, token };
-}
-
-type StockRow = {
-  tienda: string;
-  categoria: string;
-  producto: string;
-  cantidad: number;
-  fecha?: string;
-  creado_en?: string;
-};
 
 export async function GET() {
   const supabase = await createClient();
@@ -35,33 +20,11 @@ export async function GET() {
     return NextResponse.json({ error: "Solo un admin puede ver este cuadro" }, { status: 403 });
   }
 
-  const config = appsScriptConfig();
-  if (!config) {
-    return NextResponse.json({ error: "Apps Script de inventario food no configurado" }, { status: 500 });
-  }
-
   try {
-    const [stockResp, precios] = await Promise.all([
-      fetch(`${config.url}?token=${encodeURIComponent(config.token)}&action=list`),
+    const [porClave, precios] = await Promise.all([
+      getStockActualPorClave(),
       getPreciosPromedioPorProducto(),
     ]);
-    const stockData = await stockResp.json();
-    if (!stockData.ok) {
-      return NextResponse.json({ error: stockData.error || "Error en Apps Script" }, { status: 502 });
-    }
-
-    // Más reciente por tienda+categoria+producto (mismo criterio que /api/inventario-food).
-    const porClave: Record<string, StockRow> = {};
-    const rows = (stockData.items ?? []) as StockRow[];
-    rows.sort((a, b) => {
-      const da = new Date(a.creado_en || a.fecha || 0).getTime();
-      const db = new Date(b.creado_en || b.fecha || 0).getTime();
-      return db - da;
-    });
-    for (const r of rows) {
-      const clave = `${r.tienda}||${r.categoria}||${r.producto}`;
-      if (!(clave in porClave)) porClave[clave] = r;
-    }
 
     const resultado: Record<string, { valor: number; conPrecio: number; sinPrecio: number }> = {};
     for (const t of TIENDAS) resultado[t] = { valor: 0, conPrecio: 0, sinPrecio: 0 };

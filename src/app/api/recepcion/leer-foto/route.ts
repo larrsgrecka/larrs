@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
   if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
   const profile = await getProfile();
-  if (profile?.role !== "jefe_tienda" && profile?.role !== "admin") {
+  if (profile?.role !== "jefe_tienda" && profile?.role !== "admin" && profile?.role !== "operador") {
     return NextResponse.json({ error: "Sin permiso" }, { status: 403 });
   }
 

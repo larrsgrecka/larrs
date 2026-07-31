@@ -92,6 +92,11 @@ tr.drill-row:hover td { background: #f8fafc; }
       <div class="v" id="kpiImporte">—</div>
       <div id="badgesImporte"></div>
     </div>
+    <div class="kpi" id="kpiKilosWrap" style="display:none">
+      <div class="l">Kilos de helado vendidos</div>
+      <div class="v" id="kpiKilos">—</div>
+      <div id="badgesKilos"></div>
+    </div>
   </div>
 
   <div class="chart-card">
@@ -101,6 +106,11 @@ tr.drill-row:hover td { background: #f8fafc; }
   <div class="chart-card">
     <p class="section-title" style="padding:0;">Tendencia mensual — venta neta</p>
     <div class="chart-wrap"><canvas id="chartImporte"></canvas></div>
+  </div>
+  <div class="chart-card" id="chartKilosWrap" style="display:none">
+    <p class="section-title" style="padding:0;">Tendencia mensual — kilos de helado</p>
+    <div class="chart-wrap"><canvas id="chartKilos"></canvas></div>
+    <p style="font-size:11px;color:#94a3b8;margin-top:8px" id="notaCoberturaKilos"></p>
   </div>
 
   <div class="card">
@@ -154,9 +164,11 @@ let drillCodigo = null;
 let drillNombre = null;
 let chartCantidad = null;
 let chartImporte = null;
+let chartKilos = null;
 
 function fmtN(n) { return n == null ? '—' : Math.round(n).toLocaleString('es-CL'); }
 function fmtCLP(n) { return n == null ? '—' : '$' + Math.round(n).toLocaleString('es-CL'); }
+function fmtKg(n) { return n == null ? '—' : n.toLocaleString('es-CL', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' kg'; }
 
 function badge(pct, label) {
   const prefix = label ? label + ': ' : '';
@@ -260,6 +272,26 @@ function render(d) {
     d.meta.anio, true
   );
 
+  if (d.kilos) {
+    document.getElementById('kpiKilosWrap').style.display = 'block';
+    document.getElementById('chartKilosWrap').style.display = 'block';
+    document.getElementById('kpiKilos').textContent = fmtKg(d.kilos.actual);
+    document.getElementById('badgesKilos').innerHTML = badge(d.kilos.mom_pct, 'Mes ant.') + badge(d.kilos.yoy_pct, 'Año ant.');
+    const cobertura = d.kilos.coberturaPct;
+    document.getElementById('notaCoberturaKilos').textContent = cobertura == null
+      ? 'Solo cuenta formatos con peso conocido (helado simple/doble y formatos con gramaje en el nombre) — bochas sueltas, copas y tortas no están incluidas.'
+      : 'Cálculo basado en el ' + Math.round(cobertura) + '% de las unidades vendidas este mes (formatos con peso conocido) — el resto (bochas sueltas, copas, tortas, toppings) no tiene un peso asignado.';
+    renderChart(
+      'chartKilos', 'kilos', d.kilos.serieAnioActual.map(function (x) { return x.label; }),
+      d.kilos.serieAnioActual.map(function (x) { return x.kg; }),
+      d.kilos.serieAnioAnterior.map(function (x) { return x.kg; }),
+      d.meta.anio, false
+    );
+  } else {
+    document.getElementById('kpiKilosWrap').style.display = 'none';
+    document.getElementById('chartKilosWrap').style.display = 'none';
+  }
+
   const drillBar = document.getElementById('drillBar');
   if (d.meta.codigo) {
     drillBar.style.display = 'flex';
@@ -322,8 +354,9 @@ async function cargarFamilias() {
 
 function renderChart(canvasId, kind, labels, actual, anterior, anioSel, esMoneda) {
   const ctx = document.getElementById(canvasId);
-  const existing = kind === 'cantidad' ? chartCantidad : chartImporte;
+  const existing = kind === 'cantidad' ? chartCantidad : kind === 'kilos' ? chartKilos : chartImporte;
   if (existing) existing.destroy();
+  const esKilos = kind === 'kilos';
 
   const chart = new Chart(ctx, {
     type: 'line',
@@ -339,18 +372,18 @@ function renderChart(canvasId, kind, labels, actual, anterior, anioSel, esMoneda
       maintainAspectRatio: false,
       plugins: {
         legend: { display: true, position: 'top', labels: { boxWidth: 12, font: { size: 11 } } },
-        tooltip: { callbacks: { label: function (c) { return ' ' + (esMoneda ? fmtCLP(c.parsed.y) : fmtN(c.parsed.y)); } } },
+        tooltip: { callbacks: { label: function (c) { return ' ' + (esMoneda ? fmtCLP(c.parsed.y) : esKilos ? fmtKg(c.parsed.y) : fmtN(c.parsed.y)); } } },
       },
       scales: {
         y: {
           beginAtZero: true,
-          ticks: { callback: function (v) { return esMoneda ? '$' + (v / 1000).toFixed(0) + 'k' : v; } },
+          ticks: { callback: function (v) { return esMoneda ? '$' + (v / 1000).toFixed(0) + 'k' : esKilos ? v.toLocaleString('es-CL') + ' kg' : v; } },
         },
       },
     },
   });
 
-  if (kind === 'cantidad') chartCantidad = chart; else chartImporte = chart;
+  if (kind === 'cantidad') chartCantidad = chart; else if (kind === 'kilos') chartKilos = chart; else chartImporte = chart;
 }
 
 document.addEventListener('DOMContentLoaded', function () {

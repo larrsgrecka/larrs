@@ -3,6 +3,7 @@ import { createClient } from "@/utils/supabase/server";
 import { getProfile } from "@/utils/auth";
 import { TIENDAS_VENTAS, esTiendaActiva } from "@/utils/tiendas";
 import { nombreMes } from "@/utils/meses-es";
+import { gramosPorUnidad } from "@/utils/gramaje-helado";
 
 type Totales = { cantidad: number; importe_neto: number };
 type Row = { tienda: string; codigo: string; nombre: string; periodo: number; cantidad: number; importe_neto: number };
@@ -127,6 +128,53 @@ export async function GET(request: NextRequest) {
   const serieAnioActual = serieAnio(anio);
   const serieAnioAnterior = serieAnio(anio - 1);
 
+  // Kilos de helado vendidos: solo tiene sentido a nivel artículo, filtrado a
+  // la familia HELADERIA y sin drill a un código puntual (es una métrica de
+  // familia). No todo lo que vende esa familia tiene un peso confiable — ver
+  // gramosPorUnidad() — así que se excluye lo que no lo tiene, y se reporta
+  // qué % de las unidades del mes quedó cubierto para que no se lea como el
+  // 100% de lo vendido.
+  let kilos: {
+    actual: number | null; mesAnterior: number | null; anioAnterior: number | null;
+    mom_pct: number | null; yoy_pct: number | null;
+    serieAnioActual: Array<{ mes: number; label: string; kg: number | null }>;
+    serieAnioAnterior: Array<{ mes: number; label: string; kg: number | null }>;
+    coberturaPct: number | null;
+  } | null = null;
+  if (nivel === "articulo" && familiaFiltro === "HELADERIA" && !codigoFiltro) {
+    const kgPorPeriodo = new Map<number, number>();
+    let cantidadConPesoActual = 0;
+    let cantidadTotalActual = 0;
+    for (const r of rows) {
+      if (r.periodo === periodoActual) cantidadTotalActual += r.cantidad;
+      const gramos = gramosPorUnidad(r.codigo, r.nombre);
+      if (gramos == null) continue;
+      const kg = (r.cantidad * gramos) / 1000;
+      kgPorPeriodo.set(r.periodo, (kgPorPeriodo.get(r.periodo) ?? 0) + kg);
+      if (r.periodo === periodoActual) cantidadConPesoActual += r.cantidad;
+    }
+    const getKg = (p: number): number | null => kgPorPeriodo.has(p) ? kgPorPeriodo.get(p)! : null;
+    const actualKg = getKg(periodoActual);
+    const mesAnteriorKg = getKg(periodoActual - 1);
+    const anioAnteriorKg = getKg(periodoActual - 12);
+    function serieAnioKg(a: number) {
+      return Array.from({ length: 12 }, (_, i) => {
+        const m = i + 1;
+        return { mes: m, label: nombreMes(m).slice(0, 3), kg: getKg(a * 12 + m) };
+      });
+    }
+    kilos = {
+      actual: actualKg,
+      mesAnterior: mesAnteriorKg,
+      anioAnterior: anioAnteriorKg,
+      mom_pct: variacion(mesAnteriorKg, actualKg),
+      yoy_pct: variacion(anioAnteriorKg, actualKg),
+      serieAnioActual: serieAnioKg(anio),
+      serieAnioAnterior: serieAnioKg(anio - 1),
+      coberturaPct: cantidadTotalActual > 0 ? (cantidadConPesoActual / cantidadTotalActual) * 100 : null,
+    };
+  }
+
   let desglose: Array<{
     codigo: string; nombre: string; cantidad: number; importe_neto: number;
     mom_pct: number | null; yoy_pct: number | null;
@@ -189,5 +237,6 @@ export async function GET(request: NextRequest) {
     serieAnioActual,
     serieAnioAnterior,
     desglose,
+    kilos,
   });
 }

@@ -57,6 +57,11 @@ tr:hover td { background: #f8fafc; }
     <select id="tienda-select" onchange="onTiendaChange()"></select>
   </div>
 
+  <div class="form-card" id="historial-card" style="display:none">
+    <div class="section-title">Pesajes registrados recientemente</div>
+    <div id="historial-body"></div>
+  </div>
+
   <div class="form-card" id="recetas-disp-card" style="display:none">
     <div class="section-title">Recetas disponibles <span style="font-weight:400;color:#94a3b8">(recibidas del Centro de Producción − consumidas al pesar)</span></div>
     <div class="card" style="margin-bottom:0">
@@ -207,6 +212,65 @@ function onTiendaChange() {
   loadVitrina();
   renderSabores();
   loadRecetasDisponibles();
+  loadHistorial();
+}
+
+async function loadHistorial() {
+  const tienda = tiendaActiva();
+  const card = document.getElementById('historial-card');
+  const body = document.getElementById('historial-body');
+  if (!tienda) { card.style.display = 'none'; return; }
+  card.style.display = 'block';
+  body.innerHTML = '<div class="empty">Cargando...</div>';
+  try {
+    const resp = await fetch('/api/produccion-pesaje/historial?tienda=' + encodeURIComponent(tienda));
+    const data = await resp.json();
+    if (!data.ok) throw new Error(data.error || 'Error al cargar historial');
+    renderHistorial(data.registros || []);
+  } catch (e) {
+    body.innerHTML = `<div class="empty">Error: ${esc(e.message)}</div>`;
+  }
+}
+
+function fechaCorta(fecha) {
+  const d = new Date(fecha + 'T00:00:00');
+  return d.toLocaleDateString('es-CL', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+function prellenarCorreccion(tienda, fecha, sabor) {
+  if (!esAdmin) return;
+  document.getElementById('correccion-tienda').value = tienda;
+  document.getElementById('correccion-fecha').value = fecha;
+  document.getElementById('correccion-sabor-buscar').value = sabor;
+  document.getElementById('correccion-cantidad').focus();
+  document.getElementById('correccion-card').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function renderHistorial(registros) {
+  const body = document.getElementById('historial-body');
+  if (!registros.length) {
+    body.innerHTML = '<div class="empty">Todavía no hay pesajes registrados para esta tienda.</div>';
+    return;
+  }
+  body.innerHTML = registros.map((r) => {
+    const items = r.items.map((it) => {
+      const kgTxt = it.kg.toLocaleString('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const corregirAttr = esAdmin
+        ? ` onclick="prellenarCorreccion('${esc(r.tienda)}','${esc(r.fecha)}','${esc(it.sabor)}')" style="cursor:pointer;text-decoration:underline dotted"` +
+          ` title="Registrar una corrección para este sabor"`
+        : '';
+      return `<span${corregirAttr}>${esc(it.sabor)}: <strong>${kgTxt} kg</strong></span>`;
+    }).join(' &nbsp;·&nbsp; ');
+    const obs = r.observaciones ? `<div style="color:#94a3b8;font-size:11px;margin-top:2px">${esc(r.observaciones)}</div>` : '';
+    return `<div style="border-bottom:1px solid #f1f5f9;padding:10px 0">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap">
+        <strong style="font-size:12px">${esc(fechaCorta(r.fecha))}</strong>
+        <span style="color:#94a3b8;font-size:11px">${esc(r.nombre || r.email)}</span>
+      </div>
+      <div style="margin-top:4px;font-size:12px;color:#334155;line-height:1.6">${items}</div>
+      ${obs}
+    </div>`;
+  }).join('');
 }
 
 async function loadRecetasDisponibles() {
@@ -452,6 +516,7 @@ initCorreccion();
 loadVitrina();
 loadSabores();
 loadRecetasDisponibles();
+loadHistorial();
 document.getElementById('last-update').textContent = `Cargado: ${new Date().toLocaleString('es-CL')}`;
 if (window._LARRS_IS_OPERADOR) {
   document.getElementById('campo-nombre-operador').style.display = '';

@@ -525,12 +525,14 @@ function renderHistorial(items) {
   const showTienda = !tiendaFija;
   tbody.innerHTML = items.map(it => {
     const resumen = (it.items || []).map(x => `${esc(x.producto)} (${fmtNum(x.cantidad)} ${esc(x.unidad)})`).join(', ');
+    const obs = (it.observaciones || '').trim();
+    const obsHtml = obs ? `<div style="margin-top:4px;padding:5px 7px;background:#fffbeb;border-radius:5px;color:#92400e;font-size:11px;white-space:pre-line">💬 ${esc(obs)}</div>` : '';
     return `
     <tr>
       <td style="font-size:12px">${esc(it.fecha) || '—'}</td>
       ${showTienda ? `<td style="font-size:12px">${esc(it.tienda) || '—'}</td>` : ''}
       <td style="font-size:12px">${esc(it.proveedor) || '—'}</td>
-      <td style="font-size:11px;color:#64748b;max-width:220px">${resumen || '—'}</td>
+      <td style="font-size:11px;color:#64748b;max-width:220px">${resumen || '—'}${obsHtml}</td>
       <td>${it.foto_url ? `<a href="${esc(it.foto_url)}" target="_blank" rel="noopener">Ver foto</a>` : '—'}</td>
       <td style="font-size:11px;color:#64748b">${esc(it.reportado_por) || '—'}</td>
     </tr>`;

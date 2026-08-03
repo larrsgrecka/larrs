@@ -18,14 +18,16 @@ export async function GET() {
       getSaboresProduccion().catch(() => [] as string[]),
     ]);
 
-    // Conteo físico de helado en kilos (cuánto hay realmente en la vitrina/
-    // bodega) — distinto del "recetas recibidas" de Recepción, esto es un
-    // conteo de stock como cualquier otra categoría, solo que en kg.
+    // Conteo físico de helado en recetas enteras (cuántas recetas hay
+    // realmente en la vitrina/bodega) — más rápido de contar que pesar en kg,
+    // y en la misma unidad que "recibido" (Recepción) y "consumido" (Pesaje),
+    // así que cada conteo puede servir de reconciliación exacta del saldo
+    // (ver produccion-pesaje/recetas-disponibles).
     if (sabores.length > 0) {
       categorias.push({
         value: "HELADERIA",
-        label: "Heladería (kg en tienda)",
-        productos: sabores.map((nombre) => ({ nombre, unidad: "kg" })),
+        label: "Heladería (recetas en tienda)",
+        productos: sabores.map((nombre) => ({ nombre, unidad: "receta" })),
       });
     }
 

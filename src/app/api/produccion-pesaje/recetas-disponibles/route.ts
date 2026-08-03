@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { getProfile } from "@/utils/auth";
-import { getRecetarioCostos, matchCostos, type RecetaCosto } from "@/utils/recetario-costos";
+import { getRecetarioCostos, matchCostos } from "@/utils/recetario-costos";
 import { getRecetasConsumidasPorTiendaYSabor } from "@/utils/produccion-recetas-consumidas";
 
 // El CSV de producción es grande y acá se recorre completo (no solo el
@@ -26,14 +26,14 @@ function inventarioFoodConfig() {
 
 type ItemRecepcion = { categoria?: string; producto?: string; cantidad?: number };
 type RegistroRecepcion = { items?: ItemRecepcion[]; fecha?: string };
+type EventoFecha = { fecha: string; cantidad: number };
 
-// Fecha + cantidad recibida (en recetas) por sabor, y la fecha de la primera
-// recepción de cada sabor (el consumo de antes de esa fecha no cuenta).
-async function getRecibidoPorSabor(
-  tienda: string
-): Promise<{ recibido: Record<string, number>; primeraFecha: Record<string, string> }> {
+// Recepciones de Heladería por sabor, cada una con su fecha (sin sumar
+// todavía — el corte de qué cuenta o no se aplica más abajo, una vez que se
+// sabe cuál es el último conteo físico de cada sabor).
+async function getRecepcionesPorSabor(tienda: string): Promise<Record<string, EventoFecha[]>> {
   const config = recepcionConfig();
-  if (!config) return { recibido: {}, primeraFecha: {} };
+  if (!config) return {};
 
   const url = new URL(config.url);
   url.searchParams.set("token", config.token);
@@ -41,30 +41,27 @@ async function getRecibidoPorSabor(
   url.searchParams.set("tienda", tienda);
   const resp = await fetch(url.toString());
   const data = await resp.json();
-  if (!data.ok) return { recibido: {}, primeraFecha: {} };
+  if (!data.ok) return {};
 
-  const recibido: Record<string, number> = {};
-  const primeraFecha: Record<string, string> = {};
+  const out: Record<string, EventoFecha[]> = {};
   for (const registro of (data.items ?? []) as RegistroRecepcion[]) {
     const fecha = registro.fecha || "";
     for (const item of registro.items ?? []) {
-      if (item.categoria !== "HELADERIA" || !item.producto) continue;
-      recibido[item.producto] = (recibido[item.producto] || 0) + (Number(item.cantidad) || 0);
-      if (fecha && (!primeraFecha[item.producto] || fecha < primeraFecha[item.producto])) {
-        primeraFecha[item.producto] = fecha;
-      }
+      if (item.categoria !== "HELADERIA" || !item.producto || !fecha) continue;
+      if (!out[item.producto]) out[item.producto] = [];
+      out[item.producto].push({ fecha, cantidad: Number(item.cantidad) || 0 });
     }
   }
-  return { recibido, primeraFecha };
+  return out;
 }
 
 type ConteoRow = { categoria?: string; producto?: string; cantidad?: number; fecha?: string };
 
-// Primer conteo físico (kg) de Heladería registrado en Inventario Food, por
-// sabor — la fecha más antigua encontrada, con su cantidad en kg.
-async function getPrimerConteoHeladeriaPorSabor(
+// Último conteo físico (en recetas enteras, no kg) de Heladería registrado en
+// Inventario Food, por sabor — el más reciente por fecha.
+async function getUltimoConteoHeladeriaPorSabor(
   tienda: string
-): Promise<Record<string, { fecha: string; kg: number }>> {
+): Promise<Record<string, EventoFecha>> {
   const config = inventarioFoodConfig();
   if (!config) return {};
 
@@ -76,48 +73,55 @@ async function getPrimerConteoHeladeriaPorSabor(
   const data = await resp.json();
   if (!data.ok) return {};
 
-  const out: Record<string, { fecha: string; kg: number }> = {};
+  const out: Record<string, EventoFecha> = {};
   for (const row of (data.items ?? []) as ConteoRow[]) {
     if (row.categoria !== "HELADERIA" || !row.producto || !row.fecha) continue;
-    const kg = Number(row.cantidad) || 0;
-    if (!out[row.producto] || row.fecha < out[row.producto].fecha) {
-      out[row.producto] = { fecha: row.fecha, kg };
+    const cantidad = Number(row.cantidad) || 0;
+    if (!out[row.producto] || row.fecha >= out[row.producto].fecha) {
+      out[row.producto] = { fecha: row.fecha, cantidad };
     }
   }
   return out;
 }
 
-// Junta recepción + primer conteo físico por tienda: el que haya pasado
-// PRIMERO define desde cuándo se empieza a descontar consumo ("corte"). Si
-// el primero en el tiempo es un conteo físico, sus kg (convertidos a
-// recetas con el Recetario) se suman como saldo inicial — es la cantidad
-// real que había ese día, no una recepción, pero cuenta igual para partir
-// con un número real en vez de 0 a secas.
+// Junta recepción + último conteo físico por tienda: el conteo físico más
+// reciente (si existe) es la verdad conocida a esa fecha — reemplaza
+// cualquier suma acumulada de antes, para que un recuento periódico corrija
+// solo el desvío (mermas no registradas, redondeos, etc.) en vez de arrastrar
+// error para siempre. Encima de ese conteo se suman las recepciones
+// ocurridas desde esa fecha en adelante. Si un sabor nunca se ha contado,
+// se usa la fecha de su primera recepción como corte (comportamiento previo:
+// evita arrastrar consumo histórico de antes de que existiera este control).
 async function getDatosTienda(
-  tienda: string,
-  recetario: { recetas: RecetaCosto[] }
+  tienda: string
 ): Promise<{ recibido: Record<string, number>; corte: Record<string, string> }> {
-  const [{ recibido, primeraFecha }, conteos] = await Promise.all([
-    getRecibidoPorSabor(tienda),
-    getPrimerConteoHeladeriaPorSabor(tienda),
+  const [recepcionesPorSabor, conteos] = await Promise.all([
+    getRecepcionesPorSabor(tienda),
+    getUltimoConteoHeladeriaPorSabor(tienda),
   ]);
 
-  const saboresConocidos = new Set([...Object.keys(recibido), ...Object.keys(conteos)]);
-  const costosPorSabor = matchCostos([...saboresConocidos], recetario.recetas);
+  const saboresConocidos = new Set([...Object.keys(recepcionesPorSabor), ...Object.keys(conteos)]);
 
-  const recibidoFinal: Record<string, number> = { ...recibido };
-  const corte: Record<string, string> = { ...primeraFecha };
+  const recibidoFinal: Record<string, number> = {};
+  const corte: Record<string, string> = {};
 
   for (const sabor of saboresConocidos) {
+    const eventos = recepcionesPorSabor[sabor] || [];
     const conteo = conteos[sabor];
-    if (!conteo) continue;
-    const fechaRecepcion = primeraFecha[sabor];
-    if (fechaRecepcion && fechaRecepcion <= conteo.fecha) continue; // la recepción ya fue primero
 
-    corte[sabor] = conteo.fecha;
-    const kilos = costosPorSabor[sabor]?.kilosReceta;
-    if (kilos) {
-      recibidoFinal[sabor] = (recibidoFinal[sabor] || 0) + Math.round(conteo.kg / kilos);
+    if (conteo) {
+      corte[sabor] = conteo.fecha;
+      const recibidasDespues = eventos
+        .filter((e) => e.fecha >= conteo.fecha)
+        .reduce((acc, e) => acc + e.cantidad, 0);
+      recibidoFinal[sabor] = conteo.cantidad + recibidasDespues;
+    } else {
+      const primeraFecha = eventos.reduce(
+        (min, e) => (!min || e.fecha < min ? e.fecha : min),
+        "" as string
+      );
+      if (primeraFecha) corte[sabor] = primeraFecha;
+      recibidoFinal[sabor] = eventos.reduce((acc, e) => acc + e.cantidad, 0);
     }
   }
 
@@ -147,7 +151,7 @@ export async function GET(request: NextRequest) {
       }
 
       const recetario = await getRecetarioCostos().catch(() => ({ recetas: [], sincronizadoEn: "" }));
-      const datosPorTienda = await Promise.all(TIENDAS.map((t) => getDatosTienda(t, recetario)));
+      const datosPorTienda = await Promise.all(TIENDAS.map((t) => getDatosTienda(t)));
 
       const cortePorTiendaYSabor: Record<string, Record<string, string>> = {};
       TIENDAS.forEach((t, i) => { cortePorTiendaYSabor[t] = datosPorTienda[i].corte; });
@@ -175,7 +179,7 @@ export async function GET(request: NextRequest) {
     }
 
     const recetario = await getRecetarioCostos().catch(() => ({ recetas: [], sincronizadoEn: "" }));
-    const datos = await getDatosTienda(tienda, recetario);
+    const datos = await getDatosTienda(tienda);
     const cortePorTiendaYSabor = { [tienda]: datos.corte };
     const consumidoPorTienda = await getRecetasConsumidasPorTiendaYSabor(recetario.recetas, cortePorTiendaYSabor);
     const consumido = consumidoPorTienda[tienda] || {};

@@ -54,13 +54,19 @@ function toKg(v: number): number {
   return v >= 100 ? v / 1000 : v;
 }
 
-function parseFechaDMY(s: string): string | null {
+// fallbackYear (año de la "Marca temporal" de envío) corrige typos de año en
+// la "Fecha de recuento" tipeada a mano — visto en producción real: alguien
+// escribió "23/7/2024" el mismo día que envió el formulario en 2026 (día/mes
+// correctos, año typo). La fecha de recuento siempre es "hoy" o "ayer" en
+// este flujo, así que cualquier año a 2+ años del año de envío es un typo.
+function parseFechaDMY(s: string, fallbackYear?: number): string | null {
   if (!s) return null;
   const part = s.trim().split(" ")[0];
   const [d, m, y] = part.split("/");
   if (!d || !m || !y) return null;
-  const yr = Number(y);
+  let yr = Number(y);
   if (!yr || yr < 2000 || yr > 2100) return null;
+  if (fallbackYear && Math.abs(yr - fallbackYear) > 1) yr = fallbackYear;
   return `${yr}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
 }
 
@@ -109,7 +115,8 @@ async function calcularRegistros(): Promise<RegistroPesaje[]> {
     if (!(TIENDAS as readonly string[]).includes(tienda)) continue;
     const tipo = (row[5] || "").toLowerCase();
     if (!tipo.includes("fabricaci")) continue;
-    const fecha = parseFechaDMY(row[3] || "");
+    const tsYear = parseFechaDMY(row[0] || "")?.slice(0, 4);
+    const fecha = parseFechaDMY(row[3] || "", tsYear ? Number(tsYear) : undefined);
     if (!fecha) continue;
 
     const items: ItemPesaje[] = [];

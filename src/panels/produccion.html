@@ -236,9 +236,14 @@ function parseDateDMY(s, fallbackYear) {
     const [d,m,y] = part.split('/');
     if (!d||!m||!y) return null;
     let yr = +y;
-    // Corregir años con typo: 0026→2026, 2027 cuando debía ser 2026, etc.
-    // Regla: si el año es inválido (< 2000) o mayor al año de envío del formulario → corregir
-    if (fallbackYear && (yr < 2000 || yr > fallbackYear)) yr = fallbackYear;
+    // Corregir años con typo: 0026→2026, 2027 cuando debía ser 2026, 2024
+    // cuando debía ser 2026 (typo real visto en producción: día/mes correctos,
+    // año tipeado mal), etc. Regla: si el año es inválido (< 2000) o se aleja
+    // más de 1 año del año de envío del formulario → corregir. Un año de por
+    // medio se permite (alguien registrando un conteo de fin de año al día
+    // siguiente), pero 2+ años de diferencia siempre es un typo en este flujo
+    // (la fecha de recuento siempre es "hoy" o "ayer", nunca años atrás).
+    if (fallbackYear && (yr < 2000 || Math.abs(yr - fallbackYear) > 1)) yr = fallbackYear;
     const dt = new Date(yr, +m-1, +d);
     return isNaN(dt.getTime()) ? null : dt;
   } catch(e) { return null; }

@@ -16,20 +16,30 @@ export type StockRow = {
   categoria: string;
   producto: string;
   cantidad: number;
+  unidad?: string;
+  ubicacion?: string;
   fecha?: string;
   creado_en?: string;
 };
 
-// clave "tienda||categoria||producto" -> fila más reciente.
+// clave "tienda||categoria||producto||ubicacion" -> fila más reciente. Barra
+// y Bodega son conteos independientes del mismo producto, así que cada
+// combinación tiene su propia "última fila" — quien necesite el total de un
+// producto debe sumar todas las claves que compartan tienda+categoria+producto.
 export async function getStockActualPorClave(): Promise<Record<string, StockRow>> {
   const config = appsScriptConfig();
   if (!config) return {};
 
-  const resp = await fetch(`${config.url}?token=${encodeURIComponent(config.token)}&action=list`);
-  const data = await resp.json();
+  let data: { ok: boolean; items?: StockRow[] };
+  try {
+    const resp = await fetch(`${config.url}?token=${encodeURIComponent(config.token)}&action=list`);
+    data = JSON.parse(await resp.text());
+  } catch {
+    return {};
+  }
   if (!data.ok) return {};
 
-  const rows = (data.items ?? []) as StockRow[];
+  const rows = data.items ?? [];
   rows.sort((a, b) => {
     const da = new Date(a.creado_en || a.fecha || 0).getTime();
     const db = new Date(b.creado_en || b.fecha || 0).getTime();
@@ -38,7 +48,7 @@ export async function getStockActualPorClave(): Promise<Record<string, StockRow>
 
   const porClave: Record<string, StockRow> = {};
   for (const r of rows) {
-    const clave = `${r.tienda}||${r.categoria}||${r.producto}`;
+    const clave = `${r.tienda}||${r.categoria}||${r.producto}||${r.ubicacion || ""}`;
     if (!(clave in porClave)) porClave[clave] = r;
   }
   return porClave;

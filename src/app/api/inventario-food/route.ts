@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { getProfile } from "@/utils/auth";
 
-type Item = { producto: string; cantidad: number; unidad?: string };
+type Item = { producto: string; cantidad: number; unidad?: string; ubicacion?: string };
 
 function appsScriptConfig() {
   const url = process.env.INVENTARIO_FOOD_APPS_SCRIPT_URL;
@@ -96,6 +96,7 @@ export async function POST(request: NextRequest) {
       producto: it.producto,
       cantidad: Number(it.cantidad),
       unidad: it.unidad || "un",
+      ubicacion: it.ubicacion || "",
     })),
   };
 
@@ -151,6 +152,7 @@ export async function PUT(request: NextRequest) {
     producto: body.producto,
     cantidad: Number(body.cantidad),
     unidad,
+    ubicacion: body.ubicacion || "",
     observaciones: body.observaciones || "",
   };
 
@@ -223,11 +225,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: data.error || "Error en Apps Script" }, { status: 502 });
   }
 
-  // Nos quedamos con el conteo más reciente por tienda+categoria+producto
-  // (mismo criterio que /api/pedidos-historial: la fila más nueva primero).
+  // Nos quedamos con el conteo más reciente por tienda+categoria+producto+
+  // ubicacion (mismo criterio que /api/pedidos-historial: la fila más nueva
+  // primero) — Barra y Bodega son conteos independientes del mismo producto.
   const porClave: Record<string, unknown> = {};
   for (const it of (data.items ?? []) as Record<string, unknown>[]) {
-    const clave = `${it.tienda}||${it.categoria}||${it.producto}`;
+    const clave = `${it.tienda}||${it.categoria}||${it.producto}||${it.ubicacion || ""}`;
     if (!(clave in porClave)) porClave[clave] = it;
   }
 

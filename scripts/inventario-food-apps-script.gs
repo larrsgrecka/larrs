@@ -12,8 +12,15 @@
 const TOKEN = 'larrs-inventario-food-2026';
 const HUB_SPREADSHEET_ID = '1L952Ivf2eBZh9vQYmAOkJaZszBQUy2Uvmtub3RWifOw'; // Mermas Larrs
 const SHEET_NAME = 'Inventario';
+// "ubicacion" va al FINAL, no intercalada — la hoja ya existe con estos 11
+// headers en este orden exacto; ensureSheet_() no reescribe headers de una
+// hoja que ya existe, así que insertarla en el medio desalinearía todas las
+// filas viejas contra las nuevas. Si quieres que la fila 1 de la hoja
+// muestre la etiqueta "ubicacion" (es solo cosmético, el código no la lee
+// por nombre), agrégala a mano en la última columna.
 const HEADERS = ['id', 'fecha', 'tienda', 'categoria', 'producto', 'cantidad',
-                  'unidad', 'observaciones', 'reportado_por', 'reportado_por_id', 'creado_en'];
+                  'unidad', 'observaciones', 'reportado_por', 'reportado_por_id', 'creado_en',
+                  'ubicacion'];
 
 function ensureSheet_() {
   const ss = SpreadsheetApp.openById(HUB_SPREADSHEET_ID);
@@ -125,6 +132,7 @@ function doCreate_(body) {
         if (h === 'producto') return item.producto;
         if (h === 'cantidad') return item.cantidad;
         if (h === 'unidad') return item.unidad || 'un';
+        if (h === 'ubicacion') return item.ubicacion || '';
         return body[h] != null ? body[h] : '';
       });
     });

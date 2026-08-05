@@ -10,7 +10,7 @@
 // objetiva de qué productos están por debajo de lo que históricamente rota.
 
 import { getVentasPorTiendaProductoMes } from "@/utils/catalogo-productos";
-import { getStockActualPorClave, type StockRow } from "@/utils/inventario-food-stock";
+import { getStockActualPorClave } from "@/utils/inventario-food-stock";
 import { getCatalogoFood } from "@/utils/catalogo-food";
 
 const MESES_HISTORIAL = 6;
@@ -47,6 +47,19 @@ export async function getStockMinimos(): Promise<ItemStockMinimo[]> {
     getCatalogoFood(),
   ]);
 
+  // El stock ahora se cuenta por Barra y Bodega por separado (claves distintas
+  // en stockPorClave) — acá interesa el TOTAL del producto sin importar dónde
+  // está, así que se suman todas las ubicaciones de un mismo tienda+categoria+
+  // producto, y se toma la fecha más reciente entre ellas para mostrar.
+  const stockPorProducto: Record<string, { cantidad: number; fecha: string }> = {};
+  for (const row of Object.values(stockPorClave)) {
+    const clave = `${row.tienda}||${row.categoria}||${row.producto}`;
+    const fecha = row.fecha || row.creado_en || "";
+    if (!stockPorProducto[clave]) stockPorProducto[clave] = { cantidad: 0, fecha: "" };
+    stockPorProducto[clave].cantidad += Number(row.cantidad) || 0;
+    if (fecha > stockPorProducto[clave].fecha) stockPorProducto[clave].fecha = fecha;
+  }
+
   const mesesAConsiderar = mesesCompletosRecientes(MESES_HISTORIAL);
 
   // Todo producto contable del catálogo food, con su categoría — así también
@@ -70,8 +83,8 @@ export async function getStockMinimos(): Promise<ItemStockMinimo[]> {
       const totalVendido = mesesConVenta.reduce((acc, m) => acc + (ventasPorMes[m] || 0), 0);
 
       const clave = `${tienda}||${categoria}||${producto}`;
-      const stockRow: StockRow | undefined = stockPorClave[clave];
-      const stockActual = stockRow ? Number(stockRow.cantidad) || 0 : 0;
+      const stockRow = stockPorProducto[clave];
+      const stockActual = stockRow ? stockRow.cantidad : 0;
 
       let ventaSemanalPromedio = 0;
       let stockMinimoSugerido = 0;
@@ -101,7 +114,7 @@ export async function getStockMinimos(): Promise<ItemStockMinimo[]> {
         categoria,
         producto,
         stockActual,
-        fechaUltimoConteo: stockRow?.fecha || stockRow?.creado_en || "",
+        fechaUltimoConteo: stockRow?.fecha || "",
         ventaSemanalPromedio,
         mesesConDatos: mesesConVenta.length,
         stockMinimoSugerido,

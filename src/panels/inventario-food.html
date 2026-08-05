@@ -101,9 +101,9 @@ tr:hover td { background: #f8fafc; }
 
     <div class="card" id="productos-card" style="margin-bottom:12px">
       <table>
-        <thead><tr><th>Producto</th><th>Unidad</th><th class="r">Cantidad contada</th></tr></thead>
+        <thead><tr><th>Producto</th><th>Unidad</th><th class="r">Barra</th><th class="r">Bodega</th></tr></thead>
         <tbody id="productos-body">
-          <tr><td colspan="3" class="empty">Selecciona una categoría para empezar el conteo.</td></tr>
+          <tr><td colspan="4" class="empty">Selecciona una categoría para empezar el conteo.</td></tr>
         </tbody>
       </table>
     </div>
@@ -136,13 +136,14 @@ tr:hover td { background: #f8fafc; }
           <th id="th-tienda" style="display:none">Tienda</th>
           <th>Categoría</th>
           <th>Producto</th>
+          <th>Ubicación</th>
           <th class="r">Cantidad</th>
           <th>Fecha conteo</th>
           <th id="th-acciones" style="display:none">Acciones</th>
         </tr>
       </thead>
       <tbody id="stock-body">
-        <tr><td colspan="6" class="empty">Cargando...</td></tr>
+        <tr><td colspan="7" class="empty">Cargando...</td></tr>
       </tbody>
     </table>
   </div>
@@ -152,6 +153,7 @@ tr:hover td { background: #f8fafc; }
         <tr>
           <th>Categoría</th>
           <th>Producto</th>
+          <th>Ubicación</th>
           <th class="r">Costanera</th>
           <th class="r">Dominicos</th>
           <th class="r">Trapenses</th>
@@ -292,18 +294,20 @@ function actualizarVisibilidadVistas() {
 function renderStockComparativo(items) {
   const tbody = document.getElementById('stock-comparativo-body');
   if (!items.length) {
-    tbody.innerHTML = '<tr><td colspan="5" class="empty">Sin conteos todavía.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="empty">Sin conteos todavía.</td></tr>';
     return;
   }
   const porClave = {};
   items.forEach(it => {
-    const clave = it.categoria + '||' + it.producto;
-    if (!porClave[clave]) porClave[clave] = { categoria: it.categoria, producto: it.producto, porTienda: {} };
+    const ubicacion = it.ubicacion || '—';
+    const clave = it.categoria + '||' + it.producto + '||' + ubicacion;
+    if (!porClave[clave]) porClave[clave] = { categoria: it.categoria, producto: it.producto, ubicacion, porTienda: {} };
     porClave[clave].porTienda[it.tienda] = it;
   });
   const filas = Object.values(porClave).sort((a, b) => {
     if (a.categoria !== b.categoria) return String(a.categoria).localeCompare(String(b.categoria));
-    return String(a.producto).localeCompare(String(b.producto));
+    if (a.producto !== b.producto) return String(a.producto).localeCompare(String(b.producto));
+    return String(a.ubicacion).localeCompare(String(b.ubicacion));
   });
   tbody.innerHTML = filas.map(f => {
     const celdas = TIENDAS.map(t => {
@@ -313,6 +317,7 @@ function renderStockComparativo(items) {
     return `<tr>
       <td><span class="cat-badge">${esc(labelCategoria(f.categoria))}</span></td>
       <td style="font-size:12px">${esc(f.producto)} ${codigoTxt(f.categoria, f.producto)}</td>
+      <td style="font-size:11px;color:#64748b">${esc(f.ubicacion)}</td>
       ${celdas}
     </tr>`;
   }).join('');
@@ -339,17 +344,21 @@ function onCategoriaChange() {
   const cat = catalogo.find(c => c.value === catValue);
 
   if (!cat) {
-    body.innerHTML = '<tr><td colspan="3" class="empty">Selecciona una categoría para empezar el conteo.</td></tr>';
+    body.innerHTML = '<tr><td colspan="4" class="empty">Selecciona una categoría para empezar el conteo.</td></tr>';
     return;
   }
 
   // Cada producto trae su propia unidad desde el catálogo (ej. el café en
   // grano se cuenta en bolsas/"un", pero el café por kilo admite decimales).
+  // Barra y Bodega son conteos independientes del mismo producto — cualquiera
+  // de los dos se puede dejar en blanco si no se contó esa ubicación hoy.
+  const step = p => p.unidad === 'un' ? '1' : '0.01';
   body.innerHTML = cat.productos.map(p => `
     <tr>
       <td style="font-size:12px">${esc(p.nombre)} ${p.codigo ? `<span style="color:#94a3b8;font-size:10px">[${esc(p.codigo)}]</span>` : ''}</td>
       <td style="font-size:11px;color:#64748b">${esc(p.unidad)}</td>
-      <td class="r"><input type="number" class="cant-input" data-producto="${esc(p.nombre)}" data-unidad="${esc(p.unidad)}" min="0" step="${p.unidad === 'un' ? '1' : '0.01'}" placeholder="—"></td>
+      <td class="r"><input type="number" class="cant-input" data-producto="${esc(p.nombre)}" data-unidad="${esc(p.unidad)}" data-ubicacion="Barra" min="0" step="${step(p)}" placeholder="—"></td>
+      <td class="r"><input type="number" class="cant-input" data-producto="${esc(p.nombre)}" data-unidad="${esc(p.unidad)}" data-ubicacion="Bodega" min="0" step="${step(p)}" placeholder="—"></td>
     </tr>
   `).join('');
 }
@@ -377,11 +386,11 @@ async function submitConteo() {
   const inputs = [...document.querySelectorAll('#productos-body .cant-input')];
   const items = inputs
     .filter(inp => inp.value !== '')
-    .map(inp => ({ producto: inp.dataset.producto, cantidad: parseFloat(inp.value), unidad: inp.dataset.unidad }));
+    .map(inp => ({ producto: inp.dataset.producto, cantidad: parseFloat(inp.value), unidad: inp.dataset.unidad, ubicacion: inp.dataset.ubicacion }));
 
   if (items.length === 0) {
     msg.className = 'msg err';
-    msg.textContent = 'Ingresa la cantidad de al menos un producto.';
+    msg.textContent = 'Ingresa la cantidad de al menos un producto (Barra o Bodega).';
     return;
   }
 
@@ -430,7 +439,7 @@ async function submitConteo() {
 
 async function loadStock() {
   const tbody = document.getElementById('stock-body');
-  tbody.innerHTML = `<tr><td colspan="${esAdmin ? 6 : 5}" class="empty">Cargando...</td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="${esAdmin ? 7 : 6}" class="empty">Cargando...</td></tr>`;
   try {
     const qs = (!tiendaFija && tiendaActiva !== 'Todas') ? `?tienda=${encodeURIComponent(tiendaActiva)}` : '';
     const resp = await fetch('/api/inventario-food' + qs);
@@ -441,7 +450,7 @@ async function loadStock() {
     renderStock(stockItems);
     renderStockComparativo(stockItems);
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="${esAdmin ? 6 : 5}" class="empty">Error: ${e.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="${esAdmin ? 7 : 6}" class="empty">Error: ${e.message}</td></tr>`;
   }
   document.getElementById('last-update').textContent = `Actualizado: ${new Date().toLocaleString('es-CL')}`;
 }
@@ -454,14 +463,15 @@ function labelCategoria(value) {
 function renderStock(items) {
   const tbody = document.getElementById('stock-body');
   if (!items.length) {
-    tbody.innerHTML = `<tr><td colspan="${esAdmin ? 6 : 5}" class="empty">Sin conteos todavía.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="${esAdmin ? 7 : 6}" class="empty">Sin conteos todavía.</td></tr>`;
     return;
   }
   const showTienda = !tiendaFija;
   const sorted = [...items].sort((a, b) => {
     if (showTienda && a.tienda !== b.tienda) return String(a.tienda).localeCompare(String(b.tienda));
     if (a.categoria !== b.categoria) return String(a.categoria).localeCompare(String(b.categoria));
-    return String(a.producto).localeCompare(String(b.producto));
+    if (a.producto !== b.producto) return String(a.producto).localeCompare(String(b.producto));
+    return String(a.ubicacion || '').localeCompare(String(b.ubicacion || ''));
   });
   tbody.innerHTML = sorted.map(it => {
     if (esAdmin && String(it.id) === String(editingId)) {
@@ -470,6 +480,7 @@ function renderStock(items) {
           ${showTienda ? `<td style="font-size:12px">${esc(it.tienda)}</td>` : ''}
           <td><span class="cat-badge">${esc(labelCategoria(it.categoria))}</span></td>
           <td style="font-size:12px">${esc(it.producto)}</td>
+          <td style="font-size:11px;color:#64748b">${esc(it.ubicacion) || '—'}</td>
           <td class="r"><input type="number" id="edit-cantidad" class="cant-input" value="${it.cantidad}" min="0" step="${it.unidad === 'un' ? '1' : '0.01'}"></td>
           <td><input type="date" id="edit-fecha" value="${esc(it.fecha)}" style="font-size:12px;border:1px solid #e2e8f0;border-radius:6px;padding:4px 6px"></td>
           <td style="white-space:nowrap">
@@ -483,6 +494,7 @@ function renderStock(items) {
       ${showTienda ? `<td style="font-size:12px">${esc(it.tienda)}</td>` : ''}
       <td><span class="cat-badge">${esc(labelCategoria(it.categoria))}</span></td>
       <td style="font-size:12px">${esc(it.producto)} ${codigoTxt(it.categoria, it.producto)}</td>
+      <td style="font-size:11px;color:#64748b">${esc(it.ubicacion) || '—'}</td>
       <td class="r" style="font-size:12px">${fmtNum(it.cantidad)} ${esc(it.unidad)}</td>
       <td style="font-size:11px;color:#64748b">${esc(it.fecha)}</td>
       ${esAdmin ? `<td style="white-space:nowrap">
@@ -519,7 +531,7 @@ async function guardarEdicionStock(id) {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        id, fecha, cantidad, unidad: it.unidad,
+        id, fecha, cantidad, unidad: it.unidad, ubicacion: it.ubicacion || '',
         tienda: it.tienda, categoria: it.categoria, producto: it.producto,
         observaciones: it.observaciones || '',
       }),

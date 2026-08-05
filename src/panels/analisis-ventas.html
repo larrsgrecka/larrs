@@ -122,6 +122,8 @@ tr.drill-row:hover td { background: #f8fafc; }
             <th>Familia</th>
             <th class="r">Unidades</th>
             <th class="r">Venta neta</th>
+            <th class="r">Venta neta mes ant.</th>
+            <th class="r">Venta neta año ant.</th>
             <th class="r">vs mes ant.</th>
             <th class="r">vs año ant.</th>
           </tr>
@@ -140,6 +142,8 @@ tr.drill-row:hover td { background: #f8fafc; }
             <th>Nombre</th>
             <th class="r">Unidades</th>
             <th class="r">Venta neta</th>
+            <th class="r">Venta neta mes ant.</th>
+            <th class="r">Venta neta año ant.</th>
             <th class="r">vs mes ant.</th>
             <th class="r">vs año ant.</th>
           </tr>
@@ -309,7 +313,7 @@ function render(d) {
 function renderTabla(tbodyId, desglose, clickable) {
   const tbody = document.getElementById(tbodyId);
   if (!desglose || desglose.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="5" class="empty">Sin datos para este mes</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="empty">Sin datos para este mes</td></tr>';
     return;
   }
   tbody.innerHTML = desglose.map(function (r) {
@@ -318,6 +322,8 @@ function renderTabla(tbodyId, desglose, clickable) {
       '<td>' + r.nombre + '</td>' +
       '<td class="r">' + fmtN(r.cantidad) + '</td>' +
       '<td class="r">' + fmtCLP(r.importe_neto) + '</td>' +
+      '<td class="r" style="color:#94a3b8">' + fmtCLP(r.importe_mes_anterior) + '</td>' +
+      '<td class="r" style="color:#94a3b8">' + fmtCLP(r.importe_anio_anterior) + '</td>' +
       '<td class="r">' + badgeDiffUnidades(r.cantidad_mom, '') + '</td>' +
       '<td class="r">' + badgeDiffUnidades(r.cantidad_yoy, '') + '</td>' +
       '</tr>';

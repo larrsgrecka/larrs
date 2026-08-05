@@ -177,6 +177,7 @@ export async function GET(request: NextRequest) {
 
   let desglose: Array<{
     codigo: string; nombre: string; cantidad: number; importe_neto: number;
+    importe_mes_anterior: number; importe_anio_anterior: number;
     mom_pct: number | null; yoy_pct: number | null;
     cantidad_mom: number | null; cantidad_yoy: number | null;
   }> | null = null;
@@ -199,6 +200,8 @@ export async function GET(request: NextRequest) {
         nombre: v.nombre,
         cantidad: v.cantidad,
         importe_neto: v.actual,
+        importe_mes_anterior: v.anterior,
+        importe_anio_anterior: v.yoy,
         mom_pct: variacion(v.anterior, v.actual),
         yoy_pct: variacion(v.yoy, v.actual),
         cantidad_mom: v.cantidadAnterior == null ? null : v.cantidad - v.cantidadAnterior,

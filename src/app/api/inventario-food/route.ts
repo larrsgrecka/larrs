@@ -11,6 +11,30 @@ function appsScriptConfig() {
   return { url, token };
 }
 
+// Google Apps Script a veces devuelve una respuesta vacía o una página de
+// error de Drive en vez del JSON esperado (falla temporal de infraestructura
+// de Google, no de esta app) — sin este guard, resp.json() explota con un
+// error crudo tipo "Unexpected end of JSON input" que además rompe el propio
+// JSON de respuesta de esta ruta, confundiendo al cliente todavía más.
+async function fetchAppsScriptJson(
+  url: string,
+  options?: RequestInit
+): Promise<{ ok: boolean; error?: string; [key: string]: unknown }> {
+  let resp: Response;
+  try {
+    resp = await fetch(url, options);
+  } catch {
+    return { ok: false, error: "No se pudo conectar con el servicio de Inventario Food. Intenta de nuevo en unos segundos." };
+  }
+  const text = await resp.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    console.error("[inventario-food] Respuesta no-JSON del Apps Script:", resp.status, text.slice(0, 300));
+    return { ok: false, error: "El servicio de Inventario Food no respondió correctamente (puede ser una falla temporal de Google). Intenta de nuevo en unos segundos." };
+  }
+}
+
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -75,11 +99,10 @@ export async function POST(request: NextRequest) {
     })),
   };
 
-  const resp = await fetch(`${config.url}?token=${encodeURIComponent(config.token)}`, {
+  const data = await fetchAppsScriptJson(`${config.url}?token=${encodeURIComponent(config.token)}`, {
     method: "POST",
     body: JSON.stringify(payload),
   });
-  const data = await resp.json();
   if (!data.ok) {
     return NextResponse.json({ error: data.error || "Error en Apps Script" }, { status: 502 });
   }
@@ -131,11 +154,10 @@ export async function PUT(request: NextRequest) {
     observaciones: body.observaciones || "",
   };
 
-  const resp = await fetch(`${config.url}?token=${encodeURIComponent(config.token)}&action=update`, {
+  const data = await fetchAppsScriptJson(`${config.url}?token=${encodeURIComponent(config.token)}&action=update`, {
     method: "POST",
     body: JSON.stringify(payload),
   });
-  const data = await resp.json();
   if (!data.ok) {
     return NextResponse.json({ error: data.error || "Error en Apps Script" }, { status: 502 });
   }
@@ -163,11 +185,10 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: "id es requerido" }, { status: 400 });
   }
 
-  const resp = await fetch(`${config.url}?token=${encodeURIComponent(config.token)}&action=delete`, {
+  const data = await fetchAppsScriptJson(`${config.url}?token=${encodeURIComponent(config.token)}&action=delete`, {
     method: "POST",
     body: JSON.stringify({ id: body.id }),
   });
-  const data = await resp.json();
   if (!data.ok) {
     return NextResponse.json({ error: data.error || "Error en Apps Script" }, { status: 502 });
   }
@@ -197,8 +218,7 @@ export async function GET(request: NextRequest) {
   url.searchParams.set("action", "list");
   if (tienda && tienda !== "Todas") url.searchParams.set("tienda", tienda);
 
-  const resp = await fetch(url.toString());
-  const data = await resp.json();
+  const data = await fetchAppsScriptJson(url.toString());
   if (!data.ok) {
     return NextResponse.json({ error: data.error || "Error en Apps Script" }, { status: 502 });
   }

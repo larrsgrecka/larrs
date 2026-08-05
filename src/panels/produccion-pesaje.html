@@ -246,13 +246,67 @@ function prellenarCorreccion(tienda, fecha, sabor) {
   document.getElementById('correccion-card').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
+let historialRegistros = [];
+
+// El Apps Script de Producción solo permite agregar filas nuevas, no editar
+// una ya existente — así que una fecha mal tipeada no se puede "corregir" en
+// el sitio. Se logra el mismo efecto con dos correcciones (ya soportadas):
+// restar todo lo de ese registro en la fecha vieja y volver a sumarlo en la
+// fecha correcta — el resultado neto en cualquier cálculo que sume kg por
+// fecha (semanas, recetas consumidas, merma) queda igual que si el dato
+// hubiera nacido bien fechado.
+async function corregirFechaRegistro(idx) {
+  if (!esAdmin) return;
+  const r = historialRegistros[idx];
+  if (!r) return;
+
+  const fechaNueva = prompt(
+    `Corregir fecha del pesaje de ${r.tienda} (${esc(r.nombre || r.email)}), actualmente ${r.fecha}.\nIngresa la fecha correcta (AAAA-MM-DD):`,
+    r.fecha
+  );
+  if (!fechaNueva) return;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fechaNueva)) { alert('Formato de fecha inválido. Usa AAAA-MM-DD.'); return; }
+  if (fechaNueva === r.fecha) { alert('La fecha nueva es igual a la actual.'); return; }
+  if (!confirm(`Esto resta todo lo registrado el ${r.fecha} y lo vuelve a sumar el ${fechaNueva} (${r.items.length} sabor(es)). ¿Continuar?`)) return;
+
+  try {
+    const [restarResp, sumarResp] = await Promise.all([
+      fetch('/api/produccion-pesaje', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fecha: r.fecha, tienda: r.tienda, esCorreccion: true,
+          observaciones: `[Corrección de fecha] movido a ${fechaNueva}`,
+          items: r.items.map(it => ({ sabor: it.sabor, cantidad: -it.kg })),
+        }),
+      }),
+      fetch('/api/produccion-pesaje', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fecha: fechaNueva, tienda: r.tienda, esCorreccion: true,
+          observaciones: `[Corrección de fecha] originalmente registrado el ${r.fecha}`,
+          items: r.items.map(it => ({ sabor: it.sabor, cantidad: it.kg })),
+        }),
+      }),
+    ]);
+    const [restarData, sumarData] = await Promise.all([restarResp.json(), sumarResp.json()]);
+    if (!restarData.ok || !sumarData.ok) throw new Error(restarData.error || sumarData.error || 'Error al corregir la fecha');
+
+    alert(`Fecha corregida: ${r.fecha} → ${fechaNueva}.`);
+    loadHistorial();
+    loadRecetasDisponibles();
+  } catch (e) {
+    alert('Error: ' + e.message);
+  }
+}
+
 function renderHistorial(registros) {
+  historialRegistros = registros;
   const body = document.getElementById('historial-body');
   if (!registros.length) {
     body.innerHTML = '<div class="empty">Todavía no hay pesajes registrados para esta tienda.</div>';
     return;
   }
-  body.innerHTML = registros.map((r) => {
+  body.innerHTML = registros.map((r, idx) => {
     const items = r.items.map((it) => {
       const kgTxt = it.kg.toLocaleString('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       const corregirAttr = esAdmin
@@ -262,9 +316,12 @@ function renderHistorial(registros) {
       return `<span${corregirAttr}>${esc(it.sabor)}: <strong>${kgTxt} kg</strong></span>`;
     }).join(' &nbsp;·&nbsp; ');
     const obs = r.observaciones ? `<div style="color:#94a3b8;font-size:11px;margin-top:2px">${esc(r.observaciones)}</div>` : '';
+    const corregirFechaBtn = esAdmin
+      ? ` <button type="button" onclick="corregirFechaRegistro(${idx})" style="border:none;background:none;color:#2563eb;font-size:11px;cursor:pointer;text-decoration:underline;padding:0">corregir fecha</button>`
+      : '';
     return `<div style="border-bottom:1px solid #f1f5f9;padding:10px 0">
       <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap">
-        <strong style="font-size:12px">${esc(fechaCorta(r.fecha))}</strong>
+        <strong style="font-size:12px">${esc(fechaCorta(r.fecha))}${corregirFechaBtn}</strong>
         <span style="color:#94a3b8;font-size:11px">${esc(r.nombre || r.email)}</span>
       </div>
       <div style="margin-top:4px;font-size:12px;color:#334155;line-height:1.6">${items}</div>

@@ -41,7 +41,27 @@ export async function GET(request: NextRequest) {
   // Única acción extra soportada: el panel también pide las ventas, que el
   // mismo Apps Script devuelve como JSON.
   const esVentas = request.nextUrl.searchParams.get("action") === "getSales";
-  const destino = `${url}?token=${encodeURIComponent(token)}${esVentas ? "&action=getSales" : ""}`;
+
+  // Se arma con URL en vez de concatenar: la variable de entorno puede venir
+  // con el token ya pegado (así estaba escrita en el panel) o con una barra
+  // final, y concatenar "?token=" daría una URL con dos querystrings que Google
+  // responde con 404.
+  let destino: string;
+  try {
+    const u = new URL(url.trim());
+    // Una barra final ("/exec/") hace que Google responda 404 con una página
+    // HTML — verificado —, y es un typo fácil de dejar en una variable de
+    // entorno, así que se normaliza acá en vez de depender de cómo esté escrita.
+    u.pathname = u.pathname.replace(/\/+$/, "");
+    u.searchParams.set("token", token);
+    if (esVentas) u.searchParams.set("action", "getSales");
+    destino = u.toString();
+  } catch {
+    return NextResponse.json(
+      { error: "La URL del Apps Script de producción está mal formada. Revisa PRODUCCION_APPS_SCRIPT_URL." },
+      { status: 500 }
+    );
+  }
 
   const claveCache = esVentas ? "ventas" : "csv";
   const guardado = cache.get(claveCache);
@@ -75,10 +95,23 @@ export async function GET(request: NextRequest) {
   // sin este guard el panel recibía HTML y reventaba al parsearlo.
   const pareceHtml = texto.trimStart().startsWith("<");
   if (!resp.ok || pareceHtml) {
-    console.error("[produccion/datos] respuesta inesperada:", resp.status, texto.slice(0, 200));
+    console.error(
+      "[produccion/datos] respuesta inesperada:", resp.status,
+      "| host:", (() => { try { return new URL(destino).host; } catch { return "?"; } })(),
+      "| ruta:", (() => { try { return new URL(destino).pathname; } catch { return "?"; } })(),
+      "|", texto.slice(0, 200)
+    );
     if (guardado) return respuesta(guardado.texto, esVentas);
     return NextResponse.json(
-      { error: `La planilla de producción no respondió con datos (HTTP ${resp.status}). Puede ser una falla temporal de Google: vuelve a intentar en un momento.` },
+      {
+        error:
+          resp.status === 404
+            // 404 no es una falla pasajera: es que esa implementación del Apps
+            // Script no existe. Casi siempre, la variable de entorno del
+            // servidor apunta a un deployment viejo del script.
+            ? "La planilla de producción respondió 404: la URL del Apps Script no existe. Hay que revisar PRODUCCION_APPS_SCRIPT_URL en el servidor (debe ser la URL /exec de la implementación activa)."
+            : `La planilla de producción no respondió con datos (HTTP ${resp.status}). Puede ser una falla temporal de Google: vuelve a intentar en un momento.`,
+      },
       { status: 502 }
     );
   }

@@ -3,8 +3,10 @@ import { createClient } from "@/utils/supabase/server";
 import { getProfile } from "@/utils/auth";
 import { getRegistrosPesaje } from "@/utils/produccion-historial";
 
-// Recorre el CSV histórico completo (no solo el header) — más lento, damos margen extra.
-export const maxDuration = 30;
+// Recorre el CSV histórico completo (no solo el header) y el Apps Script puede
+// arrancar en frío: con 30 s la función se cortaba y la plataforma devolvía una
+// página de error HTML que el panel no podía parsear como JSON.
+export const maxDuration = 60;
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient();

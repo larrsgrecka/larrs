@@ -89,7 +89,7 @@ tr:hover td { background: #f8fafc; }
       </table>
     </div>
 
-    <div id="otros-sabores-admin" style="display:none">
+    <div id="otros-sabores-buscador">
       <div class="section-title">Otros sabores</div>
       <div class="form-field full" style="margin-bottom:8px">
         <input type="text" id="f-buscar" placeholder="Buscar sabor fuera de vitrina (ej: chocolate, banana...)" oninput="renderSabores()">
@@ -106,8 +106,8 @@ tr:hover td { background: #f8fafc; }
       <div class="contador" id="contador">0 sabores con cantidad ingresada</div>
     </div>
 
-    <div class="form-field full" id="otros-sabores-comentario" style="margin-bottom:12px;display:none">
-      <label>Otros sabores (si pesaste algo fuera de la vitrina, descríbelo aquí: nombre y kg)</label>
+    <div class="form-field full" id="otros-sabores-comentario" style="margin-bottom:12px">
+      <label>¿Pesaste algo que no aparece en el buscador? Descríbelo acá: nombre y kg</label>
       <textarea id="f-otros-sabores-texto" placeholder="Ej: Pistacho 2.5 kg, Frutilla 1 kg"></textarea>
     </div>
 
@@ -169,14 +169,48 @@ let sabores = [];
 let vitrinaSabores = []; // sabores de la vitrina actual de la tienda activa
 let cantidades = {}; // sabor -> valor string ingresado (se conserva al filtrar)
 let costosSabores = {}; // sabor -> {codigo, costoKg} (del Recetario, si hay match)
+// Sabores que se ofrecen pero no tienen columna en la planilla de producción:
+// se pueden pesar en pantalla y después no hay dónde guardarlos.
+let saboresSinColumna = new Set();
 
 function codigoTxt(s) {
   const c = costosSabores[s];
   return c ? `<span style="color:#94a3b8;font-size:10px">[${esc(c.codigo)}]</span>` : '';
 }
 
+function avisoSinColumna(s) {
+  return saboresSinColumna.has(s)
+    ? `<span title="Este nombre no existe en la planilla de producción: no se puede guardar hasta corregirlo en Catálogo" style="color:#b45309;font-size:10px;font-weight:700">⚠ sin columna</span>`
+    : '';
+}
+
 function tiendaActiva() {
   return tiendaFija || document.getElementById('tienda-select').value;
+}
+
+// Las respuestas de estas rutas no siempre son JSON: si la función del servidor
+// se corta por tiempo llega una página de error, y si la sesión venció llega el
+// HTML del login. Sin este guard el panel mostraba "Unexpected token '<'", que
+// no le dice nada a nadie.
+async function fetchJson(url, opciones) {
+  let resp;
+  try {
+    resp = await fetch(url, opciones);
+  } catch {
+    throw new Error('sin conexión con el servidor. Revisa la señal y vuelve a intentar.');
+  }
+  if (resp.redirected && resp.url.includes('/login')) {
+    throw new Error('tu sesión expiró. Recarga la página para volver a entrar.');
+  }
+  const texto = await resp.text();
+  try {
+    return JSON.parse(texto);
+  } catch {
+    if (texto.trim().startsWith('<')) {
+      throw new Error(`el servidor respondió ${resp.status} sin datos (si tardó mucho, vuelve a intentar en un momento).`);
+    }
+    throw new Error(`respuesta inesperada del servidor (${resp.status}).`);
+  }
 }
 
 function bindCantInputs(container) {
@@ -223,8 +257,7 @@ async function loadHistorial() {
   card.style.display = 'block';
   body.innerHTML = '<div class="empty">Cargando...</div>';
   try {
-    const resp = await fetch('/api/produccion-pesaje/historial?tienda=' + encodeURIComponent(tienda));
-    const data = await resp.json();
+    const data = await fetchJson('/api/produccion-pesaje/historial?tienda=' + encodeURIComponent(tienda));
     if (!data.ok) throw new Error(data.error || 'Error al cargar historial');
     renderHistorial(data.registros || []);
   } catch (e) {
@@ -336,8 +369,7 @@ async function loadRecetasDisponibles() {
   const body = document.getElementById('recetas-disp-body');
   if (!tienda) { card.style.display = 'none'; return; }
   try {
-    const resp = await fetch('/api/produccion-pesaje/recetas-disponibles?tienda=' + encodeURIComponent(tienda));
-    const data = await resp.json();
+    const data = await fetchJson('/api/produccion-pesaje/recetas-disponibles?tienda=' + encodeURIComponent(tienda));
     if (!data.ok) throw new Error(data.error || 'Error al cargar recetas disponibles');
     const items = data.items || [];
     if (!items.length) { card.style.display = 'none'; return; }
@@ -361,8 +393,7 @@ async function loadVitrina() {
   vitrinaSabores = [];
   if (!tienda) { renderVitrina(); renderSabores(); return; }
   try {
-    const resp = await fetch('/api/vitrina?tienda=' + encodeURIComponent(tienda));
-    const data = await resp.json();
+    const data = await fetchJson('/api/vitrina?tienda=' + encodeURIComponent(tienda));
     if (data.ok) vitrinaSabores = (data.items || []).map(it => it.sabor);
   } catch (e) { /* si falla, seguimos solo con el buscador general */ }
   renderVitrina();
@@ -384,7 +415,7 @@ function renderVitrina() {
 
   body.innerHTML = vitrinaSabores.map(s => `
     <tr>
-      <td style="font-size:12px">${esc(s)} ${codigoTxt(s)}</td>
+      <td style="font-size:12px">${esc(s)} ${codigoTxt(s)} ${avisoSinColumna(s)}</td>
       <td class="r"><input type="number" class="cant-input" data-sabor="${esc(s)}" min="0" step="0.01" placeholder="—" value="${cantidades[s] || ''}"></td>
     </tr>
   `).join('');
@@ -394,11 +425,11 @@ function renderVitrina() {
 async function loadSabores() {
   const body = document.getElementById('sabores-body');
   try {
-    const resp = await fetch('/api/produccion-pesaje/catalogo');
-    const data = await resp.json();
+    const data = await fetchJson('/api/produccion-pesaje/catalogo');
     if (!data.ok) throw new Error(data.error || 'Error al cargar sabores');
     sabores = data.sabores || [];
     costosSabores = data.costos || {};
+    saboresSinColumna = new Set(data.sinColumna || []);
     renderVitrina();
     renderSabores();
     if (esAdmin) {
@@ -444,7 +475,7 @@ async function submitCorreccion() {
 
   btn.disabled = true;
   try {
-    const resp = await fetch('/api/produccion-pesaje', {
+    const data = await fetchJson('/api/produccion-pesaje', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -454,7 +485,6 @@ async function submitCorreccion() {
         items: [{ sabor, cantidad }],
       }),
     });
-    const data = await resp.json();
     if (!data.ok) throw new Error(data.error || 'Error al registrar corrección');
 
     msg.className = 'msg ok';
@@ -483,7 +513,7 @@ function renderSabores() {
 
   body.innerHTML = filtrados.map(s => `
     <tr>
-      <td style="font-size:12px">${esc(s)} ${codigoTxt(s)}</td>
+      <td style="font-size:12px">${esc(s)} ${codigoTxt(s)} ${avisoSinColumna(s)}</td>
       <td class="r"><input type="number" class="cant-input" data-sabor="${esc(s)}" min="0" step="0.01" placeholder="—" value="${cantidades[s] || ''}"></td>
     </tr>
   `).join('');
@@ -515,13 +545,13 @@ async function submitPesaje() {
     .map(([sabor, valor]) => ({ sabor, cantidad: parseFloat(valor) }))
     .filter(it => it.cantidad > 0);
 
-  const otrosSaboresTexto = !window._LARRS_IS_ADMIN
-    ? document.getElementById('f-otros-sabores-texto').value.trim()
-    : '';
+  // El texto libre queda para lo que no está en el catálogo; cualquier rol
+  // puede usarlo y se guarda como prefijo de las observaciones.
+  const otrosSaboresTexto = document.getElementById('f-otros-sabores-texto').value.trim();
 
   if (items.length === 0) {
     msg.className = 'msg err';
-    msg.textContent = 'Ingresa el peso de al menos un sabor de la vitrina.';
+    msg.textContent = 'Ingresa el peso de al menos un sabor, de la vitrina o del buscador.';
     return;
   }
   const nombreOperador = window._LARRS_IS_OPERADOR
@@ -545,17 +575,33 @@ async function submitPesaje() {
 
   btn.disabled = true;
   try {
-    const resp = await fetch('/api/produccion-pesaje', {
+    const data = await fetchJson('/api/produccion-pesaje', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
-    const data = await resp.json();
     if (!data.ok) throw new Error(data.error || 'Error al registrar');
 
-    msg.className = 'msg ok';
-    msg.textContent = `Pesaje guardado: ${data.count} sabor(es).`;
-    cantidades = {};
+    // Un sabor que no existe como columna en la planilla no se guarda: se avisa
+    // y se le conserva la cantidad tipeada para no perder el dato.
+    const omitidos = data.omitidos || [];
+    if (omitidos.length) {
+      const detalle = omitidos.map(o => o.sugerencia
+        ? `"${esc(o.sabor)}" (¿es "${esc(o.sugerencia)}"?)`
+        : `"${esc(o.sabor)}"`).join(', ');
+      msg.className = 'msg err';
+      msg.innerHTML = `Se guardaron ${data.count} sabor(es), pero ${omitidos.length === 1 ? 'quedó' : 'quedaron'} fuera `
+        + `${detalle}: ese nombre no existe en la planilla de producción. Avisa para corregirlo en Catálogo; la cantidad quedó anotada acá.`;
+      const nuevasCantidades = {};
+      for (const o of omitidos) {
+        if (cantidades[o.sabor] != null) nuevasCantidades[o.sabor] = cantidades[o.sabor];
+      }
+      cantidades = nuevasCantidades;
+    } else {
+      msg.className = 'msg ok';
+      msg.textContent = `Pesaje guardado: ${data.count} sabor(es).`;
+      cantidades = {};
+    }
     renderVitrina();
     renderSabores();
     actualizarContador();
@@ -577,11 +623,6 @@ loadHistorial();
 document.getElementById('last-update').textContent = `Cargado: ${new Date().toLocaleString('es-CL')}`;
 if (window._LARRS_IS_OPERADOR) {
   document.getElementById('campo-nombre-operador').style.display = '';
-}
-if (window._LARRS_IS_ADMIN) {
-  document.getElementById('otros-sabores-admin').style.display = '';
-} else {
-  document.getElementById('otros-sabores-comentario').style.display = '';
 }
 </script>
 </body>

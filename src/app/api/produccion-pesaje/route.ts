@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { getProfile } from "@/utils/auth";
+import { resolverSaboresEnPlanilla } from "@/utils/sabores-produccion";
+
+// El POST resuelve los nombres contra el CSV de producción antes de escribir
+// (puede tardar varios segundos si el Apps Script arranca en frío).
+export const maxDuration = 60;
 
 type Item = { sabor: string; cantidad: number };
 
@@ -59,13 +64,36 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "nombre_operador es requerido para la cuenta compartida de tienda" }, { status: 400 });
   }
 
+  // El Apps Script escribe buscando la columna del sabor por nombre exacto y,
+  // si un solo nombre no existe, rechaza el pesaje entero. Los nombres pueden
+  // venir de la vitrina o de un sabor agregado a mano en /catalogo que no tiene
+  // columna en la planilla, así que acá se traducen: los que difieren solo en
+  // mayúsculas/tildes se corrigen solos y los que no existen se dejan fuera con
+  // aviso, para no perder el resto del pesaje.
+  const { canonico, faltantes } = await resolverSaboresEnPlanilla(
+    validItems.map((it) => it.sabor)
+  );
+  const itemsEnviables = validItems
+    .filter((it) => canonico[it.sabor])
+    .map((it) => ({ sabor: canonico[it.sabor], cantidad: Number(it.cantidad) }));
+
+  if (itemsEnviables.length === 0) {
+    const detalle = faltantes
+      .map((f) => (f.sugerencia ? `"${f.sabor}" (¿es "${f.sugerencia}"?)` : `"${f.sabor}"`))
+      .join(", ");
+    return NextResponse.json(
+      { error: `Ningún sabor del pesaje existe en la planilla de producción: ${detalle}. Hay que corregir el nombre en Catálogo.` },
+      { status: 400 }
+    );
+  }
+
   const payload = {
     fecha: body.fecha,
     tienda,
     observaciones,
     reportado_por_email: user.email || "",
     reportado_por_nombre: nombreOperador || profile.name || user.email || "",
-    items: validItems.map((it) => ({ sabor: it.sabor, cantidad: Number(it.cantidad) })),
+    items: itemsEnviables,
   };
 
   const resp = await fetch(`${config.url}?token=${encodeURIComponent(config.token)}`, {
@@ -77,5 +105,5 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: data.error || "Error en Apps Script" }, { status: 502 });
   }
 
-  return NextResponse.json(data);
+  return NextResponse.json({ ...data, omitidos: faltantes });
 }

@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { getProfile } from "@/utils/auth";
+import { resolverSaboresEnPlanilla } from "@/utils/sabores-produccion";
+
+// Validar un sabor implica leer el CSV de producción, que puede tardar.
+export const maxDuration = 30;
 
 function appsScriptConfig() {
   const url = process.env.CATALOGO_APPS_SCRIPT_URL;
@@ -67,6 +71,25 @@ export async function POST(request: NextRequest) {
   }
   if (!body.nombre) {
     return NextResponse.json({ error: "nombre es requerido" }, { status: 400 });
+  }
+
+  // Un sabor solo se puede pesar si existe como columna en la planilla de
+  // producción: el Apps Script busca la columna por nombre exacto. Incluir uno
+  // que no existe lo hace aparecer en Vitrina y Pesaje pero imposible de
+  // guardar, y de paso hacía fallar el pesaje completo (caso real: "Banana
+  // split vet. Striacciatella", con el nombre mal escrito).
+  if (body.catalogo === "sabores" && body.tipo === "incluir") {
+    const { canonico, faltantes } = await resolverSaboresEnPlanilla([String(body.nombre)]);
+    if (faltantes.length) {
+      const f = faltantes[0];
+      const pista = f.sugerencia ? ` ¿Quisiste decir "${f.sugerencia}"?` : "";
+      return NextResponse.json(
+        { error: `"${f.sabor}" no existe como columna en la planilla de producción, así que no se podría pesar.${pista}` },
+        { status: 400 }
+      );
+    }
+    // Guarda el nombre tal como está en la planilla, no como lo tipearon.
+    body.nombre = canonico[String(body.nombre)];
   }
   if (body.catalogo === "food" && body.tipo === "incluir" && !body.categoria) {
     return NextResponse.json({ error: "categoria es requerida para agregar un producto food" }, { status: 400 });

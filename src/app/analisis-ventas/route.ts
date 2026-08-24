@@ -31,6 +31,11 @@ window._LARRS_IS_ADMIN=${JSON.stringify(isAdmin)};
   html = html.replace("<body>", `<body>\n${inject}`);
 
   return new NextResponse(html, {
-    headers: { "Content-Type": "text/html; charset=utf-8" },
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      // Sin esto el navegador puede seguir mostrando el panel de un
+      // deploy anterior: el HTML cambia en cada release.
+      "Cache-Control": "no-store",
+    },
   });
 }

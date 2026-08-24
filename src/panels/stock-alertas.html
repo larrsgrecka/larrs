@@ -36,6 +36,36 @@ tr:hover td { background: #f8fafc; }
 .estado.sin_datos_venta { background: #f1f5f9; color: #64748b; }
 .scroll-body { max-height: 600px; overflow-y: auto; }
 .last { font-size: 11px; color: #b0bac8; text-align: center; margin-top: 6px; }
+td.falta { font-weight: 700; color: #b91c1c; }
+.btn { font-size: 12px; font-weight: 700; border: 1px solid #e2e8f0; background: #f8fafc; color: #334155; border-radius: 6px; padding: 7px 12px; cursor: pointer; }
+.btn:hover { background: #f1f5f9; }
+.btn:disabled { opacity: .55; cursor: default; }
+.btn-primary { background: #1e293b; border-color: #1e293b; color: #fff; }
+.btn-primary:hover { background: #334155; }
+.acciones { margin-left: auto; display: flex; gap: 8px; }
+
+/* Impresión / Guardar como PDF: sale la tabla completa tal como está filtrada,
+   sin el recorte con scroll ni los controles que no sirven en papel. */
+@media print {
+  @page { size: A4 landscape; margin: 10mm; }
+  body { background: #fff; padding: 0; font-size: 11px; }
+  .container { max-width: none; }
+  .header { background: #fff !important; color: #1e293b; border: 0; padding: 0 0 8px; border-radius: 0; }
+  .header .title { color: #1e293b; font-size: 16px; }
+  .header .subtitle { color: #475569; }
+  .logo-img { height: 30px; filter: invert(1); }
+  .toolbar, .note { display: none !important; }
+  /* En pantalla la toolbar ya dice el filtro; en papel hay que escribirlo. */
+  #impresion-hint { display: block !important; background: #fff; border: 0; border-bottom: 1px solid #cbd5e1; color: #475569; padding: 0 0 6px; margin-bottom: 10px; }
+  .card { border: 0; }
+  .scroll-body { max-height: none; overflow: visible; }
+  .kpis { grid-template-columns: repeat(3, 1fr); }
+  .kpi { border: 1px solid #cbd5e1; }
+  th { background: #f1f5f9 !important; position: static; }
+  tr { break-inside: avoid; }
+  thead { display: table-header-group; }
+  .estado { border: 1px solid #cbd5e1; }
+}
 </style>
 </head>
 <body>
@@ -61,7 +91,13 @@ tr:hover td { background: #f8fafc; }
       <option value="Trapenses">Trapenses</option>
     </select>
     <label class="check-lbl"><input type="checkbox" id="f-solo-alertas" onchange="render()" checked> Solo mostrar bajo el mínimo</label>
+    <div class="acciones">
+      <button class="btn btn-primary" id="btn-excel" onclick="descargarExcel()"
+        title="Baja lo que está filtrado: una tienda, o todas con una hoja por tienda">⬇ Excel</button>
+      <button class="btn" onclick="window.print()" title="Imprime o guarda como PDF la tabla tal como está filtrada">🖨 PDF</button>
+    </div>
   </div>
+  <div class="note" id="impresion-hint" style="display:none"></div>
 
   <div class="card">
     <div class="scroll-body">
@@ -70,10 +106,10 @@ tr:hover td { background: #f8fafc; }
           <tr>
             <th>Tienda</th><th>Categoría</th><th>Producto</th>
             <th class="r">Stock actual</th><th class="r">Venta sem. prom.</th><th class="r">Mínimo sugerido</th>
-            <th>Estado</th><th>Último conteo</th>
+            <th class="r">Falta</th><th>Estado</th><th>Último conteo</th>
           </tr>
         </thead>
-        <tbody id="tbody"><tr><td colspan="8" class="empty">Cargando...</td></tr></tbody>
+        <tbody id="tbody"><tr><td colspan="9" class="empty">Cargando...</td></tr></tbody>
       </table>
     </div>
   </div>
@@ -93,6 +129,12 @@ function num(v, dec) {
   return Number(v || 0).toLocaleString('es-CL', { minimumFractionDigits: dec, maximumFractionDigits: dec });
 }
 
+// Cuánto hay que reponer para llegar al mínimo sugerido.
+function falta(it) {
+  if (!it.mesesConDatos) return 0;
+  return Math.max(0, (it.stockMinimoSugerido || 0) - (it.stockActual || 0));
+}
+
 function etiquetaEstado(estado) {
   if (estado === 'bajo_minimo') return 'Bajo mínimo';
   if (estado === 'ok') return 'OK';
@@ -104,9 +146,30 @@ function renderKpis() {
   const tiendas = ['Costanera', 'Dominicos', 'Trapenses'];
   const kpis = document.getElementById('kpis');
   kpis.innerHTML = tiendas.map(t => {
-    const n = items.filter(it => it.tienda === t && it.estado === 'bajo_minimo').length;
-    return `<div class="kpi"><div class="n ${n > 0 ? 'alerta' : ''}">${n}</div><div class="lbl">${esc(t)} bajo mínimo</div></div>`;
+    const bajo = items.filter(it => it.tienda === t && it.estado === 'bajo_minimo');
+    const unidades = bajo.reduce((s, it) => s + falta(it), 0);
+    const detalle = bajo.length
+      ? `<div class="lbl" style="text-transform:none;letter-spacing:0">faltan ${num(unidades, 0)} unidades para el mínimo</div>`
+      : '';
+    return `<div class="kpi"><div class="n ${bajo.length > 0 ? 'alerta' : ''}">${bajo.length}</div>`
+      + `<div class="lbl">${esc(t)} bajo mínimo</div>${detalle}</div>`;
   }).join('');
+}
+
+// El Excel se arma en el servidor con el mismo cálculo que la tabla y respeta
+// los filtros de pantalla: con una tienda elegida trae solo esa hoja (para
+// enviársela a esa tienda), y con "Todas" trae el total más una hoja por tienda.
+function descargarExcel() {
+  const btn = document.getElementById('btn-excel');
+  const params = new URLSearchParams({
+    tienda: document.getElementById('f-tienda').value,
+    solo: document.getElementById('f-solo-alertas').checked ? '1' : '0',
+  });
+  btn.disabled = true;
+  btn.textContent = 'Generando...';
+  // El archivo llega como descarga (Content-Disposition), la página no navega.
+  window.location.href = '/api/stock-alertas/excel?' + params.toString();
+  setTimeout(() => { btn.disabled = false; btn.textContent = '⬇ Excel'; }, 4000);
 }
 
 function render() {
@@ -118,8 +181,12 @@ function render() {
   if (tienda !== 'Todas') filtrados = filtrados.filter(it => it.tienda === tienda);
   if (soloAlertas) filtrados = filtrados.filter(it => it.estado === 'bajo_minimo');
 
+  document.getElementById('impresion-hint').textContent =
+    `Stock y alertas · Tienda: ${tienda} · ${soloAlertas ? 'Solo productos bajo el mínimo' : 'Todos los productos'}`
+    + ` · ${filtrados.length} producto${filtrados.length === 1 ? '' : 's'} · ${new Date().toLocaleString('es-CL')}`;
+
   if (!filtrados.length) {
-    tbody.innerHTML = `<tr><td colspan="8" class="empty">${soloAlertas ? 'Ningún producto está bajo el mínimo sugerido ahora mismo.' : 'Sin datos.'}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" class="empty">${soloAlertas ? 'Ningún producto está bajo el mínimo sugerido ahora mismo.' : 'Sin datos.'}</td></tr>`;
     return;
   }
 
@@ -131,6 +198,7 @@ function render() {
       <td class="r">${num(it.stockActual, 0)}</td>
       <td class="r">${it.mesesConDatos ? num(it.ventaSemanalPromedio, 1) : '—'}</td>
       <td class="r">${it.mesesConDatos ? num(it.stockMinimoSugerido, 1) : '—'}</td>
+      <td class="r ${falta(it) > 0 ? 'falta' : ''}">${it.mesesConDatos ? num(falta(it), 1) : '—'}</td>
       <td><span class="estado ${esc(it.estado)}">${etiquetaEstado(it.estado)}</span></td>
       <td style="font-size:12px;color:#94a3b8">${esc(it.fechaUltimoConteo) || 'Nunca'}</td>
     </tr>
@@ -139,14 +207,31 @@ function render() {
 
 async function cargar() {
   try {
-    const resp = await fetch('/api/stock-alertas');
-    const data = await resp.json();
+    // El cálculo lee las ventas y el Apps Script de Inventario Food: si tarda
+    // demasiado la respuesta no es JSON, y hay que decirlo de forma entendible
+    // en vez de mostrar un "Unexpected token".
+    let resp;
+    try {
+      resp = await fetch('/api/stock-alertas');
+    } catch {
+      throw new Error('No hay conexión con el servidor. Revisa la red y vuelve a intentar.');
+    }
+    if (resp.redirected && resp.url.includes('/login')) {
+      throw new Error('Tu sesión expiró. Recarga la página para volver a entrar.');
+    }
+    const texto = await resp.text();
+    let data;
+    try {
+      data = JSON.parse(texto);
+    } catch {
+      throw new Error(`el servidor respondió ${resp.status} sin datos (el cálculo puede haber tardado demasiado). Vuelve a intentar en un momento.`);
+    }
     if (!data.ok) throw new Error(data.error || 'Error al cargar');
     items = data.items || [];
     renderKpis();
     render();
   } catch (e) {
-    document.getElementById('tbody').innerHTML = `<tr><td colspan="8" class="empty">Error: ${esc(e.message)}</td></tr>`;
+    document.getElementById('tbody').innerHTML = `<tr><td colspan="9" class="empty">Error: ${esc(e.message)}</td></tr>`;
   }
   document.getElementById('last-update').textContent = `Actualizado: ${new Date().toLocaleString('es-CL')}`;
 }

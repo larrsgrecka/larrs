@@ -4,9 +4,9 @@ import { getProfile } from "@/utils/auth";
 import { getPreciosPromedioPorProducto } from "@/utils/catalogo-productos";
 import { getStockActualPorClave } from "@/utils/inventario-food-stock";
 
-// Pagina ~12k filas de ventas en Supabase (vía getPreciosPromedioPorProducto)
-// — puede tardar varios segundos, damos margen extra.
-export const maxDuration = 30;
+// Mismo cálculo pesado que /api/stock-alertas (ventas + conteos): 30s no alcanza
+// cuando el Apps Script arranca en frío.
+export const maxDuration = 60;
 
 const TIENDAS = ["Costanera", "Dominicos", "Trapenses"];
 

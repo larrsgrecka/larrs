@@ -3,9 +3,10 @@ import { createClient } from "@/utils/supabase/server";
 import { getProfile } from "@/utils/auth";
 import { getStockMinimos } from "@/utils/stock-minimos";
 
-// Pagina ~12k filas de ventas en Supabase (vía getVentasPorTiendaProductoMes)
-// — puede tardar varios segundos, damos margen extra.
-export const maxDuration = 30;
+// Pagina ~13k filas de ventas en Supabase y lee el Apps Script de Inventario
+// Food (hasta ~15s en frío): con 30s la función se cortaba y la plataforma
+// devolvía un error en texto plano que el panel no podía parsear como JSON.
+export const maxDuration = 60;
 
 export async function GET() {
   const supabase = await createClient();

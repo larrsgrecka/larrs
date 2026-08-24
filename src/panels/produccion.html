@@ -118,8 +118,10 @@ td.r { text-align: right; }
 
 <script>
 // ========== CONFIG ==========
-// 👇 Pega aquí la URL de tu Google Apps Script (larrs_apps_script.gs)
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzO2QtBbjXbzbVF0xIPzAn5Uh5P6amNiDE4sCgSolkG0wdynTfQKjxD99tzJ5thB9Zh/exec?token=larrs-produccion-2026';
+// Los datos se piden a nuestra propia ruta, no a script.google.com: así el
+// token no viaja al navegador y la carga no depende de que la red del usuario
+// alcance a Google (un bloqueador o un proxy daban "Failed to fetch" sin más).
+const DATOS_URL = '/api/produccion/datos';
 const _solo = window._LARRS_TIENDA || null;
 const TIENDAS = _solo ? new Set([_solo]) : new Set(['Costanera', 'Dominicos', 'Trapenses']);
 const T_ORDEN = _solo ? [_solo] : ['Costanera', 'Dominicos', 'Trapenses'];
@@ -2032,9 +2034,15 @@ async function loadSales(retries) {
   { const c = cont(); if (c && !(salesData && salesData.length)) c.innerHTML = spinner; }
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      const r = await fetch(APPS_SCRIPT_URL + '&action=getSales');
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      const parsed = JSON.parse(await r.text());
+      const r = await fetch(DATOS_URL + '?action=getSales');
+      const texto = await r.text();
+      if (!r.ok) {
+        // La ruta explica la falla en JSON; si no, queda el código HTTP.
+        let detalle = '';
+        try { detalle = JSON.parse(texto).error || ''; } catch {}
+        throw new Error(detalle || 'HTTP ' + r.status);
+      }
+      const parsed = JSON.parse(texto);
       if (Array.isArray(parsed) && parsed.length > 0) {
         salesData = parsed;
         const c = cont();
@@ -2060,16 +2068,25 @@ async function loadData() {
   document.getElementById('toolbar').style.display = 'none';
 
   try {
-    if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL === 'PEGAR_URL_AQUI') {
-      throw new Error('Configura APPS_SCRIPT_URL en el código con la URL de tu Google Apps Script.');
+    let response;
+    try {
+      response = await fetch(DATOS_URL);
+    } catch {
+      throw new Error('No hay conexión con el servidor. Revisa la red y vuelve a intentar.');
+    }
+    if (response.redirected && response.url.includes('/login')) {
+      throw new Error('Tu sesión expiró. Recarga la página para volver a entrar.');
+    }
+    const csvText = await response.text();
+    if (!response.ok) {
+      // La ruta explica la falla en JSON; si ni eso llega, queda el código HTTP.
+      let detalle = '';
+      try { detalle = JSON.parse(csvText).error || ''; } catch {}
+      throw new Error(detalle || 'Error al conectar con la planilla (HTTP ' + response.status + ')');
     }
 
-    const response = await fetch(APPS_SCRIPT_URL);
-    if (!response.ok) throw new Error('Error al conectar con la planilla (HTTP ' + response.status + ')');
-    const csvText = await response.text();
-
     if (!csvText || !csvText.includes(',')) {
-      throw new Error('No se pudo obtener datos de la planilla. Verifica el token y la URL.');
+      throw new Error('La planilla no devolvió datos. Vuelve a intentar en un momento.');
     }
 
     cachedCSV = csvText;

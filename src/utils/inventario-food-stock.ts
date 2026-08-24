@@ -22,10 +22,55 @@ export type StockRow = {
   creado_en?: string;
 };
 
-// clave "tienda||categoria||producto||ubicacion" -> fila más reciente. Barra
-// y Bodega son conteos independientes del mismo producto, así que cada
-// combinación tiene su propia "última fila" — quien necesite el total de un
-// producto debe sumar todas las claves que compartan tienda+categoria+producto.
+function tsFila(r: StockRow): number {
+  return new Date(r.creado_en || r.fecha || 0).getTime();
+}
+
+// Deduplica a la fila más reciente por tienda+categoria+producto+ubicacion.
+//
+// Barra y Bodega son conteos independientes del mismo producto, así que cada
+// combinación tiene su propia "última fila" y quien necesite el total de un
+// producto suma todas las claves que compartan tienda+categoria+producto.
+//
+// Los conteos hechos antes de que existiera la ubicación no la tienen y
+// representan el total del producto (barra y bodega juntas). Sumarlos junto a
+// un Barra/Bodega posterior contaría dos veces el mismo stock, así que un
+// conteo total sin ubicación y los conteos por ubicación se invalidan entre
+// sí: para cada producto vale solo lo registrado después del último conteo
+// total sin ubicación, y si ese total es lo más reciente, vale solo él.
+export function dedupePorClaveUbicacion<T extends StockRow>(rows: T[]): Record<string, T> {
+  const ordenadas = [...rows].sort((a, b) => tsFila(b) - tsFila(a));
+  const claveProducto = (r: StockRow) => `${r.tienda}||${r.categoria}||${r.producto}`;
+
+  const porClave: Record<string, T> = {};
+  for (const r of ordenadas) {
+    const clave = `${claveProducto(r)}||${r.ubicacion || ""}`;
+    if (!(clave in porClave)) porClave[clave] = r;
+  }
+
+  // Por producto: cuándo fue el último conteo total (sin ubicación) y cuándo el
+  // último por ubicación.
+  const ultimoTotal: Record<string, number> = {};
+  const ultimoPorUbicacion: Record<string, number> = {};
+  for (const r of Object.values(porClave)) {
+    const p = claveProducto(r);
+    const destino = r.ubicacion ? ultimoPorUbicacion : ultimoTotal;
+    destino[p] = Math.max(destino[p] ?? -Infinity, tsFila(r));
+  }
+
+  for (const [clave, r] of Object.entries(porClave)) {
+    const p = claveProducto(r);
+    const total = ultimoTotal[p] ?? -Infinity;
+    const porUbic = ultimoPorUbicacion[p] ?? -Infinity;
+    // El conteo total pierde si hay uno por ubicación más nuevo; los conteos por
+    // ubicación anteriores a un total más nuevo ya están incluidos en ese total.
+    const obsoleto = r.ubicacion ? tsFila(r) < total : tsFila(r) < porUbic;
+    if (obsoleto) delete porClave[clave];
+  }
+
+  return porClave;
+}
+
 export async function getStockActualPorClave(): Promise<Record<string, StockRow>> {
   const config = appsScriptConfig();
   if (!config) return {};
@@ -39,17 +84,5 @@ export async function getStockActualPorClave(): Promise<Record<string, StockRow>
   }
   if (!data.ok) return {};
 
-  const rows = data.items ?? [];
-  rows.sort((a, b) => {
-    const da = new Date(a.creado_en || a.fecha || 0).getTime();
-    const db = new Date(b.creado_en || b.fecha || 0).getTime();
-    return db - da;
-  });
-
-  const porClave: Record<string, StockRow> = {};
-  for (const r of rows) {
-    const clave = `${r.tienda}||${r.categoria}||${r.producto}||${r.ubicacion || ""}`;
-    if (!(clave in porClave)) porClave[clave] = r;
-  }
-  return porClave;
+  return dedupePorClaveUbicacion(data.items ?? []);
 }

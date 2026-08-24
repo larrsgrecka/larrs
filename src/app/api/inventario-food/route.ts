@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { getProfile } from "@/utils/auth";
+import { dedupePorClaveUbicacion, type StockRow } from "@/utils/inventario-food-stock";
 
 type Item = { producto: string; cantidad: number; unidad?: string; ubicacion?: string };
+
+// La fila tal como la devuelve el Apps Script: los campos que usa el dedupe más
+// el resto (id, observaciones, quién reportó) que el panel necesita mostrar.
+type FilaInventario = StockRow & Record<string, unknown>;
 
 function appsScriptConfig() {
   const url = process.env.INVENTARIO_FOOD_APPS_SCRIPT_URL;
@@ -225,14 +230,19 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: data.error || "Error en Apps Script" }, { status: 502 });
   }
 
-  // Nos quedamos con el conteo más reciente por tienda+categoria+producto+
-  // ubicacion (mismo criterio que /api/pedidos-historial: la fila más nueva
-  // primero) — Barra y Bodega son conteos independientes del mismo producto.
-  const porClave: Record<string, unknown> = {};
-  for (const it of (data.items ?? []) as Record<string, unknown>[]) {
-    const clave = `${it.tienda}||${it.categoria}||${it.producto}||${it.ubicacion || ""}`;
-    if (!(clave in porClave)) porClave[clave] = it;
-  }
+  // Mismo criterio de "conteo más reciente por producto y ubicación" que usan
+  // los cuadros de valor de stock y stock mínimo, para no desalinearse.
+  const filas = (data.items ?? []) as unknown as FilaInventario[];
+  const porClave = dedupePorClaveUbicacion(filas);
 
-  return NextResponse.json({ ok: true, items: Object.values(porClave) });
+  // Si ninguna fila trae ubicación, el Apps Script desplegado todavía no guarda
+  // la columna: barra y bodega del mismo producto se pisan entre sí y el panel
+  // tiene que avisarlo en vez de mostrar un total incompleto como si fuera bueno.
+  const ubicacionEnPlanilla = filas.some((it) => !!it.ubicacion);
+
+  return NextResponse.json({
+    ok: true,
+    items: Object.values(porClave),
+    ubicacionEnPlanilla,
+  });
 }

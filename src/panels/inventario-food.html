@@ -26,6 +26,30 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .form-field textarea { resize:vertical; min-height:44px; }
 .btn { background: #2563eb; color: #fff; border: none; border-radius: 6px; padding: 9px 16px; font-size: 13px; font-weight: 600; cursor: pointer; }
 .btn:disabled { opacity:.5; cursor:not-allowed; }
+
+/* Planilla para contar en papel: vive oculta y solo existe al imprimir. */
+#planilla-print { display: none; }
+@media print {
+  @page { size: A4 portrait; margin: 12mm; }
+  body { background: #fff; padding: 0; }
+  .container { display: none !important; }
+  #planilla-print { display: block; }
+  .p-head { margin-bottom: 10px; }
+  .p-titulo { font-size: 15px; font-weight: 800; }
+  .p-sub { font-size: 11px; color: #334155; margin-top: 3px; }
+  .p-cat { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em;
+           margin: 12px 0 4px; break-after: avoid; }
+  .p-tabla { width: 100%; border-collapse: collapse; break-inside: auto; }
+  .p-tabla thead { display: table-header-group; }
+  .p-tabla th { font-size: 9px; text-transform: uppercase; letter-spacing: .04em; text-align: left;
+                border-bottom: 1.5px solid #334155; padding: 3px 5px; }
+  .p-tabla td { font-size: 10.5px; padding: 0 5px; height: 22px; border-bottom: 1px solid #cbd5e1; }
+  .p-tabla tr { break-inside: avoid; }
+  .p-cod { color: #64748b; font-size: 8.5px; }
+  .p-un { width: 52px; color: #475569; font-size: 9px; }
+  /* Casillas para escribir a mano */
+  .p-box { width: 68px; border-left: 1px solid #cbd5e1; }
+}
 .msg { font-size:12px; border-radius:8px; padding:9px 13px; margin-top:10px; display:none; }
 .msg.ok { display:block; background:#f0fdf4; border:1px solid #bbf7d0; color:#15803d; }
 .msg.err { display:block; background:#fef2f2; border:1px solid #fecaca; color:#b91c1c; }
@@ -99,6 +123,15 @@ tr:hover td { background: #f8fafc; }
       </div>
     </div>
 
+    <div id="aviso-ubicacion" style="display:none;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 13px;font-size:12px;color:#991b1b;line-height:1.5;margin-bottom:12px">
+      <b>La planilla todavía no guarda la ubicación.</b> Mientras siga así, llena Barra y Bodega y
+      guarda <b>una sola vez</b>: se registran sumadas en un mismo conteo, así no se pierde nada.
+      Lo que sí se pierde es guardar en dos veces — si guardas Barra y después vuelves por Bodega,
+      el segundo guardado reemplaza al primero en vez de sumarse. Para separar las dos ubicaciones
+      hay que redesplegar el Apps Script de Inventario Food (Administrar implementaciones → editar
+      → Nueva versión).
+    </div>
+
     <div class="card" id="productos-card" style="margin-bottom:12px">
       <table>
         <thead><tr><th>Producto</th><th>Unidad</th><th class="r">Barra</th><th class="r">Bodega</th></tr></thead>
@@ -118,7 +151,11 @@ tr:hover td { background: #f8fafc; }
       <textarea id="f-observaciones" placeholder="Ej: faltó contar la bodega chica..."></textarea>
     </div>
 
-    <button class="btn" id="submit-btn" onclick="submitConteo()">Guardar conteo</button>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <button class="btn" id="submit-btn" onclick="submitConteo()">Guardar conteo</button>
+      <button class="btn" type="button" style="background:#f8fafc;color:#334155;border:1px solid #e2e8f0"
+        onclick="imprimirPlanilla()" title="Imprime la lista con casillas vacías para contar a mano">🖨 Planilla para contar</button>
+    </div>
     <div class="msg" id="form-msg"></div>
   </div>
 
@@ -165,6 +202,9 @@ tr:hover td { background: #f8fafc; }
   <div class="last" id="last-update"></div>
 </div>
 
+<!-- Se llena al pedir la planilla y solo se ve en la impresión. -->
+<div id="planilla-print"></div>
+
 <script>
 const TIENDAS = ['Costanera', 'Dominicos', 'Trapenses'];
 const tiendaFija = window._LARRS_TIENDA || null;
@@ -180,6 +220,10 @@ function codigoTxt(categoria, producto) {
 }
 let stockItems = [];
 let editingId = null;
+// Si la planilla guarda la columna "ubicacion". Se asume que sí hasta que la
+// carga de stock demuestre lo contrario, para no degradar el conteo por una
+// respuesta que no llegó.
+let ubicacionEnPlanilla = true;
 
 function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({
@@ -333,34 +377,54 @@ async function loadCatalogo() {
   } catch (e) {
     catalogo = [];
   }
-  sel.innerHTML = '<option value="">Selecciona una categoría...</option>' +
-    catalogo.map(c => `<option value="${esc(c.value)}">${esc(c.label)}</option>`).join('');
+  sel.innerHTML = '<option value="">Selecciona una categoría...</option>'
+    + '<option value="__todas__">Todas las categorías (contar de corrido)</option>'
+    + catalogo.map(c => `<option value="${esc(c.value)}">${esc(c.label)}</option>`).join('');
   onCategoriaChange();
 }
 
-function onCategoriaChange() {
-  const catValue = document.getElementById('f-categoria').value;
-  const body = document.getElementById('productos-body');
-  const cat = catalogo.find(c => c.value === catValue);
+// Cada producto trae su propia unidad desde el catálogo (ej. el café en grano
+// se cuenta en bolsas/"un", pero el café por kilo admite decimales). Barra y
+// Bodega son conteos independientes del mismo producto — cualquiera de los dos
+// se puede dejar en blanco si no se contó esa ubicación hoy.
+const stepDe = p => p.unidad === 'un' ? '1' : '0.01';
 
-  if (!cat) {
+function filaProducto(cat, p) {
+  return `
+    <tr>
+      <td style="font-size:12px">${esc(p.nombre)} ${p.codigo ? `<span style="color:#94a3b8;font-size:10px">[${esc(p.codigo)}]</span>` : ''}</td>
+      <td style="font-size:11px;color:#64748b">${esc(p.unidad)}</td>
+      <td class="r"><input type="number" class="cant-input" data-producto="${esc(p.nombre)}" data-categoria="${esc(cat.value)}" data-unidad="${esc(p.unidad)}" data-ubicacion="Barra" min="0" step="${stepDe(p)}" placeholder="—"></td>
+      <td class="r"><input type="number" class="cant-input" data-producto="${esc(p.nombre)}" data-categoria="${esc(cat.value)}" data-unidad="${esc(p.unidad)}" data-ubicacion="Bodega" min="0" step="${stepDe(p)}" placeholder="—"></td>
+    </tr>`;
+}
+
+// Categorías elegidas ahora mismo: una sola, o todas para recorrer la bodega de
+// corrido sin entrar y guardar categoría por categoría.
+function categoriasSeleccionadas() {
+  const catValue = document.getElementById('f-categoria').value;
+  if (catValue === '__todas__') return catalogo;
+  const cat = catalogo.find(c => c.value === catValue);
+  return cat ? [cat] : [];
+}
+
+function onCategoriaChange() {
+  const body = document.getElementById('productos-body');
+  const cats = categoriasSeleccionadas();
+
+  if (!cats.length) {
     body.innerHTML = '<tr><td colspan="4" class="empty">Selecciona una categoría para empezar el conteo.</td></tr>';
     return;
   }
 
-  // Cada producto trae su propia unidad desde el catálogo (ej. el café en
-  // grano se cuenta en bolsas/"un", pero el café por kilo admite decimales).
-  // Barra y Bodega son conteos independientes del mismo producto — cualquiera
-  // de los dos se puede dejar en blanco si no se contó esa ubicación hoy.
-  const step = p => p.unidad === 'un' ? '1' : '0.01';
-  body.innerHTML = cat.productos.map(p => `
-    <tr>
-      <td style="font-size:12px">${esc(p.nombre)} ${p.codigo ? `<span style="color:#94a3b8;font-size:10px">[${esc(p.codigo)}]</span>` : ''}</td>
-      <td style="font-size:11px;color:#64748b">${esc(p.unidad)}</td>
-      <td class="r"><input type="number" class="cant-input" data-producto="${esc(p.nombre)}" data-unidad="${esc(p.unidad)}" data-ubicacion="Barra" min="0" step="${step(p)}" placeholder="—"></td>
-      <td class="r"><input type="number" class="cant-input" data-producto="${esc(p.nombre)}" data-unidad="${esc(p.unidad)}" data-ubicacion="Bodega" min="0" step="${step(p)}" placeholder="—"></td>
-    </tr>
-  `).join('');
+  const variasCategorias = cats.length > 1;
+  body.innerHTML = cats.map(cat => {
+    // Con todas juntas hace falta un separador para no perderse en la lista.
+    const encabezado = variasCategorias
+      ? `<tr><td colspan="4" style="background:#f8fafc;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.04em">${esc(cat.label)}</td></tr>`
+      : '';
+    return encabezado + cat.productos.map(p => filaProducto(cat, p)).join('');
+  }).join('');
 }
 
 async function submitConteo() {
@@ -384,9 +448,22 @@ async function submitConteo() {
   }
 
   const inputs = [...document.querySelectorAll('#productos-body .cant-input')];
-  const items = inputs
+  let items = inputs
     .filter(inp => inp.value !== '')
-    .map(inp => ({ producto: inp.dataset.producto, cantidad: parseFloat(inp.value), unidad: inp.dataset.unidad, ubicacion: inp.dataset.ubicacion }));
+    .map(inp => ({ producto: inp.dataset.producto, categoria: inp.dataset.categoria, cantidad: parseFloat(inp.value), unidad: inp.dataset.unidad, ubicacion: inp.dataset.ubicacion }));
+
+  // Si la planilla no guarda la ubicación, dos filas del mismo producto son
+  // indistinguibles y una pisa a la otra: se manda un solo conteo con Barra +
+  // Bodega sumadas para no perder la mitad del conteo.
+  if (!ubicacionEnPlanilla && items.length) {
+    const porProducto = {};
+    for (const it of items) {
+      const clave = it.categoria + '||' + it.producto;
+      if (!porProducto[clave]) porProducto[clave] = { producto: it.producto, categoria: it.categoria, cantidad: 0, unidad: it.unidad, ubicacion: '' };
+      porProducto[clave].cantidad += it.cantidad;
+    }
+    items = Object.values(porProducto);
+  }
 
   if (items.length === 0) {
     msg.className = 'msg err';
@@ -407,31 +484,55 @@ async function submitConteo() {
     msg.className = 'msg err'; msg.textContent = 'Escribe el nombre de quien hace este registro.'; return;
   }
 
-  const payload = {
-    fecha, tienda, categoria,
-    observaciones: document.getElementById('f-observaciones').value.trim(),
-    items,
-    nombre_operador: nombreOperador || undefined,
-  };
+  // La categoría se guarda a nivel de conteo, no de producto, así que contar
+  // varias categorías de corrido se envía como un conteo por categoría.
+  const porCategoria = {};
+  for (const it of items) {
+    const cat = it.categoria || categoria;
+    if (!porCategoria[cat]) porCategoria[cat] = [];
+    porCategoria[cat].push({ producto: it.producto, cantidad: it.cantidad, unidad: it.unidad, ubicacion: it.ubicacion });
+  }
+  const observaciones = document.getElementById('f-observaciones').value.trim();
+  const entradas = Object.entries(porCategoria);
 
   btn.disabled = true;
+  const guardadas = [];
   try {
-    const resp = await fetch('/api/inventario-food', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    const data = await resp.json();
-    if (!data.ok) throw new Error(data.error || 'Error al registrar');
+    for (const [cat, itemsCat] of entradas) {
+      if (entradas.length > 1) {
+        msg.className = 'msg';
+        msg.textContent = `Guardando ${labelCategoria(cat)} (${guardadas.length + 1} de ${entradas.length})...`;
+      }
+      const resp = await fetch('/api/inventario-food', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fecha, tienda, categoria: cat, observaciones,
+          items: itemsCat,
+          nombre_operador: nombreOperador || undefined,
+        }),
+      });
+      const data = await resp.json();
+      // Si falla en la mitad hay que decir qué alcanzó a guardarse: lo ya
+      // guardado no se pierde y hay que saber qué queda por recontar.
+      if (!data.ok) throw new Error(data.error || 'Error al registrar');
+      guardadas.push({ cat, count: data.count ?? itemsCat.length });
+    }
 
     msg.className = 'msg ok';
-    msg.textContent = `Conteo guardado: ${data.count} producto(s).`;
+    const total = guardadas.reduce((s, g) => s + g.count, 0);
+    msg.textContent = guardadas.length > 1
+      ? `Conteo guardado: ${total} registro(s) en ${guardadas.length} categorías.`
+      : `Conteo guardado: ${total} producto(s).`;
     inputs.forEach(inp => { inp.value = ''; });
     document.getElementById('f-observaciones').value = '';
     loadStock();
   } catch (e) {
     msg.className = 'msg err';
-    msg.textContent = 'Error: ' + e.message;
+    const yaGuardado = guardadas.length
+      ? ` Sí quedaron guardadas: ${guardadas.map(g => labelCategoria(g.cat)).join(', ')}. Vuelve a ingresar solo lo que falta.`
+      : '';
+    msg.textContent = `Error: ${e.message}.${yaGuardado}`;
   } finally {
     btn.disabled = false;
   }
@@ -447,6 +548,10 @@ async function loadStock() {
     if (!data.ok) throw new Error(data.error || 'Error al cargar stock');
     stockItems = data.items || [];
     editingId = null;
+    // Solo se avisa cuando ya hay conteos y ninguno guardó ubicación: con la
+    // planilla al día el aviso desaparece solo, sin tocar el código.
+    ubicacionEnPlanilla = !stockItems.length || !!data.ubicacionEnPlanilla;
+    document.getElementById('aviso-ubicacion').style.display = ubicacionEnPlanilla ? 'none' : 'block';
     renderStock(stockItems);
     renderStockComparativo(stockItems);
   } catch (e) {
@@ -569,6 +674,43 @@ loadValorizado();
 loadRecetasStock();
 if (window._LARRS_IS_OPERADOR) {
   document.getElementById('campo-nombre-operador').style.display = '';
+}
+
+// Planilla en papel: la misma lista que se va a cargar después en la app, con
+// casillas vacías de Barra y Bodega para contar en la bodega sin el teléfono.
+function imprimirPlanilla() {
+  const cats = categoriasSeleccionadas();
+  const msg = document.getElementById('form-msg');
+  if (!cats.length) {
+    msg.className = 'msg err';
+    msg.textContent = 'Elige una categoría (o "Todas las categorías") para imprimir la planilla.';
+    return;
+  }
+  const tienda = tiendaFija || document.getElementById('tienda-select').value;
+  const fecha = document.getElementById('f-fecha').value;
+
+  const tablas = cats.map(cat => `
+    <div class="p-cat">${esc(cat.label)}</div>
+    <table class="p-tabla">
+      <thead><tr><th>Producto</th><th class="p-un">Unidad</th><th class="p-box">Barra</th><th class="p-box">Bodega</th></tr></thead>
+      <tbody>
+        ${cat.productos.map(p => `<tr>
+          <td>${esc(p.nombre)}${p.codigo ? ` <span class="p-cod">[${esc(p.codigo)}]</span>` : ''}</td>
+          <td class="p-un">${esc(p.unidad)}</td>
+          <td class="p-box"></td><td class="p-box"></td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`).join('');
+
+  document.getElementById('planilla-print').innerHTML = `
+    <div class="p-head">
+      <div class="p-titulo">Conteo de inventario · Larrs</div>
+      <div class="p-sub">Tienda: ${esc(tienda && tienda !== 'Todas' ? tienda : '____________')}
+        · Fecha: ${esc(fecha || '____________')}
+        · Contó: ____________________</div>
+    </div>
+    ${tablas}`;
+  window.print();
 }
 </script>
 </body>

@@ -249,6 +249,27 @@ function parseDateDMY(s, fallbackYear) {
   } catch(e) { return null; }
 }
 
+// Marca temporal del envío del formulario ("d/m/aaaa h:mm:ss"), con hora — a
+// diferencia de parseDateDMY, que solo necesita el día del recuento.
+function parseTSDMY(s) {
+  if (!s) return null;
+  const m = String(s).trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[ ,]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (!m) return null;
+  const dt = new Date(+m[3], +m[2]-1, +m[1], +(m[4]||0), +(m[5]||0), +(m[6]||0));
+  return isNaN(dt.getTime()) ? null : dt;
+}
+
+function fmtCarga(d) {
+  if (!d) return 'sin cargas';
+  const hoy = realToday();
+  const dia = new Date(d); dia.setHours(0,0,0,0);
+  const difDias = Math.round((hoy - dia) / 86400000);
+  const hora = d.toLocaleTimeString('es-CL', { hour:'2-digit', minute:'2-digit', hour12:false });
+  if (difDias === 0) return `hoy ${hora}`;
+  if (difDias === 1) return `ayer ${hora}`;
+  return `${fmtDate(d)} ${hora}`;
+}
+
 function getMonday(date) {
   const d = new Date(date);
   const day = d.getDay() || 7;
@@ -368,10 +389,17 @@ function processCSV(csvText, targetWeekKey) {
   const flavorByTienda = {};
   const dailyTotal = {};
 
+  // Última vez que cada tienda envió el formulario (marca temporal del envío,
+  // no la fecha de recuento). Sirve para distinguir "el panel no trae el dato"
+  // de "la tienda todavía no lo cargó", que es la duda que siempre aparece
+  // cuando alguien carga la producción con días de retraso.
+  const ultimaCarga = {};
+
   for (const t of TIENDAS) {
     semana[t] = {};
     ayerAcc[t] = { kg: 0, reported: false };
     flavorByTienda[t] = {};
+    ultimaCarga[t] = null;
   }
 
   // Rango de fechas lunes → weekEnd
@@ -384,6 +412,10 @@ function processCSV(csvText, targetWeekKey) {
     if (row.length < 6) continue;
     const tienda = (row[2]||'').trim();
     if (!TIENDAS.has(tienda)) continue;
+    // Antes de los filtros: cualquier envío sirve como señal de que la tienda
+    // está usando el formulario, incluido "Sin Producción de Helados".
+    const ts = parseTSDMY(row[0]);
+    if (ts && (!ultimaCarga[tienda] || ts > ultimaCarga[tienda])) ultimaCarga[tienda] = ts;
     const tipo = (row[5]||'').toLowerCase();
     if (!tipo.includes('fabricaci')) continue;
     const tsYear = parseDateDMY(row[0])?.getFullYear();
@@ -432,7 +464,7 @@ function processCSV(csvText, targetWeekKey) {
   return {
     weekKey, isCurrentWeek,
     lunes, domingo, weekEnd, ayer,
-    dateRange, semStats, ayerAcc,
+    dateRange, semStats, ayerAcc, ultimaCarga,
     totalKg, dailyTotal,
     flavorRanking, flavorAgg, flavorByTienda, topKg,
     kgPerDia, bestDay, diasElapsed,
@@ -709,6 +741,8 @@ function buildFlavorAcumChart() {
   }
   const ranking = Object.entries(flavorTotal).sort((a,b)=>b[1]-a[1]).slice(0,10);
   if (!ranking.length) return;
+  const totalAcum = Object.values(flavorTotal).reduce((s,v)=>s+v,0);
+  const fmtPct = kg => (totalAcum > 0 ? kg/totalAcum*100 : 0).toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1}) + '%';
   const pal = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#ec4899','#84cc16','#f97316','#94a3b8'];
   charts['flavor-acum'] = new Chart(ctx, {
     type: 'bar',
@@ -716,9 +750,30 @@ function buildFlavorAcumChart() {
       labels: ranking.map(([n]) => n.split('(')[0].trim().slice(0, 22)),
       datasets: [{ data: ranking.map(([,kg]) => +kg.toFixed(1)), backgroundColor: pal.map(c=>c+'cc'), borderColor: pal, borderWidth: 1.5, borderRadius: 5 }]
     },
+    plugins: [{
+      id: 'pctLabels',
+      afterDatasetsDraw(chart) {
+        const c = chart.ctx;
+        const meta = chart.getDatasetMeta(0);
+        c.save();
+        c.font = '700 10px system-ui, -apple-system, sans-serif';
+        c.textBaseline = 'middle';
+        meta.data.forEach((bar, i) => {
+          const txt = fmtPct(chart.data.datasets[0].data[i]);
+          if (bar.x - bar.base > 38) {
+            c.fillStyle = '#fff'; c.textAlign = 'right';
+            c.fillText(txt, bar.x - 6, bar.y);
+          } else {
+            c.fillStyle = '#475569'; c.textAlign = 'left';
+            c.fillText(txt, bar.x + 5, bar.y);
+          }
+        });
+        c.restore();
+      }
+    }],
     options: {
       indexAxis: 'y', responsive: true, maintainAspectRatio: false,
-      plugins: { legend:{display:false}, tooltip:{callbacks:{label:c=>` ${c.parsed.x} kg`}} },
+      plugins: { legend:{display:false}, tooltip:{callbacks:{label:c=>` ${c.parsed.x} kg · ${fmtPct(c.parsed.x)}`}} },
       scales: { x:{beginAtZero:true,grid:{color:'#f1f5f9'},ticks:{font:{size:10},callback:v=>v+' kg'}}, y:{grid:{display:false},ticks:{font:{size:10},color:'#334155'}} }
     }
   });
@@ -1572,7 +1627,7 @@ function buildCostSection(data) {
 function render(data, prevData) {
   currentData = data;
   const { weekKey, isCurrentWeek, lunes, domingo, weekEnd, ayer,
-          semStats, ayerAcc, totalKg, dailyTotal,
+          semStats, ayerAcc, ultimaCarga, totalKg, dailyTotal,
           flavorRanking, topKg, kgPerDia, bestDay, diasElapsed, dateRange } = data;
 
   // Subtitle en header
@@ -1594,10 +1649,15 @@ function render(data, prevData) {
   let insightText;
   if (prevData && prevData.kgPerDia > 0) {
     const ratio = kgPerDia / prevData.kgPerDia;
-    const arrow = ratio >= 1 ? '📈' : '📉';
-    const paceStr = ratio >= 1
-      ? `Ritmo <b>${((ratio-1)*100).toFixed(0)}% por encima</b> del promedio diario de la semana anterior`
-      : `Ritmo <b>${((1-ratio)*100).toFixed(0)}% por debajo</b> del promedio diario de la semana anterior`;
+    const difPct = Math.abs(ratio - 1) * 100;
+    // Una diferencia mínima redondeaba a "0% por debajo", que se lee como error.
+    const igual = difPct < 0.5;
+    const arrow = igual ? '➡️' : ratio > 1 ? '📈' : '📉';
+    const paceStr = igual
+      ? `Ritmo <b>en línea</b> con el promedio diario de la semana anterior`
+      : ratio > 1
+        ? `Ritmo <b>${difPct.toFixed(0)}% por encima</b> del promedio diario de la semana anterior`
+        : `Ritmo <b>${difPct.toFixed(0)}% por debajo</b> del promedio diario de la semana anterior`;
     insightText = `${arrow} ${paceStr}. ${bestDayStr}Líder: <b>${bestTienda}</b> (${semStats[bestTienda].kg.toFixed(0)} kg).`;
   } else {
     const verb = isCurrentWeek ? 'acumulados' : 'producidos en la semana';
@@ -1642,8 +1702,13 @@ function render(data, prevData) {
     const estado = d.reported
       ? `<span class="reporto">✓</span> ${d.kg.toLocaleString('es-CL',{minimumFractionDigits:1,maximumFractionDigits:1})} kg`
       : `<span class="sin-reporte">Sin reporte</span>`;
+    // La hora del último envío evita la duda de "lo cargaron y no aparece":
+    // la producción se imputa a la fecha de recuento, que puede ser de días antes.
+    const carga = ultimaCarga?.[t]
+      ? `<div style="font-size:10px;color:#94a3b8;margin-top:2px">última carga: ${fmtCarga(ultimaCarga[t])}</div>`
+      : '';
     return `<tr>
-      <td><div class="tienda-cell"><span class="dot" style="background:${T_COLOR[t]}"></span>${t}</div></td>
+      <td><div class="tienda-cell"><span class="dot" style="background:${T_COLOR[t]}"></span>${t}</div>${carga}</td>
       <td class="r">${estado}</td>
     </tr>`;
   }).join('');

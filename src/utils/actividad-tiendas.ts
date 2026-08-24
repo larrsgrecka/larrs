@@ -14,6 +14,35 @@ export type ActividadTienda = {
 
 export type ActividadTiendas = Record<string, ActividadTienda>;
 
+export type ModuloKey = keyof ActividadTienda;
+
+// Una fuente que falla devuelve fechas en null + el motivo, para que el panel
+// pueda decir "no pudimos consultar" en vez de mentir con "sin registros".
+type FuenteResultado = {
+  fechas: Record<string, string | null>;
+  error: string | null;
+};
+
+// La primera consulta del día a cada Apps Script arranca en frío y Google puede
+// tardar decenas de segundos (medido: >40 s con las cuatro fuentes en frío). El
+// corte por fuente acota el total de la ruta —todas las esperas empiezan a la
+// vez— para que nunca se pase del maxDuration y devuelva un error sin JSON.
+const TIMEOUT_MS = 45_000;
+
+function fechasVacias(): Record<string, string | null> {
+  const out: Record<string, string | null> = {};
+  for (const t of TIENDAS) out[t] = null;
+  return out;
+}
+
+function motivoFalla(e: unknown): string {
+  const nombre = (e as Error)?.name;
+  if (nombre === "TimeoutError" || nombre === "AbortError") {
+    return `Google no respondió en ${TIMEOUT_MS / 1000} s (arranque en frío del Apps Script). Recarga para reintentar.`;
+  }
+  return `No se pudo consultar el servicio: ${(e as Error)?.message || "error desconocido"}`;
+}
+
 function maxFecha(a: string | null, b: string | null): string | null {
   if (!a) return b;
   if (!b) return a;
@@ -23,31 +52,40 @@ function maxFecha(a: string | null, b: string | null): string | null {
 async function ultimaFechaPorTienda(
   urlEnv: string,
   tokenEnv: string
-): Promise<Record<string, string | null>> {
+): Promise<FuenteResultado> {
   const url = process.env[urlEnv];
   const token = process.env[tokenEnv];
-  const out: Record<string, string | null> = {};
-  for (const t of TIENDAS) out[t] = null;
-  if (!url || !token) return out;
+  const fechas = fechasVacias();
+  if (!url || !token) {
+    return { fechas, error: `Falta configurar ${urlEnv} / ${tokenEnv}.` };
+  }
 
   try {
     const u = new URL(url);
     u.searchParams.set("token", token);
     u.searchParams.set("action", "list");
-    const resp = await fetch(u.toString());
-    const data = await resp.json();
-    if (!data.ok) return out;
+    const resp = await fetch(u.toString(), { signal: AbortSignal.timeout(TIMEOUT_MS) });
+    const text = await resp.text();
+    let data: { ok?: boolean; error?: string; items?: unknown };
+    try {
+      data = JSON.parse(text);
+    } catch {
+      console.error(`[actividad-tiendas] ${urlEnv} respondió sin JSON:`, resp.status, text.slice(0, 300));
+      return { fechas, error: `El servicio respondió ${resp.status} sin JSON (falla temporal de Google).` };
+    }
+    if (!data.ok) return { fechas, error: data.error || "El servicio devolvió un error." };
 
     for (const item of (data.items ?? []) as { tienda?: string; fecha?: string }[]) {
       const tienda = item.tienda;
       const fecha = item.fecha;
-      if (!tienda || !fecha || !(tienda in out)) continue;
-      out[tienda] = maxFecha(out[tienda], fecha);
+      if (!tienda || !fecha || !(tienda in fechas)) continue;
+      fechas[tienda] = maxFecha(fechas[tienda], fecha);
     }
-  } catch {
-    // deja todo en null si falla — no debe tumbar el resto del panel
+  } catch (e) {
+    console.error(`[actividad-tiendas] ${urlEnv} falló:`, e);
+    return { fechas, error: motivoFalla(e) };
   }
-  return out;
+  return { fechas, error: null };
 }
 
 function parseCSV(raw: string): string[][] {
@@ -93,36 +131,45 @@ function parseFechaDMY(s: string): string | null {
   return `${yr}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
 }
 
-async function ultimaFechaPesajePorTienda(): Promise<Record<string, string | null>> {
-  const out: Record<string, string | null> = {};
-  for (const t of TIENDAS) out[t] = null;
+async function ultimaFechaPesajePorTienda(): Promise<FuenteResultado> {
+  const fechas = fechasVacias();
 
   const url = process.env.PRODUCCION_APPS_SCRIPT_URL;
   const token = process.env.PRODUCCION_APPS_SCRIPT_TOKEN;
-  if (!url || !token) return out;
+  if (!url || !token) {
+    return { fechas, error: "Falta configurar PRODUCCION_APPS_SCRIPT_URL / PRODUCCION_APPS_SCRIPT_TOKEN." };
+  }
 
   try {
-    const resp = await fetch(`${url}?token=${encodeURIComponent(token)}`);
+    const resp = await fetch(`${url}?token=${encodeURIComponent(token)}`, {
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
     const text = await resp.text();
     const rows = parseCSV(text);
     for (let r = 1; r < rows.length; r++) {
       const row = rows[r];
       if (row.length < 6) continue;
       const tienda = (row[2] || "").trim();
-      if (!(tienda in out)) continue;
+      if (!(tienda in fechas)) continue;
       const tipo = (row[5] || "").toLowerCase();
       if (!tipo.includes("fabricaci")) continue;
       const fecha = parseFechaDMY(row[3] || "");
       if (!fecha) continue;
-      out[tienda] = maxFecha(out[tienda], fecha);
+      fechas[tienda] = maxFecha(fechas[tienda], fecha);
     }
-  } catch {
-    // deja todo en null si falla
+  } catch (e) {
+    console.error("[actividad-tiendas] PRODUCCION_APPS_SCRIPT_URL falló:", e);
+    return { fechas, error: motivoFalla(e) };
   }
-  return out;
+  return { fechas, error: null };
 }
 
-export async function getActividadTiendas(): Promise<ActividadTiendas> {
+export type ActividadResultado = {
+  actividad: ActividadTiendas;
+  errores: Partial<Record<ModuloKey, string>>;
+};
+
+export async function getActividadTiendas(): Promise<ActividadResultado> {
   const [mermas, inventario, recepcion, pesaje] = await Promise.all([
     ultimaFechaPorTienda("MERMAS_APPS_SCRIPT_URL", "MERMAS_APPS_SCRIPT_TOKEN"),
     ultimaFechaPorTienda("INVENTARIO_FOOD_APPS_SCRIPT_URL", "INVENTARIO_FOOD_APPS_SCRIPT_TOKEN"),
@@ -130,14 +177,26 @@ export async function getActividadTiendas(): Promise<ActividadTiendas> {
     ultimaFechaPesajePorTienda(),
   ]);
 
-  const out: ActividadTiendas = {};
+  const actividad: ActividadTiendas = {};
   for (const t of TIENDAS) {
-    out[t] = {
-      mermas: mermas[t] ?? null,
-      inventario: inventario[t] ?? null,
-      pesaje: pesaje[t] ?? null,
-      recepcion: recepcion[t] ?? null,
+    actividad[t] = {
+      mermas: mermas.fechas[t] ?? null,
+      inventario: inventario.fechas[t] ?? null,
+      pesaje: pesaje.fechas[t] ?? null,
+      recepcion: recepcion.fechas[t] ?? null,
     };
   }
-  return out;
+
+  const errores: Partial<Record<ModuloKey, string>> = {};
+  const fuentes: [ModuloKey, FuenteResultado][] = [
+    ["mermas", mermas],
+    ["inventario", inventario],
+    ["pesaje", pesaje],
+    ["recepcion", recepcion],
+  ];
+  for (const [key, fuente] of fuentes) {
+    if (fuente.error) errores[key] = fuente.error;
+  }
+
+  return { actividad, errores };
 }

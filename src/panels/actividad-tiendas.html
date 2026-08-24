@@ -25,6 +25,9 @@ td { padding: 10px; border-top: 1px solid #f1f5f9; font-size: 13px; vertical-ali
 .estado.alerta { background: #fffbeb; color: #b45309; }
 .estado.mal { background: #fef2f2; color: #b91c1c; }
 .estado.nunca { background: #f1f5f9; color: #64748b; }
+.estado.sindatos { background: #fff; color: #64748b; border: 1px dashed #cbd5e1; cursor: help; }
+.aviso { background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 9px 13px; font-size: 12px; color: #92400e; margin-top: 10px; line-height: 1.5; }
+.aviso b { font-weight: 700; }
 .leyenda { font-size: 11px; color: #94a3b8; margin-top: 10px; display: flex; gap: 14px; flex-wrap: wrap; }
 .leyenda span { display: flex; align-items: center; gap: 4px; }
 .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
@@ -54,9 +57,10 @@ td { padding: 10px; border-top: 1px solid #f1f5f9; font-size: 13px; vertical-ali
         </tr>
       </thead>
       <tbody id="tbody">
-        <tr><td colspan="5" class="empty">Cargando...</td></tr>
+        <tr><td colspan="5" class="empty">Cargando... la primera consulta del día puede tardar hasta un minuto (Google arranca cada Apps Script en frío).</td></tr>
       </tbody>
     </table>
+    <div id="avisos"></div>
     <div class="leyenda">
       <span><span class="dot" style="background:#16a34a"></span> Al día (0-1 día)</span>
       <span><span class="dot" style="background:#d97706"></span> Atrasando (2-6 días)</span>
@@ -90,7 +94,10 @@ function diasDesde(fechaStr) {
   return Math.round((hoy - fecha) / 86400000);
 }
 
-function celdaEstado(fechaStr) {
+function celdaEstado(fechaStr, error) {
+  // Si no pudimos consultar la fuente, no hay que mostrar "Sin registros": eso
+  // acusaría a la tienda de no registrar cuando el problema es de la consulta.
+  if (error) return `<span class="estado sindatos" title="${esc(error)}">Sin datos</span>`;
   const dias = diasDesde(fechaStr);
   if (dias === null) return `<span class="estado nunca">Sin registros</span>`;
   let clase = 'ok';
@@ -102,23 +109,40 @@ function celdaEstado(fechaStr) {
 
 async function cargar() {
   const tbody = document.getElementById('tbody');
+  const avisos = document.getElementById('avisos');
+  avisos.innerHTML = '';
   try {
     const resp = await fetch('/api/actividad-tiendas');
-    const data = await resp.json();
+    // Si la función del servidor se corta por tiempo, la respuesta no es JSON:
+    // hay que mostrar el código HTTP en vez de un "Unexpected token" críptico.
+    const text = await resp.text();
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      throw new Error(`el servidor respondió ${resp.status} sin JSON. Si tardó mucho, recarga para reintentar.`);
+    }
     if (!data.ok) throw new Error(data.error || 'Error al cargar');
     const actividad = data.actividad || {};
+    const errores = data.errores || {};
 
     tbody.innerHTML = ORDEN_TIENDAS.map((t, idx) => {
       const a = actividad[t] || {};
-      const celdas = MODULOS.map(m => `<td class="r">${celdaEstado(a[m.key])}</td>`).join('');
+      const celdas = MODULOS.map(m => `<td class="r">${celdaEstado(a[m.key], errores[m.key])}</td>`).join('');
       const piloto = idx === 0 ? '<span class="piloto">Piloto</span>' : '';
       return `<tr>
         <td class="tienda-cell">${esc(t)}${piloto}</td>
         ${celdas}
       </tr>`;
     }).join('');
+
+    const fallas = MODULOS.filter(m => errores[m.key]);
+    if (fallas.length) {
+      avisos.innerHTML = `<div class="aviso">${fallas.map(m =>
+        `<b>${esc(m.label)}:</b> ${esc(errores[m.key])}`).join('<br>')}</div>`;
+    }
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="5" class="empty">Error: ${e.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5" class="empty">Error: ${esc(e.message)}</td></tr>`;
   }
   document.getElementById('last-update').textContent = `Actualizado: ${new Date().toLocaleString('es-CL')}`;
 }

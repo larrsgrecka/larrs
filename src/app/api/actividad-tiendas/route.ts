@@ -3,7 +3,10 @@ import { createClient } from "@/utils/supabase/server";
 import { getProfile } from "@/utils/auth";
 import { getActividadTiendas } from "@/utils/actividad-tiendas";
 
-export const maxDuration = 30;
+// Consulta cuatro Apps Scripts distintos; en frío Google puede tardar más de
+// 40 s. Con 30 s la función se cortaba y la plataforma devolvía un error en
+// texto plano que el panel no podía parsear como JSON.
+export const maxDuration = 60;
 
 export async function GET() {
   const supabase = await createClient();
@@ -16,8 +19,8 @@ export async function GET() {
   }
 
   try {
-    const actividad = await getActividadTiendas();
-    return NextResponse.json({ ok: true, actividad });
+    const { actividad, errores } = await getActividadTiendas();
+    return NextResponse.json({ ok: true, actividad, errores });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }

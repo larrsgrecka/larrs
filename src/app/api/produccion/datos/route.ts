@@ -12,6 +12,15 @@ import { getProfile } from "@/utils/auth";
 // acá el fetch lo hace el servidor, con el token en variables de entorno.
 export const maxDuration = 60;
 
+// El CSV de la planilla son ~360 KB y Google lo entrega entre 2 y 19 s según su
+// humor (medido). El panel pide dos cosas seguidas —la planilla y las ventas— y
+// Apps Script serializa las ejecuciones del mismo script, así que sin caché la
+// segunda espera a la primera y cualquier recarga vuelve a pagar todo. Un caché
+// corto en memoria hace que las llamadas siguientes salgan al instante; el mismo
+// patrón que ya usa produccion-historial.ts.
+const CACHE_TTL_MS = 3 * 60 * 1000;
+const cache = new Map<string, { texto: string; ts: number }>();
+
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -34,17 +43,28 @@ export async function GET(request: NextRequest) {
   const esVentas = request.nextUrl.searchParams.get("action") === "getSales";
   const destino = `${url}?token=${encodeURIComponent(token)}${esVentas ? "&action=getSales" : ""}`;
 
+  const claveCache = esVentas ? "ventas" : "csv";
+  const guardado = cache.get(claveCache);
+  if (guardado && Date.now() - guardado.ts < CACHE_TTL_MS) {
+    return respuesta(guardado.texto, esVentas);
+  }
+
   let resp: Response;
   let texto: string;
   try {
-    resp = await fetch(destino, { signal: AbortSignal.timeout(50_000) });
+    // 25 s y no más: si Google va a tardar más que eso, es mejor decirlo y
+    // dejar reintentar que tener al panel girando un minuto entero.
+    resp = await fetch(destino, { signal: AbortSignal.timeout(25_000) });
     texto = await resp.text();
   } catch (e) {
     const timeout = (e as Error)?.name === "TimeoutError";
+    // Antes de dar error, sirve la copia vencida si hay: un dato de hace unos
+    // minutos es infinitamente mejor que una pantalla de error.
+    if (guardado) return respuesta(guardado.texto, esVentas);
     return NextResponse.json(
       {
         error: timeout
-          ? "Google no respondió en 50 s (la planilla de producción es grande y arranca en frío). Vuelve a intentar."
+          ? "Google no respondió en 25 s (la planilla es grande y arranca en frío). Vuelve a intentar en un momento."
           : "No se pudo conectar con la planilla de producción.",
       },
       { status: 504 }
@@ -56,12 +76,18 @@ export async function GET(request: NextRequest) {
   const pareceHtml = texto.trimStart().startsWith("<");
   if (!resp.ok || pareceHtml) {
     console.error("[produccion/datos] respuesta inesperada:", resp.status, texto.slice(0, 200));
+    if (guardado) return respuesta(guardado.texto, esVentas);
     return NextResponse.json(
       { error: `La planilla de producción no respondió con datos (HTTP ${resp.status}). Puede ser una falla temporal de Google: vuelve a intentar en un momento.` },
       { status: 502 }
     );
   }
 
+  cache.set(claveCache, { texto, ts: Date.now() });
+  return respuesta(texto, esVentas);
+}
+
+function respuesta(texto: string, esVentas: boolean) {
   return new NextResponse(texto, {
     headers: {
       "Content-Type": esVentas ? "application/json; charset=utf-8" : "text/csv; charset=utf-8",

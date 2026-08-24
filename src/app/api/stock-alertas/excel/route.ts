@@ -24,10 +24,19 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Solo un admin puede ver este panel" }, { status: 403 });
   }
 
+  // "un" = paquetes/unidades enteras (casi todo el catálogo); "kg" es solo el
+  // café a granel. Pedir 7,3 alfajores no existe, así que en unidades todo va
+  // redondeado, y hacia arriba: quedarse corto es peor que traer uno de más.
+  const porUnidad = (it: ItemStockMinimo): boolean => (it.unidad || "un") === "un";
+  const redondear = (it: ItemStockMinimo, valor: number, haciaArriba = true): number =>
+    porUnidad(it)
+      ? (haciaArriba ? Math.ceil(valor) : Math.round(valor))
+      : Number(valor.toFixed(1));
+
   // Cuánto hay que reponer para llegar al mínimo sugerido. Sin meses de venta
   // no hay mínimo que comparar, y si ya está sobre el mínimo no falta nada.
   const faltaParaMinimo = (it: ItemStockMinimo): number =>
-    it.mesesConDatos ? Math.max(0, it.stockMinimoSugerido - it.stockActual) : 0;
+    it.mesesConDatos ? redondear(it, Math.max(0, it.stockMinimoSugerido - it.stockActual)) : 0;
 
   // Se respetan los dos filtros de pantalla. Con una tienda elegida el archivo
   // trae solo esa hoja, para poder enviárselo a esa tienda sin los datos de las
@@ -61,9 +70,9 @@ export async function GET(request: NextRequest) {
         "Stock actual": it.stockActual,
         // Sin meses de venta no hay promedio ni mínimo: se deja la celda vacía
         // en vez de un 0 que se leería como "no rota nada".
-        "Venta sem. prom.": it.mesesConDatos ? Number(it.ventaSemanalPromedio.toFixed(1)) : "",
-        "Mínimo sugerido": it.mesesConDatos ? Number(it.stockMinimoSugerido.toFixed(1)) : "",
-        "Falta para el mínimo": it.mesesConDatos ? Number(falta.toFixed(1)) : "",
+        "Venta sem. prom.": it.mesesConDatos ? redondear(it, it.ventaSemanalPromedio, false) : "",
+        "Mínimo sugerido": it.mesesConDatos ? redondear(it, it.stockMinimoSugerido) : "",
+        "Falta para el mínimo": it.mesesConDatos ? falta : "",
         Estado: ESTADO_ES[it.estado],
         "Último conteo": it.fechaUltimoConteo || "Nunca",
         "Meses con datos de venta": it.mesesConDatos,
@@ -100,7 +109,7 @@ export async function GET(request: NextRequest) {
       const dt = items.filter((it) => it.tienda === t);
       const bajo = dt.filter((it) => it.estado === "bajo_minimo");
       const falta = bajo.reduce((s, it) => s + faltaParaMinimo(it), 0);
-      return [t, dt.length, bajo.length, Number(falta.toFixed(1))];
+      return [t, dt.length, bajo.length, Math.round(falta)];
     });
     const totalBajo = items.filter((it) => it.estado === "bajo_minimo");
     const info = XLSX.utils.aoa_to_sheet([
@@ -115,7 +124,7 @@ export async function GET(request: NextRequest) {
       ["Hoja", "Productos", "Bajo mínimo", "Unidades que faltan para el mínimo"],
       ...(tiendaFiltro === "Todas"
         ? [["Todas las tiendas", items.length, totalBajo.length,
-            Number(totalBajo.reduce((s, it) => s + faltaParaMinimo(it), 0).toFixed(1))]]
+            Math.round(totalBajo.reduce((s, it) => s + faltaParaMinimo(it), 0))]]
         : []),
       ...resumen,
       [""],

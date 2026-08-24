@@ -80,6 +80,10 @@ td.falta { font-weight: 700; color: #b91c1c; }
     El "mínimo sugerido" se calcula solo: promedio de venta semanal de los últimos 6 meses completos × 2 semanas de respaldo — no es un umbral que alguien cargue a mano, se recalcula con más meses de datos. Solo aplica a productos que se venden por POS (café, bebidas, etc.) — envases/insumos no tienen venta registrada, aparecen sin ese cálculo. El stock actual es el último conteo manual de Inventario Food (no un saldo en tiempo real) — un producto que nunca ha sido contado en Inventario Food se marca "Sin conteo" en vez de asumir que hay 0 en stock, así no se alerta sobre algo que simplemente nunca se ha registrado.
   </div>
 
+  <!-- El error vive acá y no en la tabla: si vive en la tabla, se borra al
+       tocar un filtro y se pierde el motivo de por qué no hay datos. -->
+  <div id="error-banner" style="display:none;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 13px;font-size:12px;color:#991b1b;margin-bottom:12px;line-height:1.5"></div>
+
   <div class="kpis" id="kpis"></div>
 
   <div class="toolbar">
@@ -132,7 +136,34 @@ function num(v, dec) {
 // Cuánto hay que reponer para llegar al mínimo sugerido.
 function falta(it) {
   if (!it.mesesConDatos) return 0;
-  return Math.max(0, (it.stockMinimoSugerido || 0) - (it.stockActual || 0));
+  const bruto = Math.max(0, (it.stockMinimoSugerido || 0) - (it.stockActual || 0));
+  // Casi todo se vende por unidades completas: pedir 7,3 alfajores no existe,
+  // y hacia arriba, porque quedarse corto es peor que traer uno de más.
+  return porUnidad(it) ? Math.ceil(bruto) : bruto;
+}
+
+// "un" = paquetes/unidades enteras (la enorme mayoría del catálogo); "kg" es
+// solo el café a granel, que sí admite decimales.
+function porUnidad(it) {
+  return (it.unidad || 'un') === 'un';
+}
+
+// El mínimo también se redondea hacia arriba: si el promedio da 18,3 unidades,
+// el mínimo real es 19, y así nunca se contradice con el estado mostrado
+// (stock 18 con mínimo "18" leyéndose "bajo mínimo" no se entiende).
+function fmtMinimo(it) {
+  if (!it.mesesConDatos) return '—';
+  return porUnidad(it) ? num(Math.ceil(it.stockMinimoSugerido), 0) : num(it.stockMinimoSugerido, 1);
+}
+
+function fmtVenta(it) {
+  if (!it.mesesConDatos) return '—';
+  return porUnidad(it) ? num(Math.round(it.ventaSemanalPromedio), 0) : num(it.ventaSemanalPromedio, 1);
+}
+
+function fmtFalta(it) {
+  if (!it.mesesConDatos) return '—';
+  return porUnidad(it) ? num(falta(it), 0) : num(falta(it), 1);
 }
 
 function etiquetaEstado(estado) {
@@ -195,10 +226,10 @@ function render() {
       <td>${esc(it.tienda)}</td>
       <td style="font-size:12px;color:#64748b">${esc(it.categoria)}</td>
       <td>${esc(it.producto)}</td>
-      <td class="r">${num(it.stockActual, 0)}</td>
-      <td class="r">${it.mesesConDatos ? num(it.ventaSemanalPromedio, 1) : '—'}</td>
-      <td class="r">${it.mesesConDatos ? num(it.stockMinimoSugerido, 1) : '—'}</td>
-      <td class="r ${falta(it) > 0 ? 'falta' : ''}">${it.mesesConDatos ? num(falta(it), 1) : '—'}</td>
+      <td class="r">${porUnidad(it) ? num(it.stockActual, 0) : num(it.stockActual, 1)}</td>
+      <td class="r">${fmtVenta(it)}</td>
+      <td class="r">${fmtMinimo(it)}</td>
+      <td class="r ${falta(it) > 0 ? 'falta' : ''}">${fmtFalta(it)}</td>
       <td><span class="estado ${esc(it.estado)}">${etiquetaEstado(it.estado)}</span></td>
       <td style="font-size:12px;color:#94a3b8">${esc(it.fechaUltimoConteo) || 'Nunca'}</td>
     </tr>
@@ -226,12 +257,18 @@ async function cargar() {
     } catch {
       throw new Error(`el servidor respondió ${resp.status} sin datos (el cálculo puede haber tardado demasiado). Vuelve a intentar en un momento.`);
     }
-    if (!data.ok) throw new Error(data.error || 'Error al cargar');
+    if (!data.ok) throw new Error(data.error || `el servidor respondió ${resp.status}`);
     items = data.items || [];
+    document.getElementById('error-banner').style.display = 'none';
     renderKpis();
     render();
   } catch (e) {
-    document.getElementById('tbody').innerHTML = `<tr><td colspan="9" class="empty">Error: ${esc(e.message)}</td></tr>`;
+    const banner = document.getElementById('error-banner');
+    banner.style.display = 'block';
+    banner.innerHTML = `<b>No se pudieron cargar los datos.</b> ${esc(e.message)}`
+      + ` <button type="button" class="btn" style="margin-left:8px;padding:4px 10px" onclick="cargar()">Reintentar</button>`;
+    document.getElementById('kpis').innerHTML = '';
+    document.getElementById('tbody').innerHTML = `<tr><td colspan="9" class="empty">Sin datos: mira el aviso de arriba.</td></tr>`;
   }
   document.getElementById('last-update').textContent = `Actualizado: ${new Date().toLocaleString('es-CL')}`;
 }

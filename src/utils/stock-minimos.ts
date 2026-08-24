@@ -37,6 +37,10 @@ export type ItemStockMinimo = {
   ventaSemanalPromedio: number;
   mesesConDatos: number;
   stockMinimoSugerido: number;
+  // Cómo se cuenta el producto: "un" (paquetes/unidades enteras, la enorme
+  // mayoría) o "kg". Quien muestre estos números necesita saberlo: pedir 2,4
+  // unidades de algo que se vende de a una no significa nada.
+  unidad: string;
   estado: "bajo_minimo" | "ok" | "sin_conteo" | "sin_datos_venta";
 };
 
@@ -65,19 +69,19 @@ export async function getStockMinimos(): Promise<ItemStockMinimo[]> {
   // Todo producto contable del catálogo food, con su categoría — así también
   // aparecen productos que nunca se han contado (stockActual 0) o que se
   // vendieron pero no tienen conteo reciente, no solo los que sí tienen conteo.
-  const productosPorTienda: Record<string, { categoria: string; producto: string }[]> = {};
+  const productosPorTienda: Record<string, { categoria: string; producto: string; unidad: string }[]> = {};
   for (const cat of categorias) {
     for (const p of cat.productos) {
       for (const tienda of Object.keys(ventasPorTiendaProductoMes)) {
         if (!productosPorTienda[tienda]) productosPorTienda[tienda] = [];
-        productosPorTienda[tienda].push({ categoria: cat.value, producto: p.nombre });
+        productosPorTienda[tienda].push({ categoria: cat.value, producto: p.nombre, unidad: p.unidad || "un" });
       }
     }
   }
 
   const items: ItemStockMinimo[] = [];
   for (const [tienda, productos] of Object.entries(productosPorTienda)) {
-    for (const { categoria, producto } of productos) {
+    for (const { categoria, producto, unidad } of productos) {
       const ventasPorMes = ventasPorTiendaProductoMes[tienda]?.[producto] || {};
       const mesesConVenta = mesesAConsiderar.filter((m) => ventasPorMes[m] != null);
       const totalVendido = mesesConVenta.reduce((acc, m) => acc + (ventasPorMes[m] || 0), 0);
@@ -118,6 +122,7 @@ export async function getStockMinimos(): Promise<ItemStockMinimo[]> {
         ventaSemanalPromedio,
         mesesConDatos: mesesConVenta.length,
         stockMinimoSugerido,
+        unidad,
         estado,
       });
     }

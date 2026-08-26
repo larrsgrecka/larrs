@@ -30,6 +30,39 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .fila-label { font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .05em; margin: 4px 0 6px; }
 .btn { background: #2563eb; color: #fff; border: none; border-radius: 6px; padding: 9px 16px; font-size: 13px; font-weight: 600; cursor: pointer; }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn-sec { background: #f8fafc; color: #334155; border: 1px solid #e2e8f0; }
+.btn-sec:hover { background: #f1f5f9; }
+.acciones { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+/* Dibujo de la vitrina para imprimir o guardar como PDF: existe solo en papel. */
+#vitrina-print { display: none; }
+@media print {
+  @page { size: A4 landscape; margin: 8mm; }
+  body { background: #fff; padding: 0; }
+  .container { display: none !important; }
+  #vitrina-print { display: block; }
+  /* Sin esto el navegador imprime las fichas en blanco y el dibujo no sirve. */
+  #vitrina-print * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .p-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 10px;
+            border-bottom: 1.5px solid #1e293b; padding-bottom: 5px; margin-bottom: 8px; }
+  .p-titulo { font-size: 15px; font-weight: 800; }
+  .p-sub { font-size: 10px; color: #475569; margin-top: 2px; }
+  .p-costo { font-size: 11px; font-weight: 700; text-align: right; }
+  .p-caso { display: flex; gap: 3px; align-items: stretch; }
+  .p-col { display: flex; flex-direction: column; gap: 3px; flex: 1 1 0; min-width: 0; }
+  .p-caja { flex: 0 0 26px; background: #111418; color: #fff; border-radius: 4px;
+            display: flex; align-items: center; justify-content: center; }
+  .p-caja span { writing-mode: vertical-rl; transform: rotate(180deg);
+                 font-size: 9px; font-weight: 800; letter-spacing: .2em; }
+  .p-slot { border: 0.5px solid rgba(0,0,0,.35); border-radius: 4px; padding: 4px 3px;
+            height: 62mm; display: flex; flex-direction: column; }
+  .p-num { font-size: 7px; font-weight: 800; opacity: .8; letter-spacing: .04em; }
+  .p-sabor { font-size: 9px; font-weight: 700; line-height: 1.15; margin-top: 3px;
+             overflow-wrap: anywhere; flex: 1; }
+  .p-cod { font-size: 6.5px; font-weight: 700; opacity: .8; }
+  .p-libre { background: #fff !important; color: #94a3b8 !important; border-style: dashed; }
+  .p-pie { margin-top: 8px; font-size: 8px; color: #64748b; }
+}
 .msg { font-size: 12px; border-radius: 8px; padding: 9px 13px; margin-top: 10px; display: none; }
 .msg.ok { display: block; background: #f0fdf4; border: 1px solid #bbf7d0; color: #15803d; }
 .msg.err { display: block; background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; }
@@ -63,10 +96,17 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
     <div class="caso" id="caso"></div>
   </div>
 
-  <button class="btn" id="submit-btn" onclick="guardarVitrina()">Guardar vitrina</button>
+  <div class="acciones">
+    <button class="btn" id="submit-btn" onclick="guardarVitrina()">Guardar vitrina</button>
+    <button class="btn btn-sec" type="button" onclick="imprimirVitrina()"
+      title="Dibujo de la vitrina para imprimir o guardar como PDF">🖨 PDF de la vitrina</button>
+  </div>
   <div class="msg" id="form-msg"></div>
   <div class="last" id="last-update"></div>
 </div>
+
+<!-- Se llena al pedir el PDF y solo se ve en la impresión. -->
+<div id="vitrina-print"></div>
 
 <script>
 const TIENDAS = ['Costanera', 'Dominicos', 'Trapenses'];
@@ -165,6 +205,47 @@ function onSlotChange(sel) {
   tile.querySelector('.slotnum').style.color = textoSobre(color);
   tile.querySelector('.slot-costo').textContent = costoTxt(sabor);
   actualizarCostoPromedio();
+}
+
+// Dibujo de la vitrina para imprimir: las mismas fichas y colores que en
+// pantalla, pero sin los selectores, que en papel no sirven de nada.
+function imprimirVitrina() {
+  const tienda = document.getElementById('tienda-select').value;
+  const lado = CAJA_LADO[tienda] || 'left';
+
+  const ficha = (slot) => {
+    const sabor = vitrinaActual[slot] || '';
+    const color = colorSabor(sabor);
+    const txt = textoSobre(color);
+    const info = costoTxt(sabor);
+    return `<div class="p-slot${sabor ? '' : ' p-libre'}" style="background:${color};color:${txt}">
+      <div class="p-num">Slot ${slot}</div>
+      <div class="p-sabor">${sabor ? esc(sabor) : '— Libre —'}</div>
+      ${info ? `<div class="p-cod">${esc(info)}</div>` : ''}
+    </div>`;
+  };
+
+  let cols = '';
+  for (let i = 1; i <= 12; i++) cols += `<div class="p-col">${ficha(i)}${ficha(i + 12)}</div>`;
+  const caja = '<div class="p-caja"><span>CAJA</span></div>';
+
+  const asignados = Object.values(vitrinaActual).filter(Boolean).length;
+  const costo = document.getElementById('costo-promedio-valor').textContent;
+  const costoVisible = document.getElementById('costo-resumen').style.display !== 'none';
+
+  document.getElementById('vitrina-print').innerHTML = `
+    <div class="p-head">
+      <div>
+        <div class="p-titulo">Vitrina · ${esc(tienda)}</div>
+        <div class="p-sub">Fila superior: slots 1 a 12 · Fila inferior: slots 13 a 24
+          · Caja ${lado === 'right' ? 'a la derecha' : 'a la izquierda'}
+          · ${asignados} de 24 slots con sabor</div>
+      </div>
+      ${costoVisible ? `<div class="p-costo">Costo promedio<br>${esc(costo)} / kg</div>` : ''}
+    </div>
+    <div class="p-caso">${lado === 'right' ? cols + caja : caja + cols}</div>
+    <div class="p-pie">Impreso el ${new Date().toLocaleString('es-CL')}</div>`;
+  window.print();
 }
 
 function renderCaso() {

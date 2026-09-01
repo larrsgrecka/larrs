@@ -5,6 +5,9 @@ import {
   stockYFaltantes, produccionPorSemana, topSabores, ultimosPesajes,
   cumplimientoPorTienda, ultimosConteosDeInventario, ventasPorProducto,
 } from "@/utils/mcp-datos";
+import {
+  asistenciaDelDia, atrasosYAusencias, horasTrabajadas, personalPorTienda,
+} from "@/utils/geovictoria";
 
 // Servidor MCP: expone los datos de Larrs como herramientas para Claude, así se
 // pueden preguntar desde el celular ("¿qué le falta reponer a Dominicos?") sin
@@ -120,6 +123,69 @@ const handler = createMcpHandler(
         }),
       },
       async ({ tienda, mes, limite }) => responder(await ventasPorProducto({ tienda, mes, limite }))
+    );
+
+    // ── Asistencia (GeoVictoria) ──────────────────────────────────────────
+    // La tienda sale del grupo de GeoVictoria ("Local Costanera" → Costanera),
+    // así que se pide con el mismo nombre que el resto de las herramientas.
+    const fecha = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+
+    server.registerTool(
+      "asistencia_del_dia",
+      {
+        title: "Asistencia del día",
+        description:
+          "Quién marcó entrada y salida en un día, con su turno, atrasos, salidas anticipadas y permisos. " +
+          "Sin fecha usa el día de hoy. Ojo: un turno sin marcaje puede ser alguien que todavía no llegó.",
+        inputSchema: z.object({
+          fecha: fecha.optional().describe("Día a consultar, aaaa-mm-dd (default: hoy)"),
+          tienda,
+        }),
+      },
+      async ({ fecha, tienda }) => responder(await asistenciaDelDia({ fecha, tienda }))
+    );
+
+    server.registerTool(
+      "atrasos_y_ausencias",
+      {
+        title: "Atrasos y ausencias",
+        description:
+          "Atraso acumulado por persona en un período, días con atraso, salidas anticipadas, ausencias sin " +
+          "justificar, licencias y vacaciones. Ordenado por quien más atraso acumula.",
+        inputSchema: z.object({
+          desde: fecha.describe("Inicio del período, aaaa-mm-dd"),
+          hasta: fecha.describe("Fin del período, aaaa-mm-dd"),
+          tienda,
+        }),
+      },
+      async ({ desde, hasta, tienda }) => responder(await atrasosYAusencias({ desde, hasta, tienda }))
+    );
+
+    server.registerTool(
+      "horas_trabajadas",
+      {
+        title: "Horas trabajadas",
+        description:
+          "Horas efectivas por persona y por tienda en un período, con días trabajados, horas extra realizadas " +
+          "y domingos o feriados trabajados. Sirve para cruzar dotación con producción o ventas.",
+        inputSchema: z.object({
+          desde: fecha.describe("Inicio del período, aaaa-mm-dd"),
+          hasta: fecha.describe("Fin del período, aaaa-mm-dd"),
+          tienda,
+        }),
+      },
+      async ({ desde, hasta, tienda }) => responder(await horasTrabajadas({ desde, hasta, tienda }))
+    );
+
+    server.registerTool(
+      "personal_por_tienda",
+      {
+        title: "Personal por tienda",
+        description:
+          "Quiénes están habilitados en cada local según GeoVictoria, con su fecha de contrato, y el total por tienda.",
+        inputSchema: z.object({ tienda }),
+      },
+      async ({ tienda }) => responder(await personalPorTienda({ tienda }))
     );
   },
   { serverInfo: { name: "larrs", version: "1.0.0" } }

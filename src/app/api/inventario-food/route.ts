@@ -3,6 +3,11 @@ import { createClient } from "@/utils/supabase/server";
 import { getProfile } from "@/utils/auth";
 import { dedupePorClaveUbicacion, type StockRow } from "@/utils/inventario-food-stock";
 
+// El Apps Script de Inventario Food maneja 3.400 filas y en frío tarda
+// decenas de segundos: con el default de 10 s la plataforma cortaba la
+// función y el panel recibía HTML en vez del JSON del conteo.
+export const maxDuration = 60;
+
 type Item = { producto: string; cantidad: number; unidad?: string; ubicacion?: string };
 
 // La fila tal como la devuelve el Apps Script: los campos que usa el dedupe más

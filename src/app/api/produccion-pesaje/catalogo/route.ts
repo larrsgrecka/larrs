@@ -5,7 +5,7 @@ import { getRecetarioCostos, matchCostos } from "@/utils/recetario-costos";
 
 // El CSV de producción tarda ~7s en leerse (planilla grande) — el default
 // de Vercel (10s) queda muy justo, damos más margen.
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 export async function GET() {
   const supabase = await createClient();

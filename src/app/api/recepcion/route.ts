@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { getProfile } from "@/utils/auth";
 
+// Escribe en un Apps Script de Google, que en frío tarda decenas de segundos.
+export const maxDuration = 60;
+
 type Item = { categoria: string; producto: string; cantidad: number; unidad?: string };
 
 const PROVEEDORES_VALIDOS = ["Centro de Producción", "Grecka", "Otro"];

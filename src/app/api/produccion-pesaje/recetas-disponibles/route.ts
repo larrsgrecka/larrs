@@ -6,7 +6,7 @@ import { getRecetasConsumidasPorTiendaYSabor } from "@/utils/produccion-recetas-
 
 // El CSV de producción es grande y acá se recorre completo (no solo el
 // header) — más lento que los otros catálogos, damos margen extra.
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 const TIENDAS = ["Costanera", "Dominicos", "Trapenses"];
 

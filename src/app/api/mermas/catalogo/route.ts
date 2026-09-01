@@ -4,7 +4,7 @@ import { getCatalogoProductos } from "@/utils/catalogo-productos";
 
 // Pagina ~12k filas de ventas en Supabase — puede tardar varios segundos,
 // el default de Vercel (10s) queda justo, damos más margen.
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 export async function GET() {
   const supabase = await createClient();

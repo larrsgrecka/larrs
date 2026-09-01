@@ -1,4 +1,4 @@
-import { createMcpHandler, withMcpAuth } from "mcp-handler";
+import { createMcpHandler } from "mcp-handler";
 import { timingSafeEqual } from "crypto";
 import { z } from "zod";
 import {
@@ -133,45 +133,42 @@ function tokenValido(recibido: string, esperado: string): boolean {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-// Este endpoint queda expuesto a internet con todos los datos del negocio, así
-// que sin token no se responde nada (required: true).
-const protegido = withMcpAuth(
-  handler,
-  async (req, bearer) => {
-    const esperado = process.env.MCP_TOKEN;
-    if (!esperado) {
-      console.error("[mcp] falta MCP_TOKEN: el servidor MCP queda cerrado");
-      return undefined;
-    }
-    // El header Authorization es la vía correcta. El ?token= es un respaldo para
-    // clientes que solo permiten pegar una URL: funciona igual, pero el secreto
-    // queda escrito en los logs de acceso, así que conviene el header cuando el
-    // cliente lo permita.
-    const recibido = bearer || new URL(req.url).searchParams.get("token") || "";
-    if (!recibido || !tokenValido(recibido, esperado)) return undefined;
-    return { token: recibido, clientId: "larrs-claude", scopes: ["larrs:leer"] };
-  },
-  { required: true }
-);
+// Autenticación propia en vez de withMcpAuth: ese helper responde el 401 con un
+// `resource_metadata` que anuncia un servidor OAuth, y acá no hay ninguno — el
+// cliente salía a buscarlo, no encontraba nada y fallaba con un error de
+// registro imposible de interpretar. Sin ese anuncio, el 401 dice qué hacer.
+//
+// El token va en el header Authorization, o en ?token= para clientes que solo
+// permiten pegar una URL (ahí queda escrito en los logs de acceso del servidor).
+function credencial(request: Request): string {
+  const header = request.headers.get("authorization") || "";
+  const bearer = header.match(/^Bearer\s+(.+)$/i)?.[1];
+  return (bearer || new URL(request.url).searchParams.get("token") || "").trim();
+}
 
-// withMcpAuth responde 401 si no viene el header Authorization, sin llegar a
-// verificar nada, así que el token de la URL se traslada al header antes de
-// delegarle. El body se copia explícitamente: reusar el Request original con
-// otros headers no es fiable una vez que hay stream de entrada.
 async function conAuth(request: Request): Promise<Response> {
-  const url = new URL(request.url);
-  const tokenEnUrl = url.searchParams.get("token");
-
-  if (!request.headers.get("authorization") && tokenEnUrl) {
-    const headers = new Headers(request.headers);
-    headers.set("authorization", `Bearer ${tokenEnUrl}`);
-    const body = request.method === "GET" || request.method === "HEAD"
-      ? undefined
-      : await request.arrayBuffer();
-    return protegido(new Request(url, { method: request.method, headers, body }));
+  const esperado = process.env.MCP_TOKEN;
+  if (!esperado) {
+    console.error("[mcp] falta MCP_TOKEN: el servidor MCP queda cerrado");
+    return Response.json(
+      { error: "El servidor MCP no está configurado (falta MCP_TOKEN)." },
+      { status: 503 }
+    );
   }
 
-  return protegido(request);
+  const recibido = credencial(request);
+  if (!recibido || !tokenValido(recibido, esperado)) {
+    return Response.json(
+      {
+        error:
+          "Falta el token o es incorrecto. Agrega el header 'Authorization: Bearer <token>' " +
+          "o pega la URL del conector con ?token=<token> al final.",
+      },
+      { status: 401, headers: { "WWW-Authenticate": 'Bearer error="invalid_token"' } }
+    );
+  }
+
+  return handler(request);
 }
 
 export { conAuth as GET, conAuth as POST, conAuth as DELETE };

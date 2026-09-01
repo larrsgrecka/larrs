@@ -43,3 +43,6 @@ next-env.d.ts
 
 # exports sueltos de análisis de ventas (datos de clientes, no van al repo)
 /*.txt
+
+# La extensión de Vercel guarda un token de acceso personal acá.
+.vscode/

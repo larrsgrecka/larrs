@@ -7,6 +7,9 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    // /api/mcp queda fuera: se autentica con su propio token Bearer, no con la
+    // sesión de Supabase. Si pasara por acá, una petición sin cookie terminaría
+    // redirigida a /login y el cliente MCP recibiría HTML en vez de JSON-RPC.
+    "/((?!api/mcp|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

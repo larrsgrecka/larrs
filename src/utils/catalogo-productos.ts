@@ -1,4 +1,10 @@
-import { createClient } from "@/utils/supabase/server";
+// Lectura con el cliente admin, no con el de sesión: estas son ~13k filas de
+// venta agregada que alimentan varios paneles, y todas las rutas que las piden
+// validan el rol antes de llamar acá. Con el cliente de sesión, cualquier
+// llamador sin cookie (el servidor MCP, que se autentica con su propio token)
+// recibía [] por RLS —sin error— y ese vacío se cacheaba 30 minutos, dejando
+// también a los paneles sin datos.
+import { createAdminClient } from "@/utils/supabase/admin";
 
 const LABELS: Record<string, string> = {
   HELADERIA: "Heladería",
@@ -47,7 +53,7 @@ async function fetchCatalogo(): Promise<{
   preciosPromedio: Record<string, number>;
   ventasPorTiendaProductoMes: VentasMensuales;
 }> {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const porGrupo = new Map<string, Set<string>>();
   const codigos: Record<string, string> = {};
   const sumaImporte: Record<string, number> = {};
@@ -127,6 +133,16 @@ async function getCache() {
     inFlight = fetchCatalogo().finally(() => { inFlight = null; });
   }
   const { categorias, codigos, preciosPromedio, ventasPorTiendaProductoMes } = await inFlight;
+
+  // Un catálogo vacío no es un catálogo: si la consulta no trajo filas, se
+  // sirve el cache anterior aunque esté vencido antes que congelar el vacío
+  // media hora (mismo criterio que sabores-produccion.ts).
+  if (categorias.length === 0) {
+    console.error("[catalogo-productos] la consulta no devolvió productos; no se cachea");
+    if (cache) return cache;
+    throw new Error("No se pudo leer el catálogo de productos desde la base de datos");
+  }
+
   cache = { data: categorias, codigos, preciosPromedio, ventasPorTiendaProductoMes, ts: Date.now() };
   return cache;
 }

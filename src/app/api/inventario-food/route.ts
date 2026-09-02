@@ -240,10 +240,13 @@ export async function GET(request: NextRequest) {
   const filas = (data.items ?? []) as unknown as FilaInventario[];
   const porClave = dedupePorClaveUbicacion(filas);
 
-  // Si ninguna fila trae ubicación, el Apps Script desplegado todavía no guarda
-  // la columna: barra y bodega del mismo producto se pisan entre sí y el panel
-  // tiene que avisarlo en vez de mostrar un total incompleto como si fuera bueno.
-  const ubicacionEnPlanilla = filas.some((it) => !!it.ubicacion);
+  // Si la planilla guarda la columna se detecta por la PRESENCIA del campo, no
+  // por su valor: mientras el Apps Script no estuvo redesplegado el campo no
+  // venía (undefined) y ahora llega vacío ("") hasta que se cargue el primer
+  // conteo con ubicación. Mirar el valor creaba un bloqueo circular — el panel
+  // esperaba ver ubicaciones para empezar a enviarlas, así que nunca las
+  // enviaba y nunca aparecían.
+  const ubicacionEnPlanilla = filas.some((it) => it.ubicacion !== undefined);
 
   return NextResponse.json({
     ok: true,

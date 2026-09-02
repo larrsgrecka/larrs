@@ -45,10 +45,18 @@ export type ItemStockMinimo = {
 };
 
 export async function getStockMinimos(): Promise<ItemStockMinimo[]> {
+  // Se mide cada fuente por separado: cuando esto se pasa del presupuesto de la
+  // función, los logs tienen que decir CUÁL de las tres tardó, no solo que
+  // "tardó". (Las tres corren en paralelo, así que el total es la más lenta.)
+  const t0 = Date.now();
+  const marca = (nombre: string) => <T>(v: T): T => {
+    console.log(`[stock-minimos] ${nombre}: ${Date.now() - t0} ms`);
+    return v;
+  };
   const [ventasPorTiendaProductoMes, stockPorClave, categorias] = await Promise.all([
-    getVentasPorTiendaProductoMes(),
-    getStockActualPorClave(),
-    getCatalogoFood(),
+    getVentasPorTiendaProductoMes().then(marca("ventas")),
+    getStockActualPorClave().then(marca("inventario food")),
+    getCatalogoFood().then(marca("catálogo")),
   ]);
 
   // El stock ahora se cuenta por Barra y Bodega por separado (claves distintas

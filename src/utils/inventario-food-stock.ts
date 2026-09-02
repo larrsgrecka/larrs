@@ -71,18 +71,46 @@ export function dedupePorClaveUbicacion<T extends StockRow>(rows: T[]): Record<s
   return porClave;
 }
 
+// El listado completo son ~3.500 filas y 1,2 MB, y el Apps Script tarda entre 4
+// y 10 segundos en entregarlo. Varias rutas lo piden (stock y alertas, su Excel,
+// el valor de stock, el servidor MCP), así que se cachea en memoria: la primera
+// llamada paga el costo y las siguientes salen al instante.
+const STOCK_TTL_MS = 5 * 60 * 1000;
+let stockCache: { porClave: Record<string, StockRow>; ts: number } | null = null;
+
 export async function getStockActualPorClave(): Promise<Record<string, StockRow>> {
+  if (stockCache && Date.now() - stockCache.ts < STOCK_TTL_MS) return stockCache.porClave;
+
   const config = appsScriptConfig();
-  if (!config) return {};
+  if (!config) throw new Error("Apps Script de Inventario Food no configurado");
 
-  let data: { ok: boolean; items?: StockRow[] };
+  let data: { ok: boolean; error?: string; items?: StockRow[] };
   try {
-    const resp = await fetch(`${config.url}?token=${encodeURIComponent(config.token)}&action=list`);
-    data = JSON.parse(await resp.text());
-  } catch {
-    return {};
+    // Corte propio para no consumir todo el presupuesto de la función y dejar
+    // que la plataforma la mate sin mensaje.
+    const resp = await fetch(`${config.url}?token=${encodeURIComponent(config.token)}&action=list`, {
+      signal: AbortSignal.timeout(40_000),
+    });
+    const texto = await resp.text();
+    data = JSON.parse(texto);
+  } catch (e) {
+    // Antes esto devolvía {} en silencio, y quien lo consumía concluía "no hay
+    // conteos" en vez de "no pude leer los conteos" — un panel de alertas
+    // mostrando cero productos bajo mínimo es peor que uno mostrando un error.
+    if (stockCache) return stockCache.porClave;  // mejor un dato de hace minutos
+    const timeout = (e as Error)?.name === "TimeoutError";
+    throw new Error(
+      timeout
+        ? "El Apps Script de Inventario Food no respondió en 40 s"
+        : `No se pudo leer Inventario Food: ${(e as Error)?.message || "error desconocido"}`
+    );
   }
-  if (!data.ok) return {};
+  if (!data.ok) {
+    if (stockCache) return stockCache.porClave;
+    throw new Error(`Inventario Food devolvió un error: ${data.error || "sin detalle"}`);
+  }
 
-  return dedupePorClaveUbicacion(data.items ?? []);
+  const porClave = dedupePorClaveUbicacion(data.items ?? []);
+  stockCache = { porClave, ts: Date.now() };
+  return porClave;
 }

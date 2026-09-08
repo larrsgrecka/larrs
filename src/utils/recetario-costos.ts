@@ -4,7 +4,15 @@ import { descargarArchivoSharePoint } from "./microsoft-graph";
 const SHAREPOINT_SITE = "grecka-my.sharepoint.com:/personal/rodrigo_puente_grecka_cl";
 const SHAREPOINT_FILE_PATH = "EXCEL_PBI/Recetario Larrs.xlsx";
 const SHEET_NAME = "Costo Recetas Helados";
+const SHEET_TARIFAS = "Tarifas Helados";
+// Formato de referencia para el precio por kilo: el precio de venta no depende
+// del sabor sino del formato (de $15.833/kg en el pote de 1 kg a $45.294/kg en
+// la Copa Nutella), así que el margen por sabor necesita un formato fijo contra
+// el cual compararse. Se usa el Simple, que es el que más se vende.
+const FORMATO_REFERENCIA = "Simple";
 const CACHE_TTL_MS = 10 * 60 * 1000;
+
+export type TarifaHelado = { formato: string; pesoGramos: number; tarifa: number; precioKg: number };
 
 export type RecetaCosto = {
   codigo: string;
@@ -17,13 +25,18 @@ export type RecetaCosto = {
   costoKg: number;
 };
 
-let cache: { data: RecetaCosto[]; sincronizadoEn: string; expiresAt: number } | null = null;
+let cache: {
+  data: RecetaCosto[];
+  tarifas: TarifaHelado[];
+  sincronizadoEn: string;
+  expiresAt: number;
+} | null = null;
 
 export async function getRecetarioCostos(
   forzar = false
-): Promise<{ recetas: RecetaCosto[]; sincronizadoEn: string }> {
+): Promise<{ recetas: RecetaCosto[]; tarifas: TarifaHelado[]; sincronizadoEn: string }> {
   if (!forzar && cache && Date.now() < cache.expiresAt) {
-    return { recetas: cache.data, sincronizadoEn: cache.sincronizadoEn };
+    return { recetas: cache.data, tarifas: cache.tarifas, sincronizadoEn: cache.sincronizadoEn };
   }
 
   const buffer = await descargarArchivoSharePoint(SHAREPOINT_SITE, SHAREPOINT_FILE_PATH);
@@ -49,9 +62,35 @@ export async function getRecetarioCostos(
       };
     });
 
+  // Tarifas de venta: van en otra hoja del mismo archivo, así que se leen en la
+  // misma descarga en vez de pedirlo dos veces.
+  const wsTarifas = wb.Sheets[SHEET_TARIFAS];
+  const tarifas: TarifaHelado[] = wsTarifas
+    ? (XLSX.utils.sheet_to_json(wsTarifas, { header: 1, defval: "" }) as (string | number)[][])
+        .slice(1)
+        .filter((r) => String(r[0] ?? "").trim() && Number(r[1]) > 0 && Number(r[2]) > 0)
+        .map((r) => {
+          const pesoGramos = Number(r[1]);
+          const tarifa = Number(r[2]);
+          return { formato: String(r[0]).trim(), pesoGramos, tarifa, precioKg: tarifa / (pesoGramos / 1000) };
+        })
+    : [];
+
   const sincronizadoEn = new Date().toISOString();
-  cache = { data: recetas, sincronizadoEn, expiresAt: Date.now() + CACHE_TTL_MS };
-  return { recetas, sincronizadoEn };
+  cache = { data: recetas, tarifas, sincronizadoEn, expiresAt: Date.now() + CACHE_TTL_MS };
+  return { recetas, tarifas, sincronizadoEn };
+}
+
+// Precio de venta por kilo del formato de referencia, para calcular el margen
+// de cada sabor. Si el formato cambia de nombre en el Recetario, cae al de
+// mayor peso conocido en vez de quedarse sin referencia.
+export function precioKgReferencia(tarifas: TarifaHelado[]): TarifaHelado | null {
+  if (tarifas.length === 0) return null;
+  const norm = (s: string) => normalizarNombre(s);
+  return (
+    tarifas.find((t) => norm(t.formato) === norm(FORMATO_REFERENCIA)) ??
+    [...tarifas].sort((a, b) => b.pesoGramos - a.pesoGramos)[0]
+  );
 }
 
 function normalizarNombre(s: string): string {

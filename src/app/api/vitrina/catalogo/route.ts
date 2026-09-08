@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { getProfile } from "@/utils/auth";
 import { getSaboresProduccion } from "@/utils/sabores-produccion";
-import { getRecetarioCostos, matchCostos } from "@/utils/recetario-costos";
+import { getRecetarioCostos, matchCostos, precioKgReferencia } from "@/utils/recetario-costos";
 
 // El CSV de producción tarda ~7s en leerse (planilla grande) — el default
 // de Vercel (10s) queda muy justo, damos más margen.
@@ -27,10 +27,18 @@ export async function GET() {
 
     const [sabores, recetario] = await Promise.all([
       getSaboresProduccion(),
-      getRecetarioCostos().catch(() => ({ recetas: [], sincronizadoEn: "" })),
+      getRecetarioCostos().catch(() => ({ recetas: [], tarifas: [], sincronizadoEn: "" })),
     ]);
     const costos = matchCostos(sabores, recetario.recetas);
-    return NextResponse.json({ ok: true, sabores, costos });
+
+    // Precio de venta por kilo del formato de referencia: el margen de cada
+    // sabor se calcula contra este número, porque el precio no varía por sabor.
+    const referencia = precioKgReferencia(recetario.tarifas);
+    const precioKg = referencia
+      ? { formato: referencia.formato, pesoGramos: referencia.pesoGramos, tarifa: referencia.tarifa, porKilo: Math.round(referencia.precioKg) }
+      : null;
+
+    return NextResponse.json({ ok: true, sabores, costos, precioKg });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }

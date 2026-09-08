@@ -118,12 +118,41 @@ const ocultarCostos = window._LARRS_IS_OPERADOR === true;
 let sabores = [];
 let vitrinaActual = {}; // slot -> sabor
 let costosSabores = {}; // sabor -> {codigo, costoKg}
+// Precio de venta por kilo del formato de referencia (viene del Recetario). El
+// precio no depende del sabor sino del formato, así que el margen de cada sabor
+// se mide contra este número.
+let precioKg = null; // { formato, pesoGramos, tarifa, porKilo }
+
+// Margen sobre la venta: lo que queda del precio del kilo después del costo.
+function margenDe(sabor) {
+  const c = costosSabores[sabor];
+  if (!c || !precioKg || !precioKg.porKilo) return null;
+  const pesos = precioKg.porKilo - c.costoKg;
+  return { pesos, porcentaje: (pesos / precioKg.porKilo) * 100 };
+}
 
 function costoTxt(sabor) {
   if (ocultarCostos) return '';
   const c = costosSabores[sabor];
   if (!c) return '';
-  return `${c.codigo} · $${Math.round(c.costoKg).toLocaleString('es-CL')}/kg`;
+  const base = `${c.codigo} · $${Math.round(c.costoKg).toLocaleString('es-CL')}/kg`;
+  const m = margenDe(sabor);
+  // Se muestra el % (cabe en la ficha) y los pesos quedan en el tooltip.
+  return m ? `${base} · margen ${Math.round(m.porcentaje)}%` : base;
+}
+
+// Detalle completo para el title de la ficha, donde sí hay lugar para los pesos.
+function detalleCosto(sabor) {
+  if (ocultarCostos) return '';
+  const c = costosSabores[sabor];
+  if (!c) return '';
+  const m = margenDe(sabor);
+  const partes = [`Costo: $${Math.round(c.costoKg).toLocaleString('es-CL')}/kg`];
+  if (m) {
+    partes.push(`Precio ${precioKg.formato} (${precioKg.pesoGramos} g): $${precioKg.porKilo.toLocaleString('es-CL')}/kg`);
+    partes.push(`Margen: $${Math.round(m.pesos).toLocaleString('es-CL')}/kg (${Math.round(m.porcentaje)}%)`);
+  }
+  return partes.join(' — ');
 }
 
 function actualizarCostoPromedio() {
@@ -136,8 +165,15 @@ function actualizarCostoPromedio() {
   card.style.display = 'block';
   document.getElementById('costo-promedio-valor').textContent =
     `$${Math.round(promedio).toLocaleString('es-CL')} / kg`;
-  document.getElementById('costo-promedio-sub').textContent =
-    `${conCosto.length} de ${asignados.length} sabores con costo conocido (Recetario)`;
+
+  let sub = `${conCosto.length} de ${asignados.length} sabores con costo conocido (Recetario)`;
+  if (precioKg && precioKg.porKilo) {
+    const margen = precioKg.porKilo - promedio;
+    sub = `Margen promedio $${Math.round(margen).toLocaleString('es-CL')}/kg `
+      + `(${Math.round((margen / precioKg.porKilo) * 100)}%) sobre el precio del formato `
+      + `${precioKg.formato}: $${precioKg.porKilo.toLocaleString('es-CL')}/kg · ` + sub;
+  }
+  document.getElementById('costo-promedio-sub').textContent = sub;
 }
 
 function esc(s) {
@@ -187,7 +223,7 @@ function slotHtml(slot) {
   const libre = sabor ? '' : ' libre';
   const costo = costoTxt(sabor);
   return `
-    <div class="slot${libre}" data-slot-tile="${slot}" style="background:${color}">
+    <div class="slot${libre}" data-slot-tile="${slot}" style="background:${color}" title="${esc(detalleCosto(sabor))}">
       <span class="slotnum" style="color:${txt}">Slot ${slot}</span>
       <select data-slot="${slot}" onchange="onSlotChange(this)" ${soloVer ? 'disabled' : ''}>${opcionesSabor(sabor)}</select>
       <span class="slot-costo" style="font-size:9px;font-weight:700;color:${txt};opacity:.85">${costo}</span>
@@ -239,7 +275,9 @@ function imprimirVitrina() {
         <div class="p-titulo">Vitrina · ${esc(tienda)}</div>
         <div class="p-sub">Fila superior: slots 1 a 12 · Fila inferior: slots 13 a 24
           · Caja ${lado === 'right' ? 'a la derecha' : 'a la izquierda'}
-          · ${asignados} de 24 slots con sabor</div>
+          · ${asignados} de 24 slots con sabor${precioKg && !ocultarCostos
+            ? ` · Margen calculado sobre el formato ${esc(precioKg.formato)}: $${precioKg.porKilo.toLocaleString('es-CL')}/kg`
+            : ''}</div>
       </div>
       ${costoVisible ? `<div class="p-costo">Costo promedio<br>${esc(costo)} / kg</div>` : ''}
     </div>
@@ -277,6 +315,7 @@ async function loadCatalogo() {
   if (data.ok) {
     sabores = data.sabores || [];
     costosSabores = data.costos || {};
+    precioKg = data.precioKg || null;
   }
 }
 

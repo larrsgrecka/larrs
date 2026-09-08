@@ -21,28 +21,62 @@ function appsScriptConfig() {
   return { url, token };
 }
 
+// Se arma con URL en vez de concatenar: si la variable de entorno viene con una
+// barra final o con el token ya pegado, "?token=" produce una URL que Google
+// responde con 404. Ya nos costó un día de diagnóstico en el panel de
+// producción; esta ruta seguía concatenando a mano.
+function urlAppsScript(base: string, token: string, params: Record<string, string> = {}): string {
+  const u = new URL(base.trim());
+  u.pathname = u.pathname.replace(/\/+$/, "");
+  u.searchParams.set("token", token);
+  for (const [k, v] of Object.entries(params)) u.searchParams.set(k, v);
+  return u.toString();
+}
+
 // Google Apps Script a veces devuelve una respuesta vacía o una página de
 // error de Drive en vez del JSON esperado (falla temporal de infraestructura
 // de Google, no de esta app) — sin este guard, resp.json() explota con un
 // error crudo tipo "Unexpected end of JSON input" que además rompe el propio
 // JSON de respuesta de esta ruta, confundiendo al cliente todavía más.
+const espera = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 async function fetchAppsScriptJson(
   url: string,
   options?: RequestInit
 ): Promise<{ ok: boolean; error?: string; [key: string]: unknown }> {
-  let resp: Response;
-  try {
-    resp = await fetch(url, options);
-  } catch {
-    return { ok: false, error: "No se pudo conectar con el servicio de Inventario Food. Intenta de nuevo en unos segundos." };
+  // Google devuelve 404 con una página HTML de forma intermitente: en el mismo
+  // minuto unas llamadas pasan y otras no, con el deployment intacto. Reintentar
+  // resuelve la enorme mayoría. Un 404 así llega ANTES de ejecutar el script, así
+  // que reintentar un POST no duplica el conteo; si en cambio la respuesta fuera
+  // un JSON de error del propio script, no se reintenta.
+  const intentos = 3;
+  let ultimoDetalle = "";
+
+  for (let i = 1; i <= intentos; i++) {
+    let resp: Response;
+    try {
+      resp = await fetch(url, { ...options, signal: AbortSignal.timeout(45_000) });
+    } catch (e) {
+      ultimoDetalle = (e as Error)?.name === "TimeoutError" ? "no respondió en 45 s" : "sin conexión";
+      if (i < intentos) { await espera(800 * i); continue; }
+      return { ok: false, error: `No se pudo conectar con el servicio de Inventario Food (${ultimoDetalle}). Intenta de nuevo en unos segundos.` };
+    }
+
+    const text = await resp.text();
+    try {
+      return JSON.parse(text);
+    } catch {
+      ultimoDetalle = `HTTP ${resp.status}`;
+      console.error(`[inventario-food] respuesta no-JSON (intento ${i}/${intentos}):`, resp.status, text.slice(0, 200));
+      if (i < intentos) { await espera(800 * i); continue; }
+    }
   }
-  const text = await resp.text();
-  try {
-    return JSON.parse(text);
-  } catch {
-    console.error("[inventario-food] Respuesta no-JSON del Apps Script:", resp.status, text.slice(0, 300));
-    return { ok: false, error: "El servicio de Inventario Food no respondió correctamente (puede ser una falla temporal de Google). Intenta de nuevo en unos segundos." };
-  }
+
+  return {
+    ok: false,
+    error: `El servicio de Inventario Food no respondió bien tras ${intentos} intentos (${ultimoDetalle}). ` +
+      "Es una falla temporal de Google: espera unos segundos y, antes de repetir el conteo, revisa en \"Stock actual\" si alcanzó a guardarse.",
+  };
 }
 
 export async function POST(request: NextRequest) {
@@ -110,7 +144,7 @@ export async function POST(request: NextRequest) {
     })),
   };
 
-  const data = await fetchAppsScriptJson(`${config.url}?token=${encodeURIComponent(config.token)}`, {
+  const data = await fetchAppsScriptJson(urlAppsScript(config.url, config.token), {
     method: "POST",
     body: JSON.stringify(payload),
   });
@@ -166,7 +200,7 @@ export async function PUT(request: NextRequest) {
     observaciones: body.observaciones || "",
   };
 
-  const data = await fetchAppsScriptJson(`${config.url}?token=${encodeURIComponent(config.token)}&action=update`, {
+  const data = await fetchAppsScriptJson(urlAppsScript(config.url, config.token, { action: "update" }), {
     method: "POST",
     body: JSON.stringify(payload),
   });
@@ -197,7 +231,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: "id es requerido" }, { status: 400 });
   }
 
-  const data = await fetchAppsScriptJson(`${config.url}?token=${encodeURIComponent(config.token)}&action=delete`, {
+  const data = await fetchAppsScriptJson(urlAppsScript(config.url, config.token, { action: "delete" }), {
     method: "POST",
     body: JSON.stringify({ id: body.id }),
   });
@@ -225,12 +259,14 @@ export async function GET(request: NextRequest) {
       ? profile.tienda
       : sp.get("tienda");
 
-  const url = new URL(config.url);
-  url.searchParams.set("token", config.token);
-  url.searchParams.set("action", "list");
-  if (tienda && tienda !== "Todas") url.searchParams.set("tienda", tienda);
+  // El listado por tienda además baja bastante el peso de la respuesta: el
+  // completo ya va en 1,4 MB y ~7 s, y es lo que hacía que la función se
+  // pasara de los 60 s.
+  const params: Record<string, string> = { action: "list" };
+  if (tienda && tienda !== "Todas") params.tienda = tienda;
+  const url = urlAppsScript(config.url, config.token, params);
 
-  const data = await fetchAppsScriptJson(url.toString());
+  const data = await fetchAppsScriptJson(url);
   if (!data.ok) {
     return NextResponse.json({ error: data.error || "Error en Apps Script" }, { status: 502 });
   }

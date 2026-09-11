@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { getProfile } from "@/utils/auth";
 import { resolverSaboresEnPlanilla } from "@/utils/sabores-produccion";
+import { fetchAppsScriptJson, urlAppsScript } from "@/utils/apps-script";
 
 // Validar un sabor implica leer el CSV de producción, que puede tardar.
 export const maxDuration = 30;
@@ -39,13 +40,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "catalogo debe ser 'food' o 'sabores'" }, { status: 400 });
   }
 
-  const url = new URL(config.url);
-  url.searchParams.set("token", config.token);
-  url.searchParams.set("action", "list");
-  url.searchParams.set("catalogo", catalogo);
-
-  const resp = await fetch(url.toString());
-  const data = await resp.json();
+  const params: Record<string, string> = { action: "list", catalogo: catalogo };
+  const data = await fetchAppsScriptJson(urlAppsScript(config.url, config.token, params), { servicio: "Catálogo" });
   if (!data.ok) {
     return NextResponse.json({ error: data.error || "Error en Apps Script" }, { status: 502 });
   }
@@ -104,11 +100,11 @@ export async function POST(request: NextRequest) {
     creado_por: auth.profile!.name || auth.user!.email || "",
   };
 
-  const resp = await fetch(`${config.url}?token=${encodeURIComponent(config.token)}`, {
+  const data = await fetchAppsScriptJson(urlAppsScript(config.url, config.token), {
+    servicio: "Catálogo",
     method: "POST",
     body: JSON.stringify(payload),
   });
-  const data = await resp.json();
   if (!data.ok) {
     return NextResponse.json({ error: data.error || "Error en Apps Script" }, { status: 502 });
   }
@@ -130,11 +126,11 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: "id es requerido" }, { status: 400 });
   }
 
-  const resp = await fetch(`${config.url}?token=${encodeURIComponent(config.token)}&action=delete`, {
+  const data = await fetchAppsScriptJson(urlAppsScript(config.url, config.token, { action: "delete" }), {
+    servicio: "Catálogo",
     method: "POST",
     body: JSON.stringify({ id: body.id }),
   });
-  const data = await resp.json();
   if (!data.ok) {
     return NextResponse.json({ error: data.error || "Error en Apps Script" }, { status: 502 });
   }

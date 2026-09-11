@@ -3,6 +3,7 @@ import { createClient } from "@/utils/supabase/server";
 import { getProfile } from "@/utils/auth";
 import { getRecetarioCostos, matchCostos } from "@/utils/recetario-costos";
 import { getRecetasConsumidasPorTiendaYSabor } from "@/utils/produccion-recetas-consumidas";
+import { fetchAppsScriptJson, urlAppsScript } from "@/utils/apps-script";
 
 // El CSV de producción es grande y acá se recorre completo (no solo el
 // header) — más lento que los otros catálogos, damos margen extra.
@@ -35,12 +36,8 @@ async function getRecepcionesPorSabor(tienda: string): Promise<Record<string, Ev
   const config = recepcionConfig();
   if (!config) return {};
 
-  const url = new URL(config.url);
-  url.searchParams.set("token", config.token);
-  url.searchParams.set("action", "list");
-  url.searchParams.set("tienda", tienda);
-  const resp = await fetch(url.toString());
-  const data = await resp.json();
+  const params: Record<string, string> = { action: "list", tienda: tienda };
+  const data = await fetchAppsScriptJson(urlAppsScript(config.url, config.token, params), { servicio: "Recepción" });
   if (!data.ok) return {};
 
   const out: Record<string, EventoFecha[]> = {};
@@ -65,12 +62,8 @@ async function getUltimoConteoHeladeriaPorSabor(
   const config = inventarioFoodConfig();
   if (!config) return {};
 
-  const url = new URL(config.url);
-  url.searchParams.set("token", config.token);
-  url.searchParams.set("action", "list");
-  url.searchParams.set("tienda", tienda);
-  const resp = await fetch(url.toString());
-  const data = await resp.json();
+  const params: Record<string, string> = { action: "list", tienda: tienda };
+  const data = await fetchAppsScriptJson(urlAppsScript(config.url, config.token, params), { servicio: "Inventario Food" });
   if (!data.ok) return {};
 
   const out: Record<string, EventoFecha> = {};

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { getProfile } from "@/utils/auth";
+import { fetchAppsScriptJson, urlAppsScript } from "@/utils/apps-script";
 
 // Escribe en un Apps Script de Google, que en frío tarda decenas de segundos.
 export const maxDuration = 60;
@@ -68,11 +69,11 @@ export async function POST(request: NextRequest) {
     reportado_por_id: user.id,
   };
 
-  const resp = await fetch(`${config.url}?token=${encodeURIComponent(config.token)}`, {
+  const data = await fetchAppsScriptJson(urlAppsScript(config.url, config.token), {
+    servicio: "Mermas",
     method: "POST",
     body: JSON.stringify(payload),
   });
-  const data = await resp.json();
   if (!data.ok) {
     return NextResponse.json({ error: data.error || "Error en Apps Script" }, { status: 502 });
   }
@@ -125,11 +126,11 @@ export async function PUT(request: NextRequest) {
     observaciones: body.observaciones || "",
   };
 
-  const resp = await fetch(`${config.url}?token=${encodeURIComponent(config.token)}&action=update`, {
+  const data = await fetchAppsScriptJson(urlAppsScript(config.url, config.token, { action: "update" }), {
+    servicio: "Mermas",
     method: "POST",
     body: JSON.stringify(payload),
   });
-  const data = await resp.json();
   if (!data.ok) {
     return NextResponse.json({ error: data.error || "Error en Apps Script" }, { status: 502 });
   }
@@ -157,11 +158,11 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: "id es requerido" }, { status: 400 });
   }
 
-  const resp = await fetch(`${config.url}?token=${encodeURIComponent(config.token)}&action=delete`, {
+  const data = await fetchAppsScriptJson(urlAppsScript(config.url, config.token, { action: "delete" }), {
+    servicio: "Mermas",
     method: "POST",
     body: JSON.stringify({ id: body.id }),
   });
-  const data = await resp.json();
   if (!data.ok) {
     return NextResponse.json({ error: data.error || "Error en Apps Script" }, { status: 502 });
   }
@@ -184,13 +185,9 @@ export async function GET(request: NextRequest) {
   const tienda =
     profile?.role === "jefe_tienda" && profile.tienda ? profile.tienda : sp.get("tienda");
 
-  const url = new URL(config.url);
-  url.searchParams.set("token", config.token);
-  url.searchParams.set("action", "list");
-  if (tienda && tienda !== "Todas") url.searchParams.set("tienda", tienda);
-
-  const resp = await fetch(url.toString());
-  const data = await resp.json();
+  const params: Record<string, string> = { action: "list" };
+  if (tienda && tienda !== "Todas") params.tienda = tienda;
+  const data = await fetchAppsScriptJson(urlAppsScript(config.url, config.token, params), { servicio: "Mermas" });
   if (!data.ok) {
     return NextResponse.json({ error: data.error || "Error en Apps Script" }, { status: 502 });
   }

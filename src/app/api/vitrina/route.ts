@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { getProfile } from "@/utils/auth";
+import { fetchAppsScriptJson, urlAppsScript } from "@/utils/apps-script";
 
 // Escribe en un Apps Script de Google, que en frío tarda decenas de segundos.
 export const maxDuration = 60;
@@ -31,12 +32,9 @@ export async function GET(request: NextRequest) {
       ? profile.tienda
       : sp.get("tienda");
 
-  const url = new URL(config.url);
-  url.searchParams.set("token", config.token);
-  if (tienda) url.searchParams.set("tienda", tienda);
-
-  const resp = await fetch(url.toString());
-  const data = await resp.json();
+  const params: Record<string, string> = {};
+  if (tienda) params.tienda = tienda;
+  const data = await fetchAppsScriptJson(urlAppsScript(config.url, config.token, params), { servicio: "Vitrina" });
   if (!data.ok) {
     return NextResponse.json({ error: data.error || "Error en Apps Script" }, { status: 502 });
   }
@@ -84,11 +82,11 @@ export async function POST(request: NextRequest) {
     actualizado_por: profile.name || user.email || "",
   };
 
-  const resp = await fetch(`${config.url}?token=${encodeURIComponent(config.token)}`, {
+  const data = await fetchAppsScriptJson(urlAppsScript(config.url, config.token), {
+    servicio: "Vitrina",
     method: "POST",
     body: JSON.stringify(payload),
   });
-  const data = await resp.json();
   if (!data.ok) {
     return NextResponse.json({ error: data.error || "Error en Apps Script" }, { status: 502 });
   }

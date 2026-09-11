@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { getProfile } from "@/utils/auth";
+import { fetchAppsScriptJson, urlAppsScript } from "@/utils/apps-script";
 
 // Escribe en un Apps Script de Google, que en frío tarda decenas de segundos.
 export const maxDuration = 60;
@@ -42,12 +43,10 @@ async function sumarAlStock(
   }
 
   for (const [categoria, itemsCategoria] of porCategoria) {
-    const listUrl = new URL(config.url);
-    listUrl.searchParams.set("token", config.token);
-    listUrl.searchParams.set("action", "list");
-    listUrl.searchParams.set("tienda", tienda);
-    const listResp = await fetch(listUrl.toString());
-    const listData = await listResp.json();
+    const listData = await fetchAppsScriptJson(
+      urlAppsScript(config.url, config.token, { action: "list", tienda }),
+      { servicio: "Inventario Food" }
+    );
     if (!listData.ok) return { ok: false, error: listData.error || "Error al leer stock actual" };
 
     const stockActual: Record<string, number> = {};
@@ -63,7 +62,8 @@ async function sumarAlStock(
     });
 
     const fecha = new Date().toISOString().slice(0, 10);
-    const resp = await fetch(`${config.url}?token=${encodeURIComponent(config.token)}`, {
+    const data = await fetchAppsScriptJson(urlAppsScript(config.url, config.token), {
+      servicio: "Inventario Food",
       method: "POST",
       body: JSON.stringify({
         fecha,
@@ -75,7 +75,6 @@ async function sumarAlStock(
         items: nuevosItems,
       }),
     });
-    const data = await resp.json();
     if (!data.ok) return { ok: false, error: data.error || "Error al actualizar stock" };
   }
 
@@ -142,11 +141,11 @@ export async function POST(request: NextRequest) {
     foto_mimetype: body.foto_mimetype || undefined,
   };
 
-  const resp = await fetch(`${config.url}?token=${encodeURIComponent(config.token)}`, {
+  const data = await fetchAppsScriptJson(urlAppsScript(config.url, config.token), {
+    servicio: "Recepción",
     method: "POST",
     body: JSON.stringify(payload),
   });
-  const data = await resp.json();
   if (!data.ok) {
     return NextResponse.json({ error: data.error || "Error en Apps Script de recepción" }, { status: 502 });
   }
@@ -159,9 +158,11 @@ export async function POST(request: NextRequest) {
     ? await sumarAlStock(tienda, itemsFood, reportadoPor, reportadoPorId)
     : { ok: true };
   if (!stockResult.ok) {
+    // El ok va después del spread: la recepción sí quedó guardada, aunque el
+    // ajuste de stock haya fallado.
     return NextResponse.json({
-      ok: true,
       ...data,
+      ok: true,
       stockWarning: `Recepción guardada, pero no se pudo actualizar el stock automáticamente: ${stockResult.error}`,
     });
   }
@@ -186,13 +187,12 @@ export async function GET(request: NextRequest) {
       ? profile.tienda
       : sp.get("tienda");
 
-  const url = new URL(config.url);
-  url.searchParams.set("token", config.token);
-  url.searchParams.set("action", "list");
-  if (tienda && tienda !== "Todas") url.searchParams.set("tienda", tienda);
+  const params: Record<string, string> = { action: "list" };
+  if (tienda && tienda !== "Todas") params.tienda = tienda;
 
-  const resp = await fetch(url.toString());
-  const data = await resp.json();
+  const data = await fetchAppsScriptJson(urlAppsScript(config.url, config.token, params), {
+    servicio: "Recepción",
+  });
   if (!data.ok) {
     return NextResponse.json({ error: data.error || "Error en Apps Script" }, { status: 502 });
   }

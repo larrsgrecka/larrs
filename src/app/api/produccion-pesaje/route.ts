@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { getProfile } from "@/utils/auth";
 import { resolverSaboresEnPlanilla } from "@/utils/sabores-produccion";
+import { fetchAppsScriptJson, urlAppsScript } from "@/utils/apps-script";
 
 // El POST resuelve los nombres contra el CSV de producción antes de escribir
 // (puede tardar varios segundos si el Apps Script arranca en frío).
@@ -96,11 +97,11 @@ export async function POST(request: NextRequest) {
     items: itemsEnviables,
   };
 
-  const resp = await fetch(`${config.url}?token=${encodeURIComponent(config.token)}`, {
+  const data = await fetchAppsScriptJson(urlAppsScript(config.url, config.token), {
+    servicio: "Pesaje de producción",
     method: "POST",
     body: JSON.stringify(payload),
   });
-  const data = await resp.json();
   if (!data.ok) {
     return NextResponse.json({ error: data.error || "Error en Apps Script" }, { status: 502 });
   }

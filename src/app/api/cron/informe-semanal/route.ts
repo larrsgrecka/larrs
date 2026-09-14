@@ -10,10 +10,19 @@ export const maxDuration = 60;
 export async function GET(request: NextRequest) {
   // Vercel manda el CRON_SECRET como Bearer; sin eso, cualquiera podría
   // disparar un cálculo caro desde afuera.
+  //
+  // Falta la variable y token equivocado son dos problemas distintos y se
+  // arreglan distinto, así que no comparten respuesta: con 401 para ambos no
+  // hay forma de saber, desde afuera, si la variable llegó al deploy.
   const secreto = process.env.CRON_SECRET;
-  const autorizacion = request.headers.get("authorization");
-  if (!secreto || autorizacion !== `Bearer ${secreto}`) {
-    return new Response("Unauthorized", { status: 401 });
+  if (!secreto) {
+    return NextResponse.json(
+      { error: "Falta CRON_SECRET en el entorno de este deploy. Hay que crearla en Vercel y volver a desplegar: las variables se leen al desplegar." },
+      { status: 503 }
+    );
+  }
+  if (request.headers.get("authorization") !== `Bearer ${secreto}`) {
+    return NextResponse.json({ error: "Token del cron incorrecto" }, { status: 401 });
   }
 
   try {

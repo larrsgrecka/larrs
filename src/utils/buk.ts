@@ -47,7 +47,18 @@ async function bukGet<T = unknown>(
         // que es JSON válido: si solo mirásemos data llegaríamos a "0
         // empleados" en vez de a un error de credenciales.
         ultimoError = `BUK respondió HTTP ${resp.status}: ${texto.slice(0, 120)}`;
-        if (resp.status === 401 || resp.status === 403) break;  // reintentar no ayuda
+        if (resp.status === 401 || resp.status === 403) {
+          // Un 401 acá tiene dos causas que se arreglan distinto: el token mal
+          // copiado en el entorno, o la lista blanca de IPs de BUK, que no deja
+          // entrar a Vercel porque no tiene IP fija. La huella del token —largo
+          // y extremos, nunca el valor— distingue una de la otra sin tener que
+          // ir a mirar la variable.
+          const huella = `${token.length} caracteres, ${token.slice(0, 2)}…${token.slice(-2)}`;
+          ultimoError +=
+            ` — el token configurado tiene ${huella}. Si coincide con el de BUK, entonces la API está ` +
+            `rechazando la IP: hay que revisar la lista blanca de IPs de la API key (Vercel no tiene IP fija).`;
+          break;  // reintentar no ayuda
+        }
       } else {
         const datos = JSON.parse(texto);
         if (datos && Array.isArray(datos.errors)) {

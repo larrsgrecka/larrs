@@ -9,6 +9,10 @@ import {
   asistenciaDelDia, atrasosYAusencias, horasTrabajadas, personalPorTienda,
 } from "@/utils/geovictoria";
 import { generarInformeSemanal } from "@/utils/informe-semanal";
+import {
+  dotacionPorLocal, costoLaboralPorLocal, ausenciasYLicencias, vacaciones,
+  movimientosDePersonal,
+} from "@/utils/buk";
 
 // Servidor MCP: expone los datos de Larrs como herramientas para Claude, así se
 // pueden preguntar desde el celular ("¿qué le falta reponer a Dominicos?") sin
@@ -201,6 +205,89 @@ const handler = createMcpHandler(
         inputSchema: z.object({}),
       },
       async () => responder(await generarInformeSemanal())
+    );
+
+    // ─── BUK (remuneraciones) ───
+    // GeoVictoria cubre el marcaje diario; BUK tiene lo contractual y lo que
+    // cuesta. Todo filtrado a Cristiano Ferrero SPA, que son las heladerías:
+    // la misma instancia tiene Grecka y Martina, y mezclarlas multiplicaría el
+    // costo laboral por cinco.
+
+    server.registerTool(
+      "buk_dotacion",
+      {
+        title: "Dotación por local (BUK)",
+        description:
+          "Cuánta gente hay contratada hoy en cada local, con tipo de contrato, horas semanales y antigüedad. " +
+          "Solo las heladerías Lärrs (Cristiano Ferrero SPA). No incluye sueldos individuales.",
+        inputSchema: z.object({}),
+      },
+      async () => responder(await dotacionPorLocal())
+    );
+
+    server.registerTool(
+      "buk_costo_laboral",
+      {
+        title: "Costo laboral por local (BUK)",
+        description:
+          "Cuánto costó la remuneración de un mes en cada local: costo empresa (sueldos, gratificación, " +
+          "aportes patronales), no el líquido pagado, con los conceptos que más pesan y el costo por persona. " +
+          "Sirve para cruzarlo con la producción y las ventas del mismo mes. " +
+          "La primera consulta de un mes tarda cerca de un minuto porque la contabilidad de BUK es lenta; " +
+          "después queda en caché. Si algún local no se pudo leer viene en procesosSinDatos y el total está " +
+          "incompleto: hay que decirlo, no presentarlo como si fuera el costo del mes.",
+        inputSchema: z.object({
+          mes: z.number().int().min(1).max(12).describe("Mes, 1-12"),
+          anio: z.number().int().min(2020).max(2100).describe("Año, por ejemplo 2026"),
+        }),
+      },
+      async ({ mes, anio }) => responder(await costoLaboralPorLocal(mes, anio))
+    );
+
+    server.registerTool(
+      "buk_ausencias_y_licencias",
+      {
+        title: "Ausencias y licencias (BUK)",
+        description:
+          "Licencias médicas, permisos y ausencias de un período, por local y por persona, con días. " +
+          "Incluye las que empezaron antes del período y siguen vigentes. " +
+          "Es lo declarado en BUK: para el marcaje real del día está la asistencia de GeoVictoria.",
+        inputSchema: z.object({
+          desde: z.string().describe("Fecha inicial AAAA-MM-DD"),
+          hasta: z.string().describe("Fecha final AAAA-MM-DD"),
+        }),
+      },
+      async ({ desde, hasta }) => responder(await ausenciasYLicencias(desde, hasta))
+    );
+
+    server.registerTool(
+      "buk_vacaciones",
+      {
+        title: "Vacaciones (BUK)",
+        description:
+          "Quién está o estará de vacaciones en un rango de fechas, con días hábiles y corridos, por local. " +
+          "Sirve para ver la cobertura de un local antes de programar producción.",
+        inputSchema: z.object({
+          desde: z.string().describe("Fecha inicial AAAA-MM-DD"),
+          hasta: z.string().describe("Fecha final AAAA-MM-DD"),
+        }),
+      },
+      async ({ desde, hasta }) => responder(await vacaciones(desde, hasta))
+    );
+
+    server.registerTool(
+      "buk_movimientos_de_personal",
+      {
+        title: "Ingresos y salidas (BUK)",
+        description:
+          "Quién entró y quién salió en un período, por local, con el motivo de salida. Sirve para ver " +
+          "rotación: un local que cambia de gente seguido explica caídas de producción o de cumplimiento.",
+        inputSchema: z.object({
+          desde: z.string().describe("Fecha inicial AAAA-MM-DD"),
+          hasta: z.string().describe("Fecha final AAAA-MM-DD"),
+        }),
+      },
+      async ({ desde, hasta }) => responder(await movimientosDePersonal(desde, hasta))
     );
   },
   { serverInfo: { name: "larrs", version: "1.0.0" } }

@@ -7,9 +7,11 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // /api/mcp queda fuera: se autentica con su propio token Bearer, no con la
-    // sesión de Supabase. Si pasara por acá, una petición sin cookie terminaría
-    // redirigida a /login y el cliente MCP recibiría HTML en vez de JSON-RPC.
-    "/((?!api/mcp|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    // /api/mcp y /api/cron quedan fuera: se autentican con su propio token
+    // (Bearer del conector y CRON_SECRET respectivamente), no con la sesión de
+    // Supabase. Si pasaran por acá, una petición sin cookie terminaría
+    // redirigida a /login: el cliente MCP recibiría HTML en vez de JSON-RPC, y
+    // el cron de Vercel se quedaría en el redirect sin ejecutar nunca la tarea.
+    "/((?!api/mcp|api/cron|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

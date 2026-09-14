@@ -11,6 +11,8 @@ function appsScriptConfig() {
   return { url, token };
 }
 
+import { fetchAppsScriptJson, urlAppsScript } from "@/utils/apps-script";
+
 export type StockRow = {
   tienda: string;
   categoria: string;
@@ -84,33 +86,22 @@ export async function getStockActualPorClave(): Promise<Record<string, StockRow>
   const config = appsScriptConfig();
   if (!config) throw new Error("Apps Script de Inventario Food no configurado");
 
-  let data: { ok: boolean; error?: string; items?: StockRow[] };
-  try {
-    // Corte propio para no consumir todo el presupuesto de la función y dejar
-    // que la plataforma la mate sin mensaje.
-    const resp = await fetch(`${config.url}?token=${encodeURIComponent(config.token)}&action=list`, {
-      signal: AbortSignal.timeout(40_000),
-    });
-    const texto = await resp.text();
-    data = JSON.parse(texto);
-  } catch (e) {
-    // Antes esto devolvía {} en silencio, y quien lo consumía concluía "no hay
-    // conteos" en vez de "no pude leer los conteos" — un panel de alertas
-    // mostrando cero productos bajo mínimo es peor que uno mostrando un error.
-    if (stockCache) return stockCache.porClave;  // mejor un dato de hace minutos
-    const timeout = (e as Error)?.name === "TimeoutError";
-    throw new Error(
-      timeout
-        ? "El Apps Script de Inventario Food no respondió en 40 s"
-        : `No se pudo leer Inventario Food: ${(e as Error)?.message || "error desconocido"}`
-    );
-  }
+  // Pasa por el cliente común: reintenta el 404 intermitente de Google, que es
+  // lo que hacía fallar esta lectura en medio del informe semanal.
+  const data = await fetchAppsScriptJson(
+    urlAppsScript(config.url, config.token, { action: "list" }),
+    { servicio: "Inventario Food", timeoutMs: 40_000 }
+  );
   if (!data.ok) {
-    if (stockCache) return stockCache.porClave;
-    throw new Error(`Inventario Food devolvió un error: ${data.error || "sin detalle"}`);
+    // Nunca devolver {} en silencio: quien lo consume concluiría "no hay
+    // conteos" en vez de "no pude leerlos" — un panel de alertas mostrando cero
+    // productos bajo mínimo es peor que uno mostrando un error.
+    if (stockCache) return stockCache.porClave;  // mejor un dato de hace minutos
+    throw new Error(String(data.error || "No se pudo leer Inventario Food"));
   }
 
-  const porClave = dedupePorClaveUbicacion(data.items ?? []);
+  // items llega como unknown desde el cliente común: acá sabemos su forma.
+  const porClave = dedupePorClaveUbicacion((data.items ?? []) as unknown as StockRow[]);
   stockCache = { porClave, ts: Date.now() };
   return porClave;
 }

@@ -8,6 +8,7 @@ import {
 import {
   asistenciaDelDia, atrasosYAusencias, horasTrabajadas, personalPorTienda,
 } from "@/utils/geovictoria";
+import { generarInformeSemanal } from "@/utils/informe-semanal";
 
 // Servidor MCP: expone los datos de Larrs como herramientas para Claude, así se
 // pueden preguntar desde el celular ("¿qué le falta reponer a Dominicos?") sin
@@ -186,6 +187,20 @@ const handler = createMcpHandler(
         inputSchema: z.object({ tienda }),
       },
       async ({ tienda }) => responder(await personalPorTienda({ tienda }))
+    );
+
+    server.registerTool(
+      "informe_semanal",
+      {
+        title: "Informe de la semana",
+        description:
+          "Qué pasó la semana pasada en cada tienda y qué se ve raro: producción y su variación contra la " +
+          "semana anterior, sabores más producidos, stock bajo mínimo, horas y atrasos del equipo, y en qué " +
+          "módulos dejaron de registrar. Es el mismo informe del panel /informe-semanal. Si alguna fuente no " +
+          "se pudo leer lo dice en fuentesQueFallaron: eso no es lo mismo que una semana sin problemas.",
+        inputSchema: z.object({}),
+      },
+      async () => responder(await generarInformeSemanal())
     );
   },
   { serverInfo: { name: "larrs", version: "1.0.0" } }

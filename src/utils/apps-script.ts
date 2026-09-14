@@ -32,7 +32,10 @@ export async function fetchAppsScriptJson(
   url: string,
   opciones: RequestInit & { servicio?: string; intentos?: number; timeoutMs?: number } = {}
 ): Promise<RespuestaAppsScript> {
-  const { servicio = "Google", intentos = 3, timeoutMs = 45_000, ...init } = opciones;
+  // 4 intentos con espera exponencial (1 s, 2 s, 4 s): las ráfagas de 404 de
+  // Google duran varios segundos, y con esperas de 0,8 y 1,6 s los tres intentos
+  // caían dentro de la misma ventana de fallo — visto en el informe semanal.
+  const { servicio = "Google", intentos = 4, timeoutMs = 45_000, ...init } = opciones;
   let ultimoDetalle = "";
 
   for (let intento = 1; intento <= intentos; intento++) {
@@ -43,7 +46,7 @@ export async function fetchAppsScriptJson(
       ultimoDetalle = (e as Error)?.name === "TimeoutError"
         ? `no respondió en ${Math.round(timeoutMs / 1000)} s`
         : "sin conexión";
-      if (intento < intentos) { await espera(800 * intento); continue; }
+      if (intento < intentos) { await espera(1000 * 2 ** (intento - 1)); continue; }
       return { ok: false, error: `No se pudo conectar con ${servicio} (${ultimoDetalle}). Intenta de nuevo en unos segundos.` };
     }
 
@@ -55,7 +58,7 @@ export async function fetchAppsScriptJson(
       // reintentar no repite una escritura ya hecha.
       ultimoDetalle = `HTTP ${resp.status}`;
       console.error(`[apps-script:${servicio}] respuesta no-JSON (intento ${intento}/${intentos}):`, resp.status, texto.slice(0, 200));
-      if (intento < intentos) { await espera(800 * intento); continue; }
+      if (intento < intentos) { await espera(1000 * 2 ** (intento - 1)); continue; }
     }
   }
 

@@ -69,22 +69,43 @@ export async function GET(request: NextRequest) {
     return respuesta(guardado.texto, esVentas);
   }
 
-  let resp: Response;
-  let texto: string;
-  try {
-    // 25 s y no más: si Google va a tardar más que eso, es mejor decirlo y
-    // dejar reintentar que tener al panel girando un minuto entero.
-    resp = await fetch(destino, { signal: AbortSignal.timeout(25_000) });
-    texto = await resp.text();
-  } catch (e) {
-    const timeout = (e as Error)?.name === "TimeoutError";
+  // Dos intentos en vez de uno. Cuando el primero se corta por tiempo, el Apps
+  // Script no se detiene: sigue ejecutándose del lado de Google y queda
+  // caliente, así que el segundo intento suele responder en segundos. Un solo
+  // intento de 25 s convertía cada arranque en frío en una pantalla de error
+  // que el usuario tenía que reintentar a mano — que es exactamente lo que el
+  // reintento hace ahora, pero sin molestarlo.
+  //
+  // Los tiempos suman menos que el maxDuration de 60 s: si la plataforma cortara
+  // la función, el panel recibiría HTML donde espera datos.
+  const INTENTOS_MS = [25_000, 28_000];
+  let resp: Response | null = null;
+  let texto = "";
+  let ultimoFueTimeout = false;
+
+  for (let i = 0; i < INTENTOS_MS.length; i++) {
+    try {
+      resp = await fetch(destino, { signal: AbortSignal.timeout(INTENTOS_MS[i]) });
+      texto = await resp.text();
+      break;
+    } catch (e) {
+      ultimoFueTimeout = (e as Error)?.name === "TimeoutError";
+      resp = null;
+      if (i === 0) {
+        console.warn(`[produccion/datos] intento 1 falló (${ultimoFueTimeout ? "timeout" : "red"}), reintentando`);
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+    }
+  }
+
+  if (!resp) {
     // Antes de dar error, sirve la copia vencida si hay: un dato de hace unos
     // minutos es infinitamente mejor que una pantalla de error.
     if (guardado) return respuesta(guardado.texto, esVentas);
     return NextResponse.json(
       {
-        error: timeout
-          ? "Google no respondió en 25 s (la planilla es grande y arranca en frío). Vuelve a intentar en un momento."
+        error: ultimoFueTimeout
+          ? "Google no respondió en dos intentos (la planilla es grande y arranca en frío). Vuelve a intentar en un momento: el segundo intento suele andar."
           : "No se pudo conectar con la planilla de producción.",
       },
       { status: 504 }

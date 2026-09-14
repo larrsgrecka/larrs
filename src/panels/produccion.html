@@ -2059,12 +2059,12 @@ async function loadSales(retries) {
 }
 
 // ========== CARGA INICIAL ==========
-async function loadData() {
+async function loadData(intento = 1) {
   const btn = document.getElementById('refresh-btn');
   btn.disabled = true;
   document.getElementById('refresh-icon').innerHTML = '<span class="spinner"></span>';
   document.getElementById('main-content').innerHTML =
-    `<div class="loading-overlay"><div class="big-spinner"></div><div>Descargando planilla...</div></div>`;
+    `<div class="loading-overlay"><div class="big-spinner"></div><div>${intento > 1 ? 'Reintentando...' : 'Descargando planilla...'}</div></div>`;
   document.getElementById('toolbar').style.display = 'none';
 
   try {
@@ -2128,6 +2128,19 @@ async function loadData() {
     loadSales();
 
   } catch(err) {
+    // Google tarda de 3 a 25 s según su humor, y desde el servidor a veces se
+    // pasa. Ante una falla pasajera reintenta solo en vez de dejar una pantalla
+    // de error que el usuario tiene que apretar igual: en el segundo intento el
+    // script de Google ya está caliente y suele responder en segundos.
+    // No se reintenta lo que no va a mejorar solo: sesión expirada o una URL
+    // mal configurada en el servidor.
+    const definitivo = /sesión|no existe|Sin permiso/i.test(err.message);
+    if (!definitivo && intento < 2) {
+      document.getElementById('main-content').innerHTML =
+        `<div class="loading-overlay"><div class="big-spinner"></div><div>La planilla tardó demasiado. Reintentando...</div></div>`;
+      setTimeout(() => loadData(intento + 1), 3000);
+      return;
+    }
     document.getElementById('main-content').innerHTML = `
       <div class="error-box">
         <div style="font-size:24px;margin-bottom:8px">⚠️</div>

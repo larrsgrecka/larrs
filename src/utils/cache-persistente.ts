@@ -17,22 +17,30 @@
 
 import { createAdminClient } from "@/utils/supabase/admin";
 
-const TABLA = "cache_lecturas";
+// Va a Storage y no a una tabla porque un bucket se crea con la misma llave de
+// servicio que ya usa la app, sin migración ni acceso al editor SQL: la red de
+// seguridad no debería necesitar un paso manual para existir. Cada clave es un
+// archivo JSON que se pisa entero, que es justo la operación que hace falta.
+const BUCKET = "cache-lecturas";
+
+const archivo = (clave: string) => `${clave.replace(/[^a-zA-Z0-9._-]/g, "_")}.json`;
+
+// El timestamp viaja dentro del archivo en vez de leerse de los metadatos del
+// objeto: así la antigüedad sale de la misma descarga, sin una llamada extra.
+type Envoltorio = { guardadoEn: string; datos: unknown };
 
 export type Copia<T> = { datos: T; edadMs: number };
 
 export async function leerCopia<T>(clave: string): Promise<Copia<T> | null> {
   try {
     const supabase = createAdminClient();
-    const { data, error } = await supabase
-      .from(TABLA)
-      .select("datos, actualizado_en")
-      .eq("clave", clave)
-      .maybeSingle();
+    const { data, error } = await supabase.storage.from(BUCKET).download(archivo(clave));
     if (error || !data) return null;
+    const envoltorio = JSON.parse(await data.text()) as Envoltorio;
+    if (!envoltorio?.guardadoEn) return null;
     return {
-      datos: data.datos as T,
-      edadMs: Date.now() - new Date(data.actualizado_en).getTime(),
+      datos: envoltorio.datos as T,
+      edadMs: Date.now() - new Date(envoltorio.guardadoEn).getTime(),
     };
   } catch {
     // Que falle el respaldo no puede romper a quien lo consulta: es una red de
@@ -42,11 +50,28 @@ export async function leerCopia<T>(clave: string): Promise<Copia<T> | null> {
 }
 
 export async function guardarCopia(clave: string, datos: unknown): Promise<void> {
+  const cuerpo: Envoltorio = { guardadoEn: new Date().toISOString(), datos };
+  const blob = new Blob([JSON.stringify(cuerpo)], { type: "application/json" });
+
   try {
     const supabase = createAdminClient();
-    await supabase
-      .from(TABLA)
-      .upsert({ clave, datos, actualizado_en: new Date().toISOString() }, { onConflict: "clave" });
+    const subir = () =>
+      supabase.storage.from(BUCKET).upload(archivo(clave), blob, {
+        upsert: true,
+        contentType: "application/json",
+      });
+
+    const { error } = await subir();
+    // Si el bucket no existe todavía —proyecto nuevo, o alguien lo borró— se
+    // crea y se reintenta, en vez de quedarse sin respaldo esperando que
+    // alguien lo cree a mano.
+    if (error && /bucket.*not found/i.test(error.message)) {
+      await supabase.storage.createBucket(BUCKET, { public: false });
+      const reintento = await subir();
+      if (reintento.error) throw reintento.error;
+      return;
+    }
+    if (error) throw error;
   } catch (e) {
     console.error(`[cache-persistente] no se pudo guardar "${clave}":`, e);
   }

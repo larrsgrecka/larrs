@@ -64,26 +64,44 @@ async function ultimaFechaPorTienda(
     return { fechas, error: `Falta configurar ${urlEnv} / ${tokenEnv}.` };
   }
 
-  const leer = async () => {
+  // Pide solo las últimas fechas. Hasta acá este panel usaba "list", que baja la
+  // planilla completa —1,7 MB y ~3.500 filas en Inventario Food— para quedarse
+  // con tres fechas: esa respuesta enorme es justo lo que dispara los 404
+  // intermitentes de Google. Los Apps Script que todavía no tengan la acción
+  // responden "Acción no soportada" y ahí se usa "list" como antes, así que
+  // esto funciona igual antes y después de redesplegarlos.
+  const pedir = async (accion: "actividad" | "list") => {
     const u = new URL(url);
+    u.pathname = u.pathname.replace(/\/+$/, "");
     u.searchParams.set("token", token);
-    u.searchParams.set("action", "list");
+    u.searchParams.set("action", accion);
     const resp = await fetch(u.toString(), { signal: AbortSignal.timeout(TIMEOUT_MS) });
     const text = await resp.text();
-    let data: { ok?: boolean; error?: string; items?: unknown };
     try {
-      data = JSON.parse(text);
+      return JSON.parse(text) as { ok?: boolean; error?: string; items?: unknown; ultimas?: Record<string, string> };
     } catch {
       console.error(`[actividad-tiendas] ${urlEnv} respondió sin JSON:`, resp.status, text.slice(0, 300));
       throw new Error(`El servicio respondió ${resp.status} sin JSON (falla temporal de Google).`);
     }
+  };
+
+  const leer = async () => {
+    const nuevas = fechasVacias();
+
+    let data = await pedir("actividad");
+    if (!data.ok && /no soportada/i.test(data.error || "")) {
+      data = await pedir("list");
+      if (!data.ok) throw new Error(data.error || "El servicio devolvió un error.");
+      for (const item of (data.items ?? []) as { tienda?: string; fecha?: string }[]) {
+        if (!item.tienda || !item.fecha || !(item.tienda in nuevas)) continue;
+        nuevas[item.tienda] = maxFecha(nuevas[item.tienda], item.fecha);
+      }
+      return nuevas;
+    }
     if (!data.ok) throw new Error(data.error || "El servicio devolvió un error.");
 
-    const nuevas = fechasVacias();
-    for (const item of (data.items ?? []) as { tienda?: string; fecha?: string }[]) {
-      const tienda = item.tienda;
-      const fecha = item.fecha;
-      if (!tienda || !fecha || !(tienda in nuevas)) continue;
+    for (const [tienda, fecha] of Object.entries(data.ultimas ?? {})) {
+      if (!(tienda in nuevas) || !fecha) continue;
       nuevas[tienda] = maxFecha(nuevas[tienda], fecha);
     }
     return nuevas;

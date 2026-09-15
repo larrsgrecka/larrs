@@ -54,8 +54,35 @@ function doGet(e) {
   }
   const action = e.parameter.action || 'list';
   if (action === 'list') return doList_(e);
+  if (action === 'actividad') return doActividad_();
   return jsonOut_({ ok: false, error: 'Acción no soportada: ' + action });
 }
+
+// Solo la última fecha de registro por tienda, para el panel de Actividad.
+//
+// Ese panel necesita tres fechas, pero hasta ahora pedía 'list', que devuelve
+// la planilla entera —en Inventario Food son ~3.500 filas y 1,7 MB— y la
+// descarta salvo por el máximo. Esa respuesta grande es justo lo que hace que
+// Google falle con 404 intermitentes y tarde 30 s en hacerlo.
+//
+// Acá se leen únicamente las columnas fecha y tienda (B y C) y se devuelven
+// tres valores.
+function doActividad_() {
+  const sheet = ensureSheet_();
+  const last = sheet.getLastRow();
+  const ultimas = {};
+  if (last < 2) return jsonOut_({ ok: true, ultimas: ultimas });
+
+  const valores = sheet.getRange(2, 2, last - 1, 2).getValues();
+  for (var i = 0; i < valores.length; i++) {
+    const f = fechaStr_(valores[i][0]);
+    const t = String(valores[i][1] || '').trim();
+    if (!f || !t) continue;
+    if (!ultimas[t] || String(f) > String(ultimas[t])) ultimas[t] = f;
+  }
+  return jsonOut_({ ok: true, ultimas: ultimas });
+}
+
 
 function doList_(e) {
   const sheet = ensureSheet_();

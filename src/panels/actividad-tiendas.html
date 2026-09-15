@@ -94,7 +94,7 @@ function diasDesde(fechaStr) {
   return Math.round((hoy - fecha) / 86400000);
 }
 
-function celdaEstado(fechaStr, error) {
+function celdaEstado(fechaStr, error, respaldo) {
   // Si no pudimos consultar la fuente, no hay que mostrar "Sin registros": eso
   // acusaría a la tienda de no registrar cuando el problema es de la consulta.
   if (error) return `<span class="estado sindatos" title="${esc(error)}">Sin datos</span>`;
@@ -104,6 +104,11 @@ function celdaEstado(fechaStr, error) {
   if (dias >= 7) clase = 'mal';
   else if (dias >= 2) clase = 'alerta';
   const txt = dias === 0 ? 'Hoy' : dias === 1 ? 'Ayer' : `Hace ${dias} días`;
+  // El dato de la copia guardada es real y sirve para decidir, pero no es de
+  // este momento: se marca para que nadie lo lea como si acabara de consultarse.
+  if (respaldo) {
+    return `<span class="estado ${clase}" title="Google no respondió; este dato es de la última consulta buena, ${esc(respaldo)}">${txt} <span style="opacity:.55">*</span></span>`;
+  }
   return `<span class="estado ${clase}">${txt}</span>`;
 }
 
@@ -125,10 +130,11 @@ async function cargar() {
     if (!data.ok) throw new Error(data.error || 'Error al cargar');
     const actividad = data.actividad || {};
     const errores = data.errores || {};
+    const respaldos = data.respaldos || {};
 
     tbody.innerHTML = ORDEN_TIENDAS.map((t, idx) => {
       const a = actividad[t] || {};
-      const celdas = MODULOS.map(m => `<td class="r">${celdaEstado(a[m.key], errores[m.key])}</td>`).join('');
+      const celdas = MODULOS.map(m => `<td class="r">${celdaEstado(a[m.key], errores[m.key], respaldos[m.key])}</td>`).join('');
       const piloto = idx === 0 ? '<span class="piloto">Piloto</span>' : '';
       return `<tr>
         <td class="tienda-cell">${esc(t)}${piloto}</td>
@@ -137,9 +143,16 @@ async function cargar() {
     }).join('');
 
     const fallas = MODULOS.filter(m => errores[m.key]);
-    if (fallas.length) {
-      avisos.innerHTML = `<div class="aviso">${fallas.map(m =>
-        `<b>${esc(m.label)}:</b> ${esc(errores[m.key])}`).join('<br>')}</div>`;
+    const conRespaldo = MODULOS.filter(m => respaldos[m.key]);
+    const lineas = [
+      ...fallas.map(m => `<b>${esc(m.label)}:</b> ${esc(errores[m.key])}`),
+      // Que el panel funcione con datos guardados no puede ser invisible: si
+      // Google lleva días caído, los asteriscos son la única señal de que lo
+      // que se ve no se acaba de consultar.
+      ...conRespaldo.map(m => `<b>${esc(m.label)}:</b> Google no respondió, se muestra la última consulta buena (${esc(respaldos[m.key])}), marcada con *.`),
+    ];
+    if (lineas.length) {
+      avisos.innerHTML = `<div class="aviso">${lineas.join('<br>')}</div>`;
     }
   } catch (e) {
     tbody.innerHTML = `<tr><td colspan="5" class="empty">Error: ${esc(e.message)}</td></tr>`;

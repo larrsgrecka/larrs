@@ -19,8 +19,8 @@ export async function GET() {
   }
 
   try {
-    const { actividad, errores } = await getActividadTiendas();
-    return NextResponse.json({ ok: true, actividad, errores });
+    const { actividad, errores, respaldos } = await getActividadTiendas();
+    return NextResponse.json({ ok: true, actividad, errores, respaldos });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }

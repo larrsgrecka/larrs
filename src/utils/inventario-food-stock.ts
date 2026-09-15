@@ -12,6 +12,7 @@ function appsScriptConfig() {
 }
 
 import { fetchAppsScriptJson, urlAppsScript } from "@/utils/apps-script";
+import { conRespaldo, antiguedadEnPalabras } from "@/utils/cache-persistente";
 
 export type StockRow = {
   tienda: string;
@@ -80,28 +81,45 @@ export function dedupePorClaveUbicacion<T extends StockRow>(rows: T[]): Record<s
 const STOCK_TTL_MS = 5 * 60 * 1000;
 let stockCache: { porClave: Record<string, StockRow>; ts: number } | null = null;
 
-export async function getStockActualPorClave(): Promise<Record<string, StockRow>> {
-  if (stockCache && Date.now() - stockCache.ts < STOCK_TTL_MS) return stockCache.porClave;
+export type StockConEstado = {
+  porClave: Record<string, StockRow>;
+  /** Presente cuando Google falló y esto viene de la copia guardada: de cuándo es. */
+  respaldo?: string;
+};
+
+export async function leerStockActual(): Promise<StockConEstado> {
+  if (stockCache && Date.now() - stockCache.ts < STOCK_TTL_MS) return { porClave: stockCache.porClave };
 
   const config = appsScriptConfig();
   if (!config) throw new Error("Apps Script de Inventario Food no configurado");
 
-  // Pasa por el cliente común: reintenta el 404 intermitente de Google, que es
-  // lo que hacía fallar esta lectura en medio del informe semanal.
-  const data = await fetchAppsScriptJson(
-    urlAppsScript(config.url, config.token, { action: "list" }),
-    { servicio: "Inventario Food", timeoutMs: 40_000 }
-  );
-  if (!data.ok) {
+  const leer = async () => {
+    // Pasa por el cliente común: reintenta el 404 intermitente de Google, que es
+    // lo que hacía fallar esta lectura en medio del informe semanal.
+    const data = await fetchAppsScriptJson(
+      urlAppsScript(config.url, config.token, { action: "list" }),
+      { servicio: "Inventario Food", timeoutMs: 40_000 }
+    );
     // Nunca devolver {} en silencio: quien lo consume concluiría "no hay
     // conteos" en vez de "no pude leerlos" — un panel de alertas mostrando cero
     // productos bajo mínimo es peor que uno mostrando un error.
-    if (stockCache) return stockCache.porClave;  // mejor un dato de hace minutos
-    throw new Error(String(data.error || "No se pudo leer Inventario Food"));
-  }
+    if (!data.ok) throw new Error(String(data.error || "No se pudo leer Inventario Food"));
+    // items llega como unknown desde el cliente común: acá sabemos su forma.
+    return dedupePorClaveUbicacion((data.items ?? []) as unknown as StockRow[]);
+  };
 
-  // items llega como unknown desde el cliente común: acá sabemos su forma.
-  const porClave = dedupePorClaveUbicacion((data.items ?? []) as unknown as StockRow[]);
-  stockCache = { porClave, ts: Date.now() };
-  return porClave;
+  // Los 404 de Google tardan 30 s en llegar (medido), así que los reintentos del
+  // cliente común no siempre alcanzan dentro de la request. La copia guardada
+  // cubre eso: entrega el último conteo bueno en vez de un error, diciendo de
+  // cuándo es.
+  const r = await conRespaldo("inventario-food:stock", leer, {
+    esGuardable: (porClave) => Object.keys(porClave).length > 0,
+  });
+
+  if (!r.desdeRespaldo) stockCache = { porClave: r.datos, ts: Date.now() };
+  return { porClave: r.datos, respaldo: r.desdeRespaldo ? antiguedadEnPalabras(r.edadMs!) : undefined };
+}
+
+export async function getStockActualPorClave(): Promise<Record<string, StockRow>> {
+  return (await leerStockActual()).porClave;
 }

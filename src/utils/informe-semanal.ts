@@ -77,7 +77,7 @@ export async function generarInformeSemanal(hoy = new Date()) {
   const [registros, stock, actividad, atrasos, horas] = await Promise.all([
     conFallback("producción", () => getRegistrosPesaje(undefined, 800), []),
     conFallback("stock y alertas", () => getStockMinimos(), [] as ItemStockMinimo[]),
-    conFallback("actividad por tienda", () => getActividadTiendas(), { actividad: {}, errores: {} }),
+    conFallback("actividad por tienda", () => getActividadTiendas(), { actividad: {}, errores: {}, respaldos: {} }),
     conFallback("atrasos", () => atrasosYAusencias({ desde: semana.desde, hasta: semana.hasta }), { personas: [], periodo: { desde: "", hasta: "" }, resumen: { atrasoTotalDelEquipo: "", personasConAlgunAtraso: 0, ausenciasSinJustificar: 0 } }),
     conFallback("horas trabajadas", () => horasTrabajadas({ desde: semana.desde, hasta: semana.hasta }), { personas: [], periodo: { desde: "", hasta: "" }, porTienda: {} }),
   ]);

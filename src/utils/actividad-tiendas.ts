@@ -3,6 +3,8 @@
 // cumplimiento, no de métricas. Cada fuente se consulta con su propio Apps
 // Script tal como ya hacen sus paneles; ninguna falla rompe a las demás.
 
+import { conRespaldo, antiguedadEnPalabras } from "@/utils/cache-persistente";
+
 const TIENDAS = ["Costanera", "Dominicos", "Trapenses"] as const;
 
 export type ActividadTienda = {
@@ -20,6 +22,8 @@ export type ModuloKey = keyof ActividadTienda;
 // pueda decir "no pudimos consultar" en vez de mentir con "sin registros".
 type FuenteResultado = {
   fechas: Record<string, string | null>;
+  /** Cuando la lectura falló pero había copia guardada: de cuándo es ese dato. */
+  respaldo?: string;
   error: string | null;
 };
 
@@ -60,7 +64,7 @@ async function ultimaFechaPorTienda(
     return { fechas, error: `Falta configurar ${urlEnv} / ${tokenEnv}.` };
   }
 
-  try {
+  const leer = async () => {
     const u = new URL(url);
     u.searchParams.set("token", token);
     u.searchParams.set("action", "list");
@@ -71,21 +75,35 @@ async function ultimaFechaPorTienda(
       data = JSON.parse(text);
     } catch {
       console.error(`[actividad-tiendas] ${urlEnv} respondió sin JSON:`, resp.status, text.slice(0, 300));
-      return { fechas, error: `El servicio respondió ${resp.status} sin JSON (falla temporal de Google).` };
+      throw new Error(`El servicio respondió ${resp.status} sin JSON (falla temporal de Google).`);
     }
-    if (!data.ok) return { fechas, error: data.error || "El servicio devolvió un error." };
+    if (!data.ok) throw new Error(data.error || "El servicio devolvió un error.");
 
+    const nuevas = fechasVacias();
     for (const item of (data.items ?? []) as { tienda?: string; fecha?: string }[]) {
       const tienda = item.tienda;
       const fecha = item.fecha;
-      if (!tienda || !fecha || !(tienda in fechas)) continue;
-      fechas[tienda] = maxFecha(fechas[tienda], fecha);
+      if (!tienda || !fecha || !(tienda in nuevas)) continue;
+      nuevas[tienda] = maxFecha(nuevas[tienda], fecha);
     }
+    return nuevas;
+  };
+
+  try {
+    const r = await conRespaldo(`actividad:${urlEnv}`, leer, {
+      // No pisar la copia buena con un resultado sin ninguna fecha: eso es casi
+      // siempre una falla disfrazada, y dejaría el respaldo inservible.
+      esGuardable: (f) => Object.values(f).some(Boolean),
+    });
+    return {
+      fechas: r.datos,
+      error: null,
+      respaldo: r.desdeRespaldo ? antiguedadEnPalabras(r.edadMs!) : undefined,
+    };
   } catch (e) {
     console.error(`[actividad-tiendas] ${urlEnv} falló:`, e);
     return { fechas, error: motivoFalla(e) };
   }
-  return { fechas, error: null };
 }
 
 function parseCSV(raw: string): string[][] {
@@ -140,33 +158,52 @@ async function ultimaFechaPesajePorTienda(): Promise<FuenteResultado> {
     return { fechas, error: "Falta configurar PRODUCCION_APPS_SCRIPT_URL / PRODUCCION_APPS_SCRIPT_TOKEN." };
   }
 
-  try {
+  const leer = async () => {
     const resp = await fetch(`${url}?token=${encodeURIComponent(token)}`, {
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
     const text = await resp.text();
+    // Una página de error de Google también se "parsea" como CSV y daría cero
+    // fechas, que es indistinguible de "nadie registró nada".
+    if (text.trimStart().startsWith("<")) {
+      throw new Error("La planilla de producción respondió una página de error en vez del CSV.");
+    }
     const rows = parseCSV(text);
+    const nuevas = fechasVacias();
     for (let r = 1; r < rows.length; r++) {
       const row = rows[r];
       if (row.length < 6) continue;
       const tienda = (row[2] || "").trim();
-      if (!(tienda in fechas)) continue;
+      if (!(tienda in nuevas)) continue;
       const tipo = (row[5] || "").toLowerCase();
       if (!tipo.includes("fabricaci")) continue;
       const fecha = parseFechaDMY(row[3] || "");
       if (!fecha) continue;
-      fechas[tienda] = maxFecha(fechas[tienda], fecha);
+      nuevas[tienda] = maxFecha(nuevas[tienda], fecha);
     }
+    return nuevas;
+  };
+
+  try {
+    const r = await conRespaldo("actividad:PRODUCCION_APPS_SCRIPT_URL", leer, {
+      esGuardable: (f) => Object.values(f).some(Boolean),
+    });
+    return {
+      fechas: r.datos,
+      error: null,
+      respaldo: r.desdeRespaldo ? antiguedadEnPalabras(r.edadMs!) : undefined,
+    };
   } catch (e) {
     console.error("[actividad-tiendas] PRODUCCION_APPS_SCRIPT_URL falló:", e);
     return { fechas, error: motivoFalla(e) };
   }
-  return { fechas, error: null };
 }
 
 export type ActividadResultado = {
   actividad: ActividadTiendas;
   errores: Partial<Record<ModuloKey, string>>;
+  /** Módulos cuyo dato viene de la copia guardada, con su antigüedad. */
+  respaldos: Partial<Record<ModuloKey, string>>;
 };
 
 export async function getActividadTiendas(): Promise<ActividadResultado> {
@@ -194,9 +231,11 @@ export async function getActividadTiendas(): Promise<ActividadResultado> {
     ["pesaje", pesaje],
     ["recepcion", recepcion],
   ];
+  const respaldos: Partial<Record<ModuloKey, string>> = {};
   for (const [key, fuente] of fuentes) {
     if (fuente.error) errores[key] = fuente.error;
+    if (fuente.respaldo) respaldos[key] = fuente.respaldo;
   }
 
-  return { actividad, errores };
+  return { actividad, errores, respaldos };
 }

@@ -26,7 +26,10 @@ jobs:
       - name: Tocar los Apps Script
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
-          BASE: https://larrs-du4c.vercel.app
+          # No se usa larrs-du4c.vercel.app: redirige a larrs.sistema, que es
+          # un dominio interno y desde GitHub no resuelve. Este alias apunta
+          # siempre al último deploy de main, que es producción.
+          BASE: https://larrs-du4c-git-main-gustavo-9250s-projects.vercel.app
         run: |
           # La pasada de la hora en punto incluye el stock.
           if [ "${{ github.event.schedule }}" = "5 11-23,0-1 * * *" ]; then

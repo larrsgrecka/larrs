@@ -1,0 +1,49 @@
+# Despierta los Apps Script de Google durante el horario de las tiendas.
+#
+# Un Apps Script dormido responde 404 en vez de responder lento (medido: 3 de
+# las primeras 4 llamadas fallan, y de ahí en adelante todas responden en 2-3
+# segundos). Eso es lo que hacía que el primer panel que alguien abría en el día
+# mostrara un error, y no se arregla ni cambiando la URL ni achicando la
+# respuesta, porque la falla ocurre antes de que el script se ejecute.
+#
+# Va acá y no en los cron de Vercel porque el plan Hobby solo permite una
+# ejecución diaria.
+
+name: Calentar Apps Scripts
+
+on:
+  schedule:
+    # Cada 15 minutos entre las 8:00 y las 22:00 de Chile (UTC-3).
+    - cron: "*/15 11-23,0-1 * * *"
+    # Una vez por hora incluye el stock, que es la lectura pesada.
+    - cron: "5 11-23,0-1 * * *"
+  workflow_dispatch:  # para poder dispararlo a mano desde la pestaña Actions
+
+jobs:
+  calentar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Tocar los Apps Script
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          BASE: https://larrs-du4c.vercel.app
+        run: |
+          # La pasada de la hora en punto incluye el stock.
+          if [ "${{ github.event.schedule }}" = "5 11-23,0-1 * * *" ]; then
+            URL="$BASE/api/cron/calentar?stock=1"
+          else
+            URL="$BASE/api/cron/calentar"
+          fi
+
+          # Un 404 de Google es justo lo que venimos a evitar: si pasa, se
+          # reintenta, porque la primera llamada es la que despierta el script.
+          for intento in 1 2 3; do
+            CODIGO=$(curl -s -o /tmp/salida.json -w "%{http_code}" -m 120 \
+              -H "Authorization: Bearer $CRON_SECRET" "$URL")
+            echo "intento $intento -> HTTP $CODIGO"
+            cat /tmp/salida.json; echo
+            [ "$CODIGO" = "200" ] && exit 0
+            sleep 20
+          done
+          echo "No respondió 200 en tres intentos"
+          exit 1

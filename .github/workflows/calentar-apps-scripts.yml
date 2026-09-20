@@ -31,6 +31,19 @@ jobs:
           # siempre al último deploy de main, que es producción.
           BASE: https://larrs-du4c-git-main-gustavo-9250s-projects.vercel.app
         run: |
+          # El motivo de la falla va al resumen del run, que se ve en la página
+          # y en el mail de aviso: si hay que abrir los logs para saber qué
+          # pasó, el aviso no sirve de nada.
+          fallar() {
+            echo "$1"
+            echo "❌ $1" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          }
+
+          if [ -z "$CRON_SECRET" ]; then
+            fallar "Falta el secret CRON_SECRET en el repositorio (Settings → Secrets and variables → Actions). Tiene que ser el mismo valor que la variable CRON_SECRET de Vercel."
+          fi
+
           # La pasada de la hora en punto incluye el stock.
           if [ "${{ github.event.schedule }}" = "5 11-23,0-1 * * *" ]; then
             URL="$BASE/api/cron/calentar?stock=1"
@@ -38,15 +51,25 @@ jobs:
             URL="$BASE/api/cron/calentar"
           fi
 
-          # Un 404 de Google es justo lo que venimos a evitar: si pasa, se
-          # reintenta, porque la primera llamada es la que despierta el script.
           for intento in 1 2 3; do
             CODIGO=$(curl -s -o /tmp/salida.json -w "%{http_code}" -m 120 \
               -H "Authorization: Bearer $CRON_SECRET" "$URL")
             echo "intento $intento -> HTTP $CODIGO"
-            cat /tmp/salida.json; echo
-            [ "$CODIGO" = "200" ] && exit 0
+            cat /tmp/salida.json 2>/dev/null; echo
+
+            if [ "$CODIGO" = "200" ]; then
+              echo "✅ Apps Scripts despiertos ($(cat /tmp/salida.json))" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+
+            # Reintentar un problema de credencial o de configuración solo hace
+            # perder tiempo: el resultado va a ser el mismo las tres veces.
+            case "$CODIGO" in
+              401) fallar "El secret CRON_SECRET del repositorio no coincide con el de Vercel (HTTP 401)." ;;
+              503) fallar "Falta la variable CRON_SECRET en el deploy de Vercel (HTTP 503)." ;;
+              404) fallar "La ruta /api/cron/calentar no existe en ese deploy (HTTP 404). ¿Está desplegado el último commit?" ;;
+            esac
+
             sleep 20
           done
-          echo "No respondió 200 en tres intentos"
-          exit 1
+          fallar "El calentador no respondió 200 en tres intentos (último código: $CODIGO)."

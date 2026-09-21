@@ -3,38 +3,7 @@ import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { getProfile } from "@/utils/auth";
 import * as XLSX from "xlsx";
-
-const TIENDA_MAP: Record<string, string> = {
-  "ANDRES BELLO": "Costanera",
-  "BELLO 2447": "Costanera",
-  "TRAPENSES": "Trapenses",
-  "CAMINO EL ALBA": "Dominicos",
-  "EL ALBA": "Dominicos",
-  "CAMINO DEL CERRO": "Produccion",
-};
-const EXCLUIR = ["LUIS PASTEUR", "CHAMISERO", "FRANKLIN"];
-
-function mapTienda(destino: string): string | null {
-  const d = (destino || "").toUpperCase();
-  if (EXCLUIR.some((x) => d.includes(x))) return null;
-  for (const [key, tienda] of Object.entries(TIENDA_MAP)) {
-    if (d.includes(key)) return tienda;
-  }
-  return null;
-}
-
-function parseDate(raw: unknown): string | null {
-  if (!raw) return null;
-  if (raw instanceof Date) {
-    return raw.toISOString().slice(0, 10);
-  }
-  const s = String(raw).trim();
-  if (s.includes("/")) {
-    const [d, m, y] = s.split("/");
-    if (y && m && d) return `${y}-${m.padStart(2,"0")}-${d.padStart(2,"0")}`;
-  }
-  return null;
-}
+import { mapTienda, parseDate, ubicarColumnas } from "@/utils/grecka-excel";
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
@@ -52,33 +21,69 @@ export async function POST(request: NextRequest) {
   const ws = wb.Sheets[wb.SheetNames[0]];
   const rawRows: unknown[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
 
+  if (rawRows.length < 2) {
+    return NextResponse.json({ error: "El archivo no tiene filas de datos." }, { status: 400 });
+  }
+
+  // Las columnas se ubican por el nombre del encabezado y no por su posición.
+  // El export de Grecka a veces trae una columna "#" de numeración al
+  // principio: eso corre todo un lugar, y leyendo por posición el importador
+  // buscaba el cliente donde había una celda vacía y descartaba el archivo
+  // entero diciendo que no tenía datos de Larrs.
+  const columnas = ubicarColumnas(rawRows[0]);
+  if (columnas.faltantes.length) {
+    return NextResponse.json(
+      {
+        error:
+          `No se reconocieron estas columnas en el archivo: ${columnas.faltantes.join(", ")}. ` +
+          `Los encabezados que sí se leyeron son: ${(rawRows[0] as unknown[]).map((h) => String(h).trim()).filter(Boolean).join(" | ")}. ` +
+          `¿Es el reporte de facturación que exporta Grecka?`,
+      },
+      { status: 400 }
+    );
+  }
+  const col = columnas.indices;
+
   const rows: object[] = [];
+  const destinosIgnorados = new Set<string>();
+  let filasDeLarrs = 0;
+
   for (let i = 1; i < rawRows.length; i++) {
     const row = rawRows[i] as unknown[];
-    const nombreCli = (row[4] || "").toString().toUpperCase();
+    const nombreCli = (row[col.cliente] || "").toString().toUpperCase();
     if (!nombreCli.includes("CRISTIANO FERRERO") && !nombreCli.includes("FACTORIA DE HELADOS")) continue;
+    filasDeLarrs++;
 
-    const destinoRaw = (row[31] || "").toString();
+    const destinoRaw = (row[col.destino] || "").toString();
     const tienda = mapTienda(destinoRaw);
-    if (!tienda) continue;
+    if (!tienda) {
+      if (destinoRaw.trim()) destinosIgnorados.add(destinoRaw.trim());
+      continue;
+    }
 
     rows.push({
-      ndoc: (row[1] || "").toString().trim(),
+      ndoc: (row[col.ndoc] || "").toString().trim(),
       tienda,
-      fecha: parseDate(row[6]),
-      sku: (row[13] || "").toString().trim(),
-      descripcion: (row[14] || "").toString().trim(),
-      grupo: (row[18] || "").toString().trim(),
-      cantidad: parseFloat((row[19] || "0").toString()) || 0,
-      unidad: (row[20] || "").toString().trim(),
-      precio_unitario: parseFloat((row[21] || "0").toString()) || 0,
-      neto: parseFloat((row[22] || "0").toString()) || 0,
+      fecha: parseDate(row[col.fecha]),
+      sku: (row[col.sku] || "").toString().trim(),
+      descripcion: (row[col.descripcion] || "").toString().trim(),
+      grupo: (row[col.grupo] || "").toString().trim(),
+      cantidad: parseFloat((row[col.cantidad] || "0").toString()) || 0,
+      unidad: (row[col.unidad] || "").toString().trim(),
+      precio_unitario: parseFloat((row[col.precio] || "0").toString()) || 0,
+      neto: parseFloat((row[col.neto] || "0").toString()) || 0,
       destino_raw: destinoRaw.trim(),
     });
   }
 
   if (rows.length === 0) {
-    return NextResponse.json({ error: "No se encontraron datos de Larrs en el archivo" }, { status: 400 });
+    // Decir en cuál de los dos filtros se quedó todo: sin esto, el mismo
+    // mensaje servía para un archivo equivocado, para uno con las columnas
+    // corridas y para uno que solo trae sucursales que no son de Larrs.
+    const detalle = filasDeLarrs === 0
+      ? `Se leyeron ${rawRows.length - 1} filas, pero ninguna tiene a Cristiano Ferrero o Factoría de Helados como cliente.`
+      : `Hay ${filasDeLarrs} filas de Larrs, pero ningún destino corresponde a una tienda. Destinos encontrados: ${[...destinosIgnorados].join(", ") || "(vacíos)"}.`;
+    return NextResponse.json({ error: `No se encontraron datos para importar. ${detalle}` }, { status: 400 });
   }
 
   // Upsert en lotes de 500 usando admin client (bypasa RLS)

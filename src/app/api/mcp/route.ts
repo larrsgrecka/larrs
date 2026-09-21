@@ -9,6 +9,7 @@ import {
   asistenciaDelDia, atrasosYAusencias, horasTrabajadas, personalPorTienda,
 } from "@/utils/geovictoria";
 import { generarInformeSemanal } from "@/utils/informe-semanal";
+import { pedidoSugerido } from "@/utils/pedido-sugerido";
 import {
   dotacionPorLocal, costoLaboralPorLocal, ausenciasYLicencias, vacaciones,
   movimientosDePersonal,
@@ -288,6 +289,30 @@ const handler = createMcpHandler(
         }),
       },
       async ({ desde, hasta }) => responder(await movimientosDePersonal(desde, hasta))
+    );
+
+    server.registerTool(
+      "pedido_sugerido",
+      {
+        title: "Qué pedirle a Grecka",
+        description:
+          "Qué conviene pedirle a Grecka esta semana en cada tienda, según lo que cada local consumió de " +
+          "verdad: cuánto pedir de cada producto, hace cuántos días que no se pide, cada cuánto suele " +
+          "pedirse y si el consumo viene subiendo o bajando. Marca con 'toca' lo que lleva más días sin " +
+          "pedirse que lo habitual. Solo cuenta insumos y accesorios; repuestos y servicios quedan fuera " +
+          "por ser puntuales. NO conoce el stock que hay en la tienda, así que es una sugerencia para " +
+          "ajustar, no un pedido cerrado. Si datos.desactualizado es true, falta subir el archivo de " +
+          "Grecka y varios productos van a figurar atrasados sin estarlo: hay que decirlo.",
+        inputSchema: z.object({
+          tienda,
+          semanas: z.number().int().min(2).max(26).optional()
+            .describe("Semanas de historial para calcular el consumo; por defecto 8"),
+          semanasDeCobertura: z.number().int().min(1).max(4).optional()
+            .describe("Para cuántas semanas pedir; por defecto 1, que es como compran hoy"),
+        }),
+      },
+      async ({ tienda: t, semanas, semanasDeCobertura }) =>
+        responder(await pedidoSugerido({ tienda: t, semanas, semanasDeCobertura }))
     );
   },
   { serverInfo: { name: "larrs", version: "1.0.0" } }

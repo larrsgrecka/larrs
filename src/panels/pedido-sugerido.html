@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pedido sugerido · Larrs</title>
+<style>
+:root { color-scheme: light; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f2f7; color: #1e293b; padding: 14px; font-size: 14px; }
+.container { max-width: 1040px; margin: 0 auto; }
+.header { background: linear-gradient(135deg, #111418, #1e293b); border-radius: 12px; padding: 18px 22px; margin-bottom: 12px; color: #fff; }
+.logo-img { height: 44px; width: auto; display: block; }
+.header .title { font-size: 15px; font-weight: 700; color: #e2e8f0; margin-top: 10px; }
+.header .subtitle { font-size: 12px; color: #94a3b8; margin-top: 2px; }
+.note { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 9px 13px; font-size: 12px; color: #1e40af; margin-bottom: 12px; line-height: 1.5; }
+.warn { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; border-radius: 8px; padding: 9px 13px; font-size: 12px; margin-bottom: 12px; line-height: 1.5; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 12px; }
+.kpi { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 14px; }
+.kpi .n { font-size: 22px; font-weight: 800; }
+.kpi .n.alerta { color: #b45309; }
+.kpi .lbl { font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: .04em; margin-top: 2px; }
+.toolbar { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.toolbar label { font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .06em; }
+.toolbar select { font-size: 13px; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 9px; color: #1e293b; background: #f8fafc; }
+.acciones { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+.btn { font-size: 12px; font-weight: 700; border: 1px solid #e2e8f0; background: #f8fafc; color: #334155; border-radius: 6px; padding: 7px 12px; cursor: pointer; }
+.btn:hover { background: #f1f5f9; }
+.btn-primary { background: #1e293b; border-color: #1e293b; color: #fff; }
+.btn-primary:hover { background: #334155; }
+.card { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; margin-bottom: 12px; }
+.card h2 { font-size: 13px; padding: 11px 14px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.card h2 .sub { font-size: 11px; font-weight: 500; color: #64748b; }
+table { width: 100%; border-collapse: collapse; }
+th { padding: 8px 10px; text-align: left; font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .04em; background: #f8fafc; }
+th.r, td.r { text-align: right; }
+th.c, td.c { text-align: center; }
+td { padding: 8px 10px; border-top: 1px solid #f1f5f9; font-size: 13px; vertical-align: middle; }
+tr:hover td { background: #f8fafc; }
+tr.desmarcado td { opacity: .42; }
+.prod { font-weight: 600; }
+.sku { font-size: 10px; color: #94a3b8; }
+.cant { font-weight: 800; font-size: 15px; }
+.tag { display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 7px; white-space: nowrap; }
+.tag.toca { background: #fef3c7; color: #92400e; }
+.tag.sube { background: #f0fdf4; color: #15803d; }
+.tag.baja { background: #fef2f2; color: #b91c1c; }
+.dim { color: #94a3b8; font-size: 11px; }
+.empty { padding: 30px; text-align: center; color: #94a3b8; font-size: 13px; }
+.last { font-size: 11px; color: #b0bac8; text-align: center; margin-top: 6px; }
+#impresion-hint { display: none; }
+
+@media print {
+  @page { size: A4; margin: 10mm; }
+  body { background: #fff; padding: 0; font-size: 11px; }
+  .container { max-width: none; }
+  .header { background: #fff !important; color: #1e293b; border: 0; padding: 0 0 8px; border-radius: 0; }
+  .header .title { color: #1e293b; font-size: 16px; }
+  .header .subtitle { color: #475569; }
+  .logo-img { height: 30px; filter: invert(1); }
+  .toolbar, .note, .kpis { display: none !important; }
+  #impresion-hint { display: block !important; color: #475569; border-bottom: 1px solid #cbd5e1; padding-bottom: 6px; margin-bottom: 10px; font-size: 12px; }
+  .card { border: 0; break-inside: auto; }
+  .card h2 { background: #fff; border-bottom: 1px solid #cbd5e1; padding-left: 0; }
+  tr { break-inside: avoid; }
+  /* En papel el pedido se corrige a mano: las filas desmarcadas no van. */
+  tr.desmarcado { display: none; }
+  .no-print { display: none !important; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <img src="/larrs-logo.png" alt="Larrs" class="logo-img">
+    <div class="title">Pedido sugerido a Grecka</div>
+    <div class="subtitle">Según lo que cada tienda consumió de verdad en las últimas semanas</div>
+  </div>
+
+  <div class="note">
+    Sale del historial de compras a Grecka, no de un mínimo cargado a mano. <b>No sabe qué hay
+    en bodega</b>: es un punto de partida para ajustar, no un pedido para enviar a ciegas.
+    Las filas con <span class="tag toca">toca pedir</span> llevan más días sin pedirse que lo habitual.
+    Destildá lo que no quieras y usá "Copiar para WhatsApp".
+  </div>
+
+  <div id="aviso-datos"></div>
+  <div id="impresion-hint"></div>
+
+  <div class="kpis" id="kpis"></div>
+
+  <div class="toolbar">
+    <div><label>Tienda</label><br><select id="f-tienda" onchange="cargar()"><option value="">Todas</option><option>Costanera</option><option>Dominicos</option><option>Trapenses</option></select></div>
+    <div><label>Historial</label><br><select id="f-semanas" onchange="cargar()"><option value="4">4 semanas</option><option value="8" selected>8 semanas</option><option value="12">12 semanas</option><option value="26">6 meses</option></select></div>
+    <div><label>Pedir para</label><br><select id="f-cobertura" onchange="cargar()"><option value="1" selected>1 semana</option><option value="2">2 semanas</option><option value="3">3 semanas</option><option value="4">4 semanas</option></select></div>
+    <div class="acciones">
+      <button class="btn" onclick="copiarWhatsApp()" id="btn-wa">📋 Copiar para WhatsApp</button>
+      <button class="btn" onclick="descargarCSV()">⬇ Excel</button>
+      <button class="btn btn-primary" onclick="window.print()">🖨 Imprimir</button>
+    </div>
+  </div>
+
+  <div id="contenido"><div class="card"><div class="empty">Cargando…</div></div></div>
+  <div class="last" id="last-update"></div>
+</div>
+
+<script>
+let datos = null;
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const $ = (n) => '$' + Math.round(n).toLocaleString('es-CL');
+
+async function cargar() {
+  const cont = document.getElementById('contenido');
+  cont.innerHTML = '<div class="card"><div class="empty">Cargando…</div></div>';
+  const p = new URLSearchParams({
+    semanas: document.getElementById('f-semanas').value,
+    cobertura: document.getElementById('f-cobertura').value,
+  });
+  const t = document.getElementById('f-tienda').value;
+  if (t) p.set('tienda', t);
+
+  try {
+    const resp = await fetch('/api/pedido-sugerido?' + p);
+    // Si la función se corta por tiempo la respuesta no es JSON: mostrar el
+    // código HTTP es más útil que un "Unexpected token" críptico.
+    const texto = await resp.text();
+    let d;
+    try { d = JSON.parse(texto); }
+    catch { throw new Error('el servidor respondió ' + resp.status + ' sin JSON. Recargá para reintentar.'); }
+    if (!d.ok) throw new Error(d.error || 'Error al cargar');
+    datos = d;
+    render();
+  } catch (e) {
+    cont.innerHTML = '<div class="card"><div class="empty">Error: ' + esc(e.message) + '</div></div>';
+  }
+  document.getElementById('last-update').textContent = 'Actualizado: ' + new Date().toLocaleString('es-CL');
+}
+
+function render() {
+  const d = datos;
+  const total = d.tiendas.reduce((s, t) => s + t.productos.length, 0);
+  const tocan = d.tiendas.reduce((s, t) => s + t.productos.filter((p) => p.toca).length, 0);
+  const costo = d.tiendas.reduce((s, t) => s + t.costoEstimado, 0);
+
+  document.getElementById('kpis').innerHTML = `
+    <div class="kpi"><div class="n">${total}</div><div class="lbl">Productos a pedir</div></div>
+    <div class="kpi"><div class="n ${tocan ? 'alerta' : ''}">${tocan}</div><div class="lbl">Ya tocaba pedirlos</div></div>
+    <div class="kpi"><div class="n">${$(costo)}</div><div class="lbl">Costo estimado</div></div>`;
+
+  document.getElementById('aviso-datos').innerHTML = d.datos.desactualizado
+    ? `<div class="warn"><b>Ojo con estos números:</b> la última compra registrada es del ${esc(d.datos.ultimaCompraRegistrada)},
+       hace ${d.datos.diasDesdeUltimoDato} días. Falta subir el archivo de Grecka más reciente en Importar datos Grecka,
+       así que varios productos van a figurar atrasados sin estarlo.</div>`
+    : '';
+
+  document.getElementById('impresion-hint').textContent =
+    `Pedido sugerido para ${d.semanasDeCobertura === 1 ? 'una semana' : d.semanasDeCobertura + ' semanas'}, ` +
+    `calculado sobre el consumo del ${d.periodo.desde} al ${d.periodo.hasta}.`;
+
+  document.getElementById('contenido').innerHTML = d.tiendas.map((t) => {
+    if (!t.productos.length) {
+      return `<div class="card"><h2>${esc(t.tienda)}</h2><div class="empty">Sin compras registradas en el período.</div></div>`;
+    }
+    const filas = t.productos.map((p, i) => {
+      const tend = p.tendenciaPct === null ? ''
+        : p.tendenciaPct >= 15 ? `<span class="tag sube">+${p.tendenciaPct}%</span>`
+        : p.tendenciaPct <= -15 ? `<span class="tag baja">${p.tendenciaPct}%</span>` : '';
+      const cuando = p.diasSinPedir === null ? '—'
+        : p.diasSinPedir === 0 ? 'hoy' : `hace ${p.diasSinPedir} d`;
+      const cada = p.cadaCuantosDias ? `cada ~${p.cadaCuantosDias} d` : `${p.vecesPedido}× en el período`;
+      return `<tr data-t="${esc(t.tienda)}" data-i="${i}">
+        <td class="c no-print"><input type="checkbox" checked onchange="marcar(this)"></td>
+        <td><div class="prod">${esc(p.producto)}</div><div class="sku">${esc(p.sku)} · ${esc(p.grupo)}</div></td>
+        <td class="r"><span class="cant">${p.sugerido}</span> <span class="dim">${esc(p.unidad)}</span></td>
+        <td class="r dim">${p.promedioSemanal}/sem</td>
+        <td>${p.toca ? '<span class="tag toca">toca pedir</span> ' : ''}<span class="dim">${cuando} · ${cada}</span></td>
+        <td class="r">${tend}</td>
+        <td class="r dim">${$(p.costoEstimado)}</td>
+      </tr>`;
+    }).join('');
+    return `<div class="card">
+      <h2><span>${esc(t.tienda)}</span><span class="sub">último pedido registrado: ${esc(t.ultimaCompra || '—')} · estimado <b id="tot-${esc(t.tienda)}">${$(t.costoEstimado)}</b></span></h2>
+      <table>
+        <thead><tr>
+          <th class="c no-print"></th><th>Producto</th><th class="r">Pedir</th>
+          <th class="r">Consumo</th><th>Último pedido</th><th class="r">Tendencia</th><th class="r">Costo est.</th>
+        </tr></thead>
+        <tbody>${filas}</tbody>
+      </table>
+    </div>`;
+  }).join('');
+}
+
+// Al destildar, la fila queda atenuada y sale de los totales, del texto de
+// WhatsApp y del papel: el pedido que se manda es el que quedó marcado.
+function marcar(cb) {
+  const tr = cb.closest('tr');
+  tr.classList.toggle('desmarcado', !cb.checked);
+  for (const t of datos.tiendas) {
+    const suma = seleccionDe(t.tienda).reduce((s, p) => s + p.costoEstimado, 0);
+    const el = document.getElementById('tot-' + t.tienda);
+    if (el) el.textContent = $(suma);
+  }
+}
+
+function seleccionDe(tienda) {
+  const t = datos.tiendas.find((x) => x.tienda === tienda);
+  if (!t) return [];
+  return [...document.querySelectorAll(`tr[data-t="${CSS.escape(tienda)}"]`)]
+    .filter((tr) => tr.querySelector('input')?.checked)
+    .map((tr) => t.productos[Number(tr.dataset.i)]);
+}
+
+function copiarWhatsApp() {
+  const partes = [];
+  for (const t of datos.tiendas) {
+    const sel = seleccionDe(t.tienda);
+    if (!sel.length) continue;
+    partes.push(`*Pedido ${t.tienda}* (${new Date().toLocaleDateString('es-CL')})`);
+    for (const p of sel) partes.push(`• ${p.sugerido} ${p.unidad} — ${p.producto}`);
+    partes.push('');
+  }
+  const texto = partes.join('\n').trim();
+  const btn = document.getElementById('btn-wa');
+  navigator.clipboard.writeText(texto).then(() => {
+    btn.textContent = '✓ Copiado';
+    setTimeout(() => { btn.textContent = '📋 Copiar para WhatsApp'; }, 2500);
+  }).catch(() => {
+    // Sin permiso de portapapeles (pasa en algunos navegadores): mostrarlo
+    // para copiar a mano en vez de dejar al usuario sin nada.
+    window.prompt('Copiá el pedido:', texto);
+  });
+}
+
+function descargarCSV() {
+  const filas = [['Tienda', 'SKU', 'Producto', 'Pedir', 'Unidad', 'Consumo semanal', 'Veces pedido', 'Ultimo pedido', 'Dias sin pedir', 'Costo estimado']];
+  for (const t of datos.tiendas) {
+    for (const p of seleccionDe(t.tienda)) {
+      filas.push([t.tienda, p.sku, p.producto, p.sugerido, p.unidad, p.promedioSemanal, p.vecesPedido, p.ultimaCompra || '', p.diasSinPedir ?? '', p.costoEstimado]);
+    }
+  }
+  // Punto y coma y BOM: así Excel en español abre las columnas separadas y con
+  // los acentos bien, sin pasar por el asistente de importación.
+  const csv = '﻿' + filas.map((f) => f.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(';')).join('\n');
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `pedido-sugerido-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+cargar();
+</script>
+</body>
+</html>

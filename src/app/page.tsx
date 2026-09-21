@@ -246,6 +246,24 @@ export default async function Home() {
             </Link>
           )}
 
+          {(admin || profile?.role === "jefe_tienda") && (
+            <Link
+              href="/pedido-sugerido"
+              className="block overflow-hidden rounded-2xl shadow-sm transition-transform active:scale-[0.98]"
+            >
+              <div className="flex items-center gap-4 rounded-2xl border border-amber-200 bg-amber-50 p-5">
+                <span className="text-3xl">🧾</span>
+                <div className="flex-1 text-gray-700">
+                  <p className="font-bold">Pedido sugerido</p>
+                  <p className="text-sm text-gray-400">
+                    Qué pedirle a Grecka según el consumo de cada tienda
+                  </p>
+                </div>
+                <span className="text-xl text-gray-300">›</span>
+              </div>
+            </Link>
+          )}
+
           {admin && (
             <Link
               href="/stock-alertas"

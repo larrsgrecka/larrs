@@ -91,20 +91,50 @@ export type CategoriaFood = {
 const CATALOGO_TTL_MS = 30 * 60 * 1000;
 let catalogoCache: { datos: CategoriaFood[]; ts: number } | null = null;
 
+// Un catálogo armado sin los overrides no es el catálogo: le sobran los
+// productos que un admin excluyó y le faltan los que agregó. Se marca con este
+// error para que la última copia buena le gane, y para que nunca quede cacheado
+// media hora como si fuera correcto.
+class CatalogoIncompleto extends Error {
+  constructor(readonly parcial: CategoriaFood[]) {
+    super("El catálogo se armó sin los overrides");
+  }
+}
+
 export async function getCatalogoFood(): Promise<CategoriaFood[]> {
   if (catalogoCache && Date.now() - catalogoCache.ts < CATALOGO_TTL_MS) return catalogoCache.datos;
 
-  const r = await conRespaldo("catalogo-food", construirCatalogoFood, {
-    // Un catálogo vacío o casi vacío es una fuente caída, no un catálogo: si se
-    // guardara, la copia quedaría inservible y la foto se leería contra nada.
-    esGuardable: (c) => c.reduce((n, x) => n + x.productos.length, 0) >= 20,
-  });
-  if (!r.desdeRespaldo) catalogoCache = { datos: r.datos, ts: Date.now() };
-  return r.datos;
+  try {
+    const r = await conRespaldo(
+      "catalogo-food",
+      async () => {
+        const { catalogo, degradado } = await construirCatalogoFood();
+        if (degradado) throw new CatalogoIncompleto(catalogo);
+        return catalogo;
+      },
+      {
+        // Un catálogo vacío o casi vacío es una fuente caída, no un catálogo: si
+        // se guardara, la copia quedaría inservible y la foto se leería contra
+        // nada.
+        esGuardable: (c) => c.reduce((n, x) => n + x.productos.length, 0) >= 20,
+      }
+    );
+    if (!r.desdeRespaldo) catalogoCache = { datos: r.datos, ts: Date.now() };
+    return r.datos;
+  } catch (e) {
+    // Sin overrides y sin copia guardada: se devuelve lo que hay, porque un
+    // catálogo incompleto sirve más que ninguno, pero sin cachearlo — el
+    // próximo intento vuelve a buscar el bueno.
+    if (e instanceof CatalogoIncompleto) {
+      console.error("[catalogo-food] devuelto sin overrides y sin cachear");
+      return e.parcial;
+    }
+    throw e;
+  }
 }
 
-async function construirCatalogoFood(): Promise<CategoriaFood[]> {
-  const [categorias, { incluir, excluirNombres }, codigos] = await Promise.all([
+async function construirCatalogoFood(): Promise<{ catalogo: CategoriaFood[]; degradado: boolean }> {
+  const [categorias, { incluir, excluirNombres, degradado }, codigos] = await Promise.all([
     getCatalogoProductos({
       excluir: ["HELADERIA", "CHOCOLATERIA", "ARTICULOS", "MATERIAS PRIMAS"],
     }),
@@ -137,5 +167,5 @@ async function construirCatalogoFood(): Promise<CategoriaFood[]> {
     }
   }
 
-  return conExclusiones.filter((c) => c.productos.length > 0);
+  return { catalogo: conExclusiones.filter((c) => c.productos.length > 0), degradado };
 }

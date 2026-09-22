@@ -32,7 +32,14 @@ export type SemanaInforme = { desde: string; hasta: string; etiqueta: string };
 
 // Por defecto, la semana cerrada anterior: el lunes se informa lo que pasó de
 // lunes a domingo, no la semana en curso que recién empieza.
-export function semanaAInformar(hoy = new Date()): { semana: SemanaInforme; previa: SemanaInforme } {
+// Por defecto informa la semana cerrada, que es para lo que existe: el lunes
+// temprano, mirar qué pasó. Pero mirándolo un martes parece que no se registró
+// nada, porque lo de ayer y hoy todavía no entra en ninguna semana informada.
+// Con "en-curso" se ve la semana que está pasando, comparada con la anterior.
+export function semanaAInformar(
+  hoy = new Date(),
+  cual: "cerrada" | "en-curso" = "cerrada"
+): { semana: SemanaInforme; previa: SemanaInforme } {
   const lunesEsta = lunesDe(hoy);
   const lunesPasado = new Date(lunesEsta); lunesPasado.setDate(lunesEsta.getDate() - 7);
   const domingoPasado = new Date(lunesEsta); domingoPasado.setDate(lunesEsta.getDate() - 1);
@@ -42,8 +49,23 @@ export function semanaAInformar(hoy = new Date()): { semana: SemanaInforme; prev
   const etiqueta = (a: Date, b: Date) =>
     `${a.getDate()} ${a.toLocaleDateString("es-CL", { month: "short" })} – ${b.getDate()} ${b.toLocaleDateString("es-CL", { month: "short" })}`;
 
+  const cerrada = { desde: iso(lunesPasado), hasta: iso(domingoPasado), etiqueta: etiqueta(lunesPasado, domingoPasado) };
+  if (cual === "en-curso") {
+    return {
+      // La semana en curso se corta en hoy: contar hasta el domingo daría días
+      // que todavía no pasaron, y la comparación con la semana anterior
+      // parecería una caída cuando solo faltan días por ocurrir.
+      semana: {
+        desde: iso(lunesEsta),
+        hasta: iso(hoy),
+        etiqueta: `${etiqueta(lunesEsta, hoy)} (semana en curso)`,
+      },
+      previa: cerrada,
+    };
+  }
+
   return {
-    semana: { desde: iso(lunesPasado), hasta: iso(domingoPasado), etiqueta: etiqueta(lunesPasado, domingoPasado) },
+    semana: cerrada,
     previa: { desde: iso(lunesPrevio), hasta: iso(domingoPrevio), etiqueta: etiqueta(lunesPrevio, domingoPrevio) },
   };
 }
@@ -64,8 +86,11 @@ function kgPorTienda(registros: Awaited<ReturnType<typeof getRegistrosPesaje>>, 
   return out;
 }
 
-export async function generarInformeSemanal(hoy = new Date()) {
-  const { semana, previa } = semanaAInformar(hoy);
+export async function generarInformeSemanal(
+  hoy = new Date(),
+  cual: "cerrada" | "en-curso" = "cerrada"
+) {
+  const { semana, previa } = semanaAInformar(hoy, cual);
 
   // Cada fuente se pide con su propio catch: si la asistencia falla, el informe
   // sale igual con producción y stock, diciendo qué faltó.

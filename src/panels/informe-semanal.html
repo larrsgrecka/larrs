@@ -58,6 +58,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
   <div id="acciones" style="display:none;margin-bottom:10px">
     <button class="btn" onclick="window.print()">🖨 Imprimir o guardar PDF</button>
     <button class="btn" onclick="cargar()">↻ Actualizar</button>
+    <!-- Mirado un martes, el informe de la semana cerrada parece decir que
+         nadie registró nada: lo de ayer y hoy todavía no entra. Este botón
+         muestra la semana que está pasando. -->
+    <button class="btn" id="btn-semana" onclick="cambiarSemana()">📅 Ver la semana en curso</button>
   </div>
   <div class="tenue" id="pie" style="text-align:center"></div>
 </div>
@@ -75,7 +79,8 @@ function chipVariacion(pct) {
 
 function render(inf) {
   document.getElementById('subtitulo').textContent =
-    `Semana del ${inf.semana.etiqueta} · comparada con ${inf.semanaPrevia.etiqueta}`;
+    `Semana del ${inf.semana.etiqueta} · comparada con ${inf.semanaPrevia.etiqueta}` +
+    (inf.semana.etiqueta.includes('en curso') ? ' · va hasta hoy, así que los totales todavía no están completos' : '');
 
   const r = inf.resumen;
   const claseTotal = r.variacionPct === null ? '' : r.variacionPct <= -10 ? 'baja' : r.variacionPct >= 10 ? 'sube' : '';
@@ -130,11 +135,20 @@ function render(inf) {
   document.getElementById('pie').textContent = `Generado: ${new Date(inf.generadoEn).toLocaleString('es-CL')}`;
 }
 
+let semanaVista = 'cerrada';
+
+function cambiarSemana() {
+  semanaVista = semanaVista === 'cerrada' ? 'en-curso' : 'cerrada';
+  cargar();
+}
+
 async function cargar() {
   document.getElementById('contenido').innerHTML =
     '<div class="card"><div class="empty">Armando el informe… puede tardar unos segundos.</div></div>';
+  const btn = document.getElementById('btn-semana');
+  if (btn) btn.textContent = semanaVista === 'cerrada' ? '📅 Ver la semana en curso' : '📅 Ver la semana cerrada';
   try {
-    const resp = await fetch('/api/informe-semanal');
+    const resp = await fetch('/api/informe-semanal?semana=' + semanaVista);
     const texto = await resp.text();
     let data;
     try { data = JSON.parse(texto); }

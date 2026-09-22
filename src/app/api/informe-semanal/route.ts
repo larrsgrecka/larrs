@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { getProfile } from "@/utils/auth";
 import { generarInformeSemanal } from "@/utils/informe-semanal";
@@ -6,7 +6,7 @@ import { generarInformeSemanal } from "@/utils/informe-semanal";
 // Cruza producción, stock, asistencia y cumplimiento: varias fuentes lentas.
 export const maxDuration = 60;
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
@@ -17,7 +17,7 @@ export async function GET() {
   }
 
   try {
-    return NextResponse.json({ ok: true, ...(await generarInformeSemanal()) });
+    return NextResponse.json({ ok: true, ...(await generarInformeSemanal(new Date(), request.nextUrl.searchParams.get("semana") === "en-curso" ? "en-curso" : "cerrada")) });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }

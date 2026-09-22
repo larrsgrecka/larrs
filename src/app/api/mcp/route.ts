@@ -203,9 +203,15 @@ const handler = createMcpHandler(
           "semana anterior, sabores más producidos, stock bajo mínimo, horas y atrasos del equipo, y en qué " +
           "módulos dejaron de registrar. Es el mismo informe del panel /informe-semanal. Si alguna fuente no " +
           "se pudo leer lo dice en fuentesQueFallaron: eso no es lo mismo que una semana sin problemas.",
-        inputSchema: z.object({}),
+        inputSchema: z.object({
+          semana: z.enum(["cerrada", "en-curso"]).optional().describe(
+            "'cerrada' (por defecto) informa la última semana completa, lunes a domingo. " +
+            "'en-curso' informa la semana que está pasando, del lunes hasta hoy: sirve cuando " +
+            "preguntan por lo de esta semana o por algo registrado ayer."
+          ),
+        }),
       },
-      async () => responder(await generarInformeSemanal())
+      async ({ semana }) => responder(await generarInformeSemanal(new Date(), semana ?? "cerrada"))
     );
 
     // ─── BUK (remuneraciones) ───

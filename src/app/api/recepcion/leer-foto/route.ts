@@ -46,9 +46,18 @@ export async function POST(request: NextRequest) {
     .join("\n");
 
   try {
-    const resp = await anthropic.messages.create({
-      model: "claude-sonnet-5",
-      max_tokens: 2048,
+    const inicio = Date.now();
+    // Streaming y no una llamada simple: con max_tokens alto, una respuesta
+    // larga puede pasarse del timeout HTTP del SDK antes de terminar.
+    const resp = await anthropic.messages.stream({
+      model: "claude-opus-5",
+      // Una guía de despacho trae 40 o más líneas, y cada una ocupa unos 70
+      // tokens en la respuesta (texto detectado, categoría, producto, cantidad,
+      // unidad). Con 2048 el modelo se quedaba sin espacio a mitad de la lista:
+      // el JSON llegaba cortado, no se podía leer ni una línea y el panel
+      // culpaba a la foto —"puede estar borrosa"— cuando la foto estaba
+      // perfecta. Se probó con tres celulares distintos antes de encontrarlo.
+      max_tokens: 16000,
       tools: [
         {
           name: TOOL_NAME,
@@ -116,7 +125,9 @@ Reglas:
           ],
         },
       ],
-    });
+    }).finalMessage();
+
+    const segundos = Math.round((Date.now() - inicio) / 100) / 10;
 
     const toolUse = resp.content.find((b) => b.type === "tool_use" && b.name === TOOL_NAME);
     if (!toolUse || toolUse.type !== "tool_use") {
@@ -128,20 +139,36 @@ Reglas:
       }, { status: 502 });
     }
 
+    // Con el tope agotado el JSON de la herramienta queda cortado y el SDK
+    // entrega lo que alcanzó a leer, que puede ser nada. Eso no es una foto
+    // ilegible y decirlo así manda a la gente a sacar fotos de nuevo para
+    // siempre: hay que nombrarlo por lo que es.
     const rawItems = (toolUse.input as { items?: ItemDetectado[] }).items ?? [];
     const items = rawItems.filter((it) => it.texto_detectado && Number(it.cantidad) > 0);
 
     console.log(
-      "[recepcion/leer-foto] stop_reason:", resp.stop_reason,
+      "[recepcion/leer-foto]", segundos + "s",
+      "| stop_reason:", resp.stop_reason,
+      "| tokens salida:", resp.usage.output_tokens,
       "| items crudos:", rawItems.length,
-      "| items tras filtro:", items.length,
-      "| crudos:", JSON.stringify(rawItems).slice(0, 2000)
+      "| items tras filtro:", items.length
     );
+
+    if (resp.stop_reason === "max_tokens") {
+      console.error(`[recepcion/leer-foto] respuesta cortada por max_tokens con ${rawItems.length} items leídos`);
+      return NextResponse.json({
+        error: items.length
+          ? `La guía tiene muchas líneas y la lectura se cortó: se alcanzaron a leer ${items.length}. Revisa que no falten productos al final y agrégalos a mano.`
+          : "La guía tiene demasiadas líneas y la lectura se cortó antes de completar ni una. No es problema de la foto: hay que avisarle a Gustavo para subir el límite.",
+        items,
+        debug: { raw_count: rawItems.length, filtered_count: items.length, stop_reason: resp.stop_reason, segundos },
+      }, { status: items.length ? 200 : 502 });
+    }
 
     return NextResponse.json({
       ok: true,
       items,
-      debug: { raw_count: rawItems.length, filtered_count: items.length, stop_reason: resp.stop_reason },
+      debug: { raw_count: rawItems.length, filtered_count: items.length, stop_reason: resp.stop_reason, segundos },
     });
   } catch (e) {
     console.error("[recepcion/leer-foto] Error:", e);

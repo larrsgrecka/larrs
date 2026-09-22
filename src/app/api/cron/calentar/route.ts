@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getActividadTiendas } from "@/utils/actividad-tiendas";
 import { leerStockActual } from "@/utils/inventario-food-stock";
+import { getCatalogoFood } from "@/utils/catalogo-food";
 
 // Mantiene despiertos los Apps Script de Google.
 //
@@ -50,6 +51,17 @@ export async function GET(request: NextRequest) {
     } catch (e) {
       resultado.stock = { error: (e as Error).message };
     }
+  }
+
+  // El catálogo de productos food tarda más de 30 s en armarse desde cero y lo
+  // necesita la lectura de la foto de una guía, que además se lleva ~30 s con
+  // el modelo: juntos se pasan del minuto que da la plataforma. Tenerlo caliente
+  // es lo que hace que esa lectura entre en tiempo.
+  try {
+    const catalogo = await getCatalogoFood();
+    resultado.catalogoFood = { categorias: catalogo.length, productos: catalogo.reduce((n, c) => n + c.productos.length, 0) };
+  } catch (e) {
+    resultado.catalogoFood = { error: (e as Error).message };
   }
 
   const segundos = Math.round((Date.now() - inicio) / 100) / 10;

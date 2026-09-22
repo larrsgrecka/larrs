@@ -379,8 +379,14 @@ async function leerFotoAutomaticamente() {
     if (agregados === 0 && sinIdentificar.length === 0) {
       msg.className = 'msg err';
       const d = data.debug || {};
-      msg.textContent = 'No se detectó ningún producto en la foto. Puede estar borrosa, inclinada o con poca luz — prueba tomarla de nuevo bien derecha y de cerca, o agrega los productos manualmente abajo.'
-        + ` [debug: crudos=${d.raw_count ?? '?'}, filtrados=${d.filtered_count ?? '?'}, stop=${d.stop_reason ?? '?'}]`;
+      // Cuando la lectura se corta por largo, la foto no tiene nada que ver:
+      // mandar a repetirla es hacer perder el tiempo — se probó con tres
+      // celulares y fotos perfectas antes de descubrir que el problema era el
+      // límite de la respuesta. El servidor ya distingue los dos casos.
+      msg.textContent = data.error
+        ? data.error
+        : 'No se detectó ningún producto en la foto. Puede estar borrosa, inclinada o con poca luz — prueba tomarla de nuevo bien derecha y de cerca, o agrega los productos manualmente abajo.'
+          + ` [debug: crudos=${d.raw_count ?? '?'}, filtrados=${d.filtered_count ?? '?'}, stop=${d.stop_reason ?? '?'}]`;
       btnReintentar.style.display = 'inline-block';
     } else {
       msg.className = 'msg ok';

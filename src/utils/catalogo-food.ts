@@ -1,3 +1,4 @@
+import { conRespaldo } from "@/utils/cache-persistente";
 import { getCatalogoProductos, getCodigosProductos } from "@/utils/catalogo-productos";
 import { getOverrides } from "@/utils/catalogo-overrides";
 
@@ -79,7 +80,30 @@ export type CategoriaFood = {
 // Recepción de productos) — mismas reglas de curación para ambos, así no
 // se desalinean con el tiempo. Los admins pueden agregar/excluir artículos
 // puntuales sin tocar código vía /catalogo (ver catalogo-overrides.ts).
+// Armarlo cuesta 33-37 segundos medidos —tres fuentes, una de ellas un Apps
+// Script de Google— y además el resultado variaba entre llamadas seguidas (104
+// productos y después 73), porque alguna fuente falla de a ratos y devuelve de
+// menos. En la lectura de la foto de una guía eso es doblemente caro: se suma a
+// los ~28 s del modelo y se pasa del minuto que da la plataforma, y encima
+// cambia el catálogo contra el que se emparejan los productos.
+// 30 minutos y no 10: el calentador lo toca cada 15, así nunca está frío
+// cuando alguien sube la foto de una guía.
+const CATALOGO_TTL_MS = 30 * 60 * 1000;
+let catalogoCache: { datos: CategoriaFood[]; ts: number } | null = null;
+
 export async function getCatalogoFood(): Promise<CategoriaFood[]> {
+  if (catalogoCache && Date.now() - catalogoCache.ts < CATALOGO_TTL_MS) return catalogoCache.datos;
+
+  const r = await conRespaldo("catalogo-food", construirCatalogoFood, {
+    // Un catálogo vacío o casi vacío es una fuente caída, no un catálogo: si se
+    // guardara, la copia quedaría inservible y la foto se leería contra nada.
+    esGuardable: (c) => c.reduce((n, x) => n + x.productos.length, 0) >= 20,
+  });
+  if (!r.desdeRespaldo) catalogoCache = { datos: r.datos, ts: Date.now() };
+  return r.datos;
+}
+
+async function construirCatalogoFood(): Promise<CategoriaFood[]> {
   const [categorias, { incluir, excluirNombres }, codigos] = await Promise.all([
     getCatalogoProductos({
       excluir: ["HELADERIA", "CHOCOLATERIA", "ARTICULOS", "MATERIAS PRIMAS"],

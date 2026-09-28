@@ -124,6 +124,11 @@ export async function generarInformeSemanal(
 ) {
   const { semana, previa } = semanaAInformar(hoy, cual);
 
+  // Los mensajes tienen que decir contra qué se compara: en curso son los
+  // mismos días de la semana pasada, no la semana entera.
+  const enCurso = cual === "en-curso";
+  const referencia = enCurso ? "el mismo tramo de la semana pasada" : "la semana anterior";
+
   // Cada fuente se pide con su propio catch: si la asistencia falla, el informe
   // sale igual con producción y stock, diciendo qué faltó.
   const fallas: string[] = [];
@@ -154,11 +159,16 @@ export async function generarInformeSemanal(
 
     // Producción: sin nada en la semana, o un salto que conviene mirar.
     if (act.kg === 0 && prev.kg > 0) {
-      alertas.push({ tienda, tipo: "produccion", gravedad: "alta", mensaje: `No registró producción en toda la semana (la anterior fueron ${prev.kg.toFixed(0)} kg).` });
+      alertas.push({
+        tienda, tipo: "produccion", gravedad: "alta",
+        mensaje: enCurso
+          ? `No registró producción en lo que va de la semana (el mismo tramo de la semana pasada fueron ${prev.kg.toFixed(0)} kg).`
+          : `No registró producción en toda la semana (la anterior fueron ${prev.kg.toFixed(0)} kg).`,
+      });
     } else if (variacion !== null && variacion <= -0.3) {
-      alertas.push({ tienda, tipo: "produccion", gravedad: "alta", mensaje: `Produjo ${Math.abs(variacion * 100).toFixed(0)}% menos que la semana anterior (${act.kg.toFixed(0)} kg contra ${prev.kg.toFixed(0)} kg).` });
+      alertas.push({ tienda, tipo: "produccion", gravedad: "alta", mensaje: `Produjo ${Math.abs(variacion * 100).toFixed(0)}% menos que ${referencia} (${act.kg.toFixed(0)} kg contra ${prev.kg.toFixed(0)} kg).` });
     } else if (variacion !== null && variacion >= 0.5) {
-      alertas.push({ tienda, tipo: "produccion", gravedad: "media", mensaje: `Produjo ${(variacion * 100).toFixed(0)}% más que la semana anterior (${act.kg.toFixed(0)} kg contra ${prev.kg.toFixed(0)} kg): vale revisar que no sea una carga duplicada.` });
+      alertas.push({ tienda, tipo: "produccion", gravedad: "media", mensaje: `Produjo ${(variacion * 100).toFixed(0)}% más que ${referencia} (${act.kg.toFixed(0)} kg contra ${prev.kg.toFixed(0)} kg): vale revisar que no sea una carga duplicada.` });
     }
 
     // Módulos sin registrar.

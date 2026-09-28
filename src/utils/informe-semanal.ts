@@ -17,12 +17,29 @@ export type Alerta = {
   mensaje: string;
 };
 
-const iso = (d: Date) => d.toISOString().slice(0, 10);
+// Las fechas se resuelven en hora de Chile y no en UTC.
+//
+// El servidor corre en UTC, así que toISOString() devolvía el día siguiente
+// desde las 21:00 de Chile en adelante: el informe de un lunes por la noche
+// incluía el martes, y las alertas del cron de las 21 y 22 comparaban tramos
+// corridos un día. Los registros de las tiendas están en hora de Chile, que es
+// la única que importa acá.
+const ZONA = "America/Santiago";
+const formatoISO = new Intl.DateTimeFormat("en-CA", {
+  timeZone: ZONA, year: "numeric", month: "2-digit", day: "2-digit",
+});
+
+const iso = (d: Date) => formatoISO.format(d);
+
+/** La misma fecha, pero como medianoche de Chile, para poder sumar y restar días. */
+function enChile(fecha: Date): Date {
+  const [a, m, d] = iso(fecha).split("-").map(Number);
+  return new Date(a, m - 1, d);
+}
 
 // Lunes de la semana de una fecha (semana ISO: lunes a domingo).
 function lunesDe(fecha: Date): Date {
-  const d = new Date(fecha);
-  d.setHours(0, 0, 0, 0);
+  const d = enChile(fecha);
   const dia = d.getDay() || 7;
   d.setDate(d.getDate() - (dia - 1));
   return d;
@@ -40,6 +57,7 @@ export function semanaAInformar(
   hoy = new Date(),
   cual: "cerrada" | "en-curso" = "cerrada"
 ): { semana: SemanaInforme; previa: SemanaInforme } {
+  const hoyEnChile = enChile(hoy);
   const lunesEsta = lunesDe(hoy);
   const lunesPasado = new Date(lunesEsta); lunesPasado.setDate(lunesEsta.getDate() - 7);
   const domingoPasado = new Date(lunesEsta); domingoPasado.setDate(lunesEsta.getDate() - 1);
@@ -51,16 +69,30 @@ export function semanaAInformar(
 
   const cerrada = { desde: iso(lunesPasado), hasta: iso(domingoPasado), etiqueta: etiqueta(lunesPasado, domingoPasado) };
   if (cual === "en-curso") {
+    // La semana en curso se corta en hoy: contar hasta el domingo daría días
+    // que todavía no pasaron.
+    //
+    // Y se compara contra el MISMO tramo de la semana anterior, no contra la
+    // semana entera. Comparar un lunes contra siete días daba "produjo 76%
+    // menos" todos los lunes: una alerta falsa semanal, que es la forma más
+    // rápida de que nadie vuelva a mirar la pantalla.
+    // Ambas fechas a medianoche de Chile, así la cuenta de días es exacta y no
+    // depende de la hora a la que se mire el informe.
+    const diasTranscurridos = Math.round((hoyEnChile.getTime() - lunesEsta.getTime()) / 86400000);
+    const hastaPrevio = new Date(lunesPasado);
+    hastaPrevio.setDate(lunesPasado.getDate() + diasTranscurridos);
+
     return {
-      // La semana en curso se corta en hoy: contar hasta el domingo daría días
-      // que todavía no pasaron, y la comparación con la semana anterior
-      // parecería una caída cuando solo faltan días por ocurrir.
       semana: {
         desde: iso(lunesEsta),
-        hasta: iso(hoy),
-        etiqueta: `${etiqueta(lunesEsta, hoy)} (semana en curso)`,
+        hasta: iso(hoyEnChile),
+        etiqueta: `${etiqueta(lunesEsta, hoyEnChile)} (semana en curso)`,
       },
-      previa: cerrada,
+      previa: {
+        desde: iso(lunesPasado),
+        hasta: iso(hastaPrevio),
+        etiqueta: `${etiqueta(lunesPasado, hastaPrevio)} (mismos días de la semana pasada)`,
+      },
     };
   }
 

@@ -11,6 +11,7 @@ import {
 import { generarInformeSemanal } from "@/utils/informe-semanal";
 import { pedidoSugerido } from "@/utils/pedido-sugerido";
 import { ultimasRevisiones } from "@/utils/revision-vitrina";
+import { alertasGuardadas, refrescarAlertas } from "@/utils/alertas";
 import {
   dotacionPorLocal, costoLaboralPorLocal, ausenciasYLicencias, vacaciones,
   movimientosDePersonal,
@@ -333,6 +334,27 @@ const handler = createMcpHandler(
         inputSchema: z.object({ tienda }),
       },
       async ({ tienda: t }) => responder(await ultimasRevisiones(t))
+    );
+
+    server.registerTool(
+      "alertas_ahora",
+      {
+        title: "Qué está fuera de lugar hoy",
+        description:
+          "Todas las señales al día de hoy en las tres tiendas: faltantes de vitrina, productos bajo mínimo, " +
+          "módulos sin registrar, caídas de producción, ausencias y atrasos. Es lo mismo que ve el panel de " +
+          "Alertas. Por defecto entrega el último cálculo con su antigüedad; con recalcular=true lo rehace, " +
+          "lo que tarda cerca de un minuto. Si fuentesQueFallaron trae algo, faltan alertas de esas fuentes: " +
+          "no es lo mismo que estar todo en orden.",
+        inputSchema: z.object({
+          recalcular: z.boolean().optional().describe("Rehacer el cálculo en vez de usar el último; tarda ~1 minuto"),
+        }),
+      },
+      async ({ recalcular }) => {
+        if (recalcular) return responder(await refrescarAlertas());
+        const guardadas = await alertasGuardadas();
+        return responder(guardadas ?? await refrescarAlertas());
+      }
     );
   },
   { serverInfo: { name: "larrs", version: "1.0.0" } }

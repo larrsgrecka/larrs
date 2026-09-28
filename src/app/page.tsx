@@ -3,6 +3,7 @@ import Link from "next/link";
 import { createClient } from "@/utils/supabase/server";
 import { getProfile } from "@/utils/auth";
 import { logout } from "./login/actions";
+import { alertasGuardadas } from "@/utils/alertas";
 
 export default async function Home() {
   const supabase = await createClient();
@@ -12,6 +13,11 @@ export default async function Home() {
   const profile = await getProfile();
   const admin = profile?.role === "admin";
   const operador = profile?.role === "operador";
+
+  // Se lee lo que dejó calculado el calentador, que son milisegundos: cruzar
+  // las fuentes en vivo acá dejaría la pantalla de inicio en blanco medio
+  // minuto. Si falla, el inicio abre igual sin el aviso.
+  const alertas = admin ? await alertasGuardadas().catch(() => null) : null;
 
   return (
     <div className="flex min-h-screen flex-col bg-gray-50">
@@ -36,6 +42,30 @@ export default async function Home() {
       {/* Cards */}
       <div className="-mt-8 mx-auto w-full max-w-sm flex-1 px-4">
         <div className="flex flex-col gap-3">
+          {/* Lo primero que ve quien supervisa: qué está fuera de lugar hoy.
+              Solo aparece si hay algo urgente — un aviso que está siempre
+              termina siendo parte del fondo y nadie lo lee. */}
+          {admin && alertas && alertas.altas > 0 && (
+            <Link
+              href="/alertas"
+              className="block overflow-hidden rounded-2xl shadow-sm transition-transform active:scale-[0.98]"
+            >
+              <div className="flex items-center gap-4 rounded-2xl border border-red-300 bg-red-50 p-5">
+                <span className="text-3xl">🔴</span>
+                <div className="flex-1 text-gray-700">
+                  <p className="font-bold text-red-800">
+                    {alertas.altas} {alertas.altas === 1 ? "alerta urgente" : "alertas urgentes"}
+                  </p>
+                  <p className="text-sm text-red-700/70">
+                    {alertas.medias > 0 && `y ${alertas.medias} para mirar · `}
+                    calculado {alertas.hace}
+                  </p>
+                </div>
+                <span className="text-xl text-red-300">›</span>
+              </div>
+            </Link>
+          )}
+
           {!operador && (
             <Link
               href="/produccion"
@@ -239,6 +269,24 @@ export default async function Home() {
                   <p className="font-bold">Actividad por tienda</p>
                   <p className="text-sm text-gray-400">
                     Última fecha de cada registro — quién está al día
+                  </p>
+                </div>
+                <span className="text-xl text-gray-300">›</span>
+              </div>
+            </Link>
+          )}
+
+          {admin && (
+            <Link
+              href="/alertas"
+              className="block overflow-hidden rounded-2xl shadow-sm transition-transform active:scale-[0.98]"
+            >
+              <div className="flex items-center gap-4 rounded-2xl border border-amber-200 bg-amber-50 p-5">
+                <span className="text-3xl">🔔</span>
+                <div className="flex-1 text-gray-700">
+                  <p className="font-bold">Alertas</p>
+                  <p className="text-sm text-gray-400">
+                    Todo lo que está fuera de lugar, en las tres tiendas
                   </p>
                 </div>
                 <span className="text-xl text-gray-300">›</span>

@@ -3,6 +3,7 @@ import { getActividadTiendas } from "@/utils/actividad-tiendas";
 import { leerStockActual } from "@/utils/inventario-food-stock";
 import { getCatalogoFood } from "@/utils/catalogo-food";
 import { getStockMinimos } from "@/utils/stock-minimos";
+import { refrescarAlertas } from "@/utils/alertas";
 
 // Mantiene despiertos los Apps Script de Google.
 //
@@ -75,6 +76,19 @@ export async function GET(request: NextRequest) {
       resultado.stockMinimos = { productos: minimos.length };
     } catch (e) {
       resultado.stockMinimos = { error: (e as Error).message };
+    }
+  }
+
+  // Las alertas se dejan calculadas acá para que el panel y el aviso del inicio
+  // abran al instante: cruzarlas en vivo tarda más de medio minuto y nadie mira
+  // una pantalla que tarda eso en cargar. Va en la pasada con stock porque usa
+  // las mismas fuentes que se acaban de calentar.
+  if (request.nextUrl.searchParams.get("stock") === "1") {
+    try {
+      const a = await refrescarAlertas();
+      resultado.alertas = { altas: a.altas, medias: a.medias, fuentesQueFallaron: a.fuentesQueFallaron.length };
+    } catch (e) {
+      resultado.alertas = { error: (e as Error).message };
     }
   }
 

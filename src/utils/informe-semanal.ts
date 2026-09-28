@@ -12,7 +12,7 @@ const TIENDAS = ["Costanera", "Dominicos", "Trapenses"] as const;
 
 export type Alerta = {
   tienda: string;
-  tipo: "sin_registrar" | "produccion" | "stock" | "asistencia";
+  tipo: "sin_registrar" | "produccion" | "stock" | "asistencia" | "vitrina";
   gravedad: "alta" | "media";
   mensaje: string;
 };

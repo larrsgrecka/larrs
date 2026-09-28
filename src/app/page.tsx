@@ -246,6 +246,24 @@ export default async function Home() {
             </Link>
           )}
 
+          {(admin || profile?.role === "jefe_tienda" || operador) && (
+            <Link
+              href="/revision-vitrina"
+              className="block overflow-hidden rounded-2xl shadow-sm transition-transform active:scale-[0.98]"
+            >
+              <div className="flex items-center gap-4 rounded-2xl border border-sky-200 bg-sky-50 p-5">
+                <span className="text-3xl">📸</span>
+                <div className="flex-1 text-gray-700">
+                  <p className="font-bold">Revisar vitrina</p>
+                  <p className="text-sm text-gray-400">
+                    Una foto y te dice qué falta o está sin cartel
+                  </p>
+                </div>
+                <span className="text-xl text-gray-300">›</span>
+              </div>
+            </Link>
+          )}
+
           {(admin || profile?.role === "jefe_tienda") && (
             <Link
               href="/pedido-sugerido"

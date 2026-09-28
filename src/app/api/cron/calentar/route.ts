@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getActividadTiendas } from "@/utils/actividad-tiendas";
 import { leerStockActual } from "@/utils/inventario-food-stock";
 import { getCatalogoFood } from "@/utils/catalogo-food";
+import { getStockMinimos } from "@/utils/stock-minimos";
 
 // Mantiene despiertos los Apps Script de Google.
 //
@@ -62,6 +63,19 @@ export async function GET(request: NextRequest) {
     resultado.catalogoFood = { categorias: catalogo.length, productos: catalogo.reduce((n, c) => n + c.productos.length, 0) };
   } catch (e) {
     resultado.catalogoFood = { error: (e as Error).message };
+  }
+
+  // Los mínimos por producto tardaron 143 s medidos en frío (ventas, catálogo e
+  // Inventario Food, con reintentos por medio). Los usa Stock y alertas y ahora
+  // también la revisión de vitrina por foto, que compite con el minuto de la
+  // plataforma: tenerlos calientes es la diferencia entre que funcione o no.
+  if (request.nextUrl.searchParams.get("stock") === "1") {
+    try {
+      const minimos = await getStockMinimos();
+      resultado.stockMinimos = { productos: minimos.length };
+    } catch (e) {
+      resultado.stockMinimos = { error: (e as Error).message };
+    }
   }
 
   const segundos = Math.round((Date.now() - inicio) / 100) / 10;

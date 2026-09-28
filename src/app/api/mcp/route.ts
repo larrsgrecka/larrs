@@ -10,6 +10,7 @@ import {
 } from "@/utils/geovictoria";
 import { generarInformeSemanal } from "@/utils/informe-semanal";
 import { pedidoSugerido } from "@/utils/pedido-sugerido";
+import { ultimasRevisiones } from "@/utils/revision-vitrina";
 import {
   dotacionPorLocal, costoLaboralPorLocal, ausenciasYLicencias, vacaciones,
   movimientosDePersonal,
@@ -319,6 +320,19 @@ const handler = createMcpHandler(
       },
       async ({ tienda: t, semanas, semanasDeCobertura }) =>
         responder(await pedidoSugerido({ tienda: t, semanas, semanasDeCobertura }))
+    );
+
+    server.registerTool(
+      "revisiones_de_vitrina",
+      {
+        title: "Últimas revisiones de vitrina",
+        description:
+          "Cuándo fue la última vez que cada tienda revisó su vitrina con una foto, quién lo hizo y cuántos " +
+          "faltantes salieron. Las revisiones las hacen los jefes de local desde el panel: si una tienda no " +
+          "aparece o dice que nunca la revisó, es que no está usando la revisión, no que la vitrina esté bien.",
+        inputSchema: z.object({ tienda }),
+      },
+      async ({ tienda: t }) => responder(await ultimasRevisiones(t))
     );
   },
   { serverInfo: { name: "larrs", version: "1.0.0" } }

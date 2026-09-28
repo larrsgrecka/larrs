@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Revisar vitrina · Larrs</title>
+<style>
+:root { color-scheme: light; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f2f7; color: #1e293b; padding: 14px; font-size: 14px; }
+.container { max-width: 760px; margin: 0 auto; }
+.header { background: linear-gradient(135deg, #111418, #1e293b); border-radius: 12px; padding: 18px 22px; margin-bottom: 12px; color: #fff; }
+.logo-img { height: 44px; width: auto; display: block; }
+.header .title { font-size: 15px; font-weight: 700; color: #e2e8f0; margin-top: 10px; }
+.header .subtitle { font-size: 12px; color: #94a3b8; margin-top: 2px; }
+.card { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; margin-bottom: 12px; }
+.card h2 { font-size: 13px; margin-bottom: 10px; }
+label.lbl { display: block; font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 5px; }
+select, input[type=file] { width: 100%; font-size: 15px; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; background: #f8fafc; }
+.tipos { display: flex; gap: 8px; margin-bottom: 12px; }
+.tipo { flex: 1; padding: 12px; border: 2px solid #e2e8f0; border-radius: 10px; background: #fff; font-size: 14px; font-weight: 700; color: #64748b; cursor: pointer; text-align: center; }
+.tipo.on { border-color: #1e293b; background: #1e293b; color: #fff; }
+.ayuda { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 10px 12px; font-size: 12px; color: #1e40af; line-height: 1.55; margin-bottom: 12px; }
+.previews { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
+.previews img { width: 92px; height: 92px; object-fit: cover; border-radius: 8px; border: 1px solid #e2e8f0; }
+.btn { width: 100%; font-size: 15px; font-weight: 700; border: 0; border-radius: 10px; padding: 14px; cursor: pointer; background: #1e293b; color: #fff; }
+.btn:disabled { opacity: .5; }
+.msg { border-radius: 8px; padding: 10px 12px; font-size: 13px; margin-top: 10px; }
+.msg.err { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
+.msg.info { background: #f8fafc; color: #475569; border: 1px solid #e2e8f0; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; margin-bottom: 12px; }
+.kpi { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px 12px; }
+.kpi .n { font-size: 20px; font-weight: 800; }
+.kpi .n.malo { color: #b91c1c; }
+.kpi .n.medio { color: #b45309; }
+.kpi .lbl2 { font-size: 10px; color: #64748b; text-transform: uppercase; letter-spacing: .04em; margin-top: 2px; }
+.bloque { margin-bottom: 14px; }
+.bloque h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: #64748b; margin-bottom: 6px; }
+.item { padding: 9px 11px; border-radius: 8px; margin-bottom: 6px; font-size: 13px; line-height: 1.45; }
+.item.falta { background: #fef2f2; border: 1px solid #fecaca; }
+.item.duda { background: #fffbeb; border: 1px solid #fde68a; }
+.item.extra { background: #eff6ff; border: 1px solid #bfdbfe; }
+.item.anon { background: #f8fafc; border: 1px solid #e2e8f0; }
+.item b { font-weight: 700; }
+.item .nota { color: #64748b; font-size: 12px; }
+.ok-todo { background: #f0fdf4; border: 1px solid #bbf7d0; color: #15803d; border-radius: 8px; padding: 12px; font-size: 13px; }
+.hist { font-size: 12px; color: #64748b; line-height: 1.6; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <img src="/larrs-logo.png" alt="Larrs" class="logo-img">
+    <div class="title">Revisar vitrina con una foto</div>
+    <div class="subtitle" id="sub">Comparar lo que hay en la vitrina con lo que el sistema espera</div>
+  </div>
+
+  <div class="card">
+    <div class="tipos">
+      <div class="tipo on" data-tipo="helados" onclick="elegirTipo(this)">🍦 Helados</div>
+      <div class="tipo" data-tipo="pasteleria" onclick="elegirTipo(this)">🥐 Pastelería</div>
+    </div>
+
+    <div class="ayuda" id="ayuda"></div>
+
+    <div id="selector-tienda" style="display:none;margin-bottom:12px">
+      <label class="lbl">Tienda</label>
+      <select id="f-tienda"><option>Costanera</option><option>Dominicos</option><option>Trapenses</option></select>
+    </div>
+
+    <label class="lbl">Fotos (hasta 3)</label>
+    <input type="file" id="fotos" accept="image/*" capture="environment" multiple onchange="onFotos(event)">
+    <div class="previews" id="previews"></div>
+
+    <button class="btn" id="btn" onclick="revisar()" disabled>Revisar vitrina</button>
+    <div id="msg"></div>
+  </div>
+
+  <div id="resultado"></div>
+  <div class="card hist" id="historial"></div>
+</div>
+
+<script>
+let tipo = 'helados';
+let fotos = [];
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+const AYUDAS = {
+  helados: 'Sacá las fotos <b>de frente y cubriendo toda la vitrina</b>. Si no entra en una, sacá dos con un poco de zona repetida en el medio. Lo importante es que <b>se lean los carteles</b>: si una zona queda cortada, esos sabores van a figurar como "no se pudo verificar" en vez de como faltantes.',
+  pasteleria: 'Fotografiá <b>cada vitrina de frente</b>, lo más cerca que puedas sin que queden bandejas afuera. Los carteles de pastelería son chicos: si no se leen, el resultado va a decir "no se pudo verificar" en vez de inventar.',
+};
+
+function elegirTipo(el) {
+  document.querySelectorAll('.tipo').forEach((t) => t.classList.remove('on'));
+  el.classList.add('on');
+  tipo = el.dataset.tipo;
+  document.getElementById('ayuda').innerHTML = AYUDAS[tipo];
+  document.getElementById('resultado').innerHTML = '';
+}
+
+function onFotos(evt) {
+  const archivos = [...evt.target.files].slice(0, 3);
+  fotos = [];
+  const previews = document.getElementById('previews');
+  previews.innerHTML = '';
+  document.getElementById('btn').disabled = true;
+
+  for (const file of archivos) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        // Se achica antes de subirla: las fotos del celular pesan 4 MB y no
+        // hace falta ese detalle para leer un cartel — sí hace falta que el
+        // envío no se eternice con la señal del local.
+        const maxDim = 1600;
+        let { width, height } = img;
+        if (width > maxDim || height > maxDim) {
+          const r = Math.min(maxDim / width, maxDim / height);
+          width = Math.round(width * r); height = Math.round(height * r);
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width; canvas.height = height;
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+        fotos.push({ base64: dataUrl.split(',')[1], mimetype: 'image/jpeg' });
+        const el = document.createElement('img');
+        el.src = dataUrl;
+        previews.appendChild(el);
+        document.getElementById('btn').disabled = fotos.length === 0;
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+}
+
+async function revisar() {
+  const btn = document.getElementById('btn');
+  const msg = document.getElementById('msg');
+  btn.disabled = true;
+  btn.textContent = 'Revisando… puede tardar medio minuto';
+  msg.innerHTML = '';
+  document.getElementById('resultado').innerHTML = '';
+
+  const cuerpo = { tipo, fotos };
+  const sel = document.getElementById('f-tienda');
+  if (sel && document.getElementById('selector-tienda').style.display !== 'none') cuerpo.tienda = sel.value;
+
+  try {
+    const resp = await fetch('/api/revision-vitrina', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cuerpo),
+    });
+    const texto = await resp.text();
+    let d;
+    try { d = JSON.parse(texto); }
+    catch { throw new Error(`el servidor respondió ${resp.status} sin datos. Probá de nuevo.`); }
+    if (!d.ok) throw new Error(d.error || 'No se pudo revisar');
+    render(d);
+    cargarHistorial();
+  } catch (e) {
+    msg.className = 'msg err';
+    msg.textContent = e.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Revisar vitrina';
+  }
+}
+
+function render(d) {
+  const faltan = (d.faltantes || []).filter((f) => f.certeza === 'seguro');
+  const dudas = (d.faltantes || []).filter((f) => f.certeza !== 'seguro');
+  const partes = [];
+
+  partes.push(`<div class="kpis">
+    <div class="kpi"><div class="n">${d.presentes.length}/${d.esperados}</div><div class="lbl2">Están</div></div>
+    <div class="kpi"><div class="n ${faltan.length ? 'malo' : ''}">${faltan.length}</div><div class="lbl2">Faltan</div></div>
+    <div class="kpi"><div class="n ${d.sinNombre.length ? 'medio' : ''}">${d.sinNombre.length}</div><div class="lbl2">Sin cartel</div></div>
+  </div>`);
+
+  if (faltan.length) {
+    partes.push(`<div class="bloque"><h3>Falta reponer</h3>` + faltan.map((f) =>
+      `<div class="item falta"><b>${esc(f.esperado)}</b><div class="nota">${esc(f.nota)}</div></div>`).join('') + `</div>`);
+  }
+
+  // Lo que no se pudo verificar va aparte y en otro color: no es lo mismo "no
+  // está" que "la foto no alcanza a mostrarlo", y mezclarlos haría que nadie
+  // confíe en la lista roja.
+  if (dudas.length) {
+    partes.push(`<div class="bloque"><h3>No se pudo verificar en la foto</h3>` + dudas.map((f) =>
+      `<div class="item duda"><b>${esc(f.esperado)}</b><div class="nota">${esc(f.nota)}</div></div>`).join('') + `</div>`);
+  }
+
+  if (d.sinNombre.length) {
+    partes.push(`<div class="bloque"><h3>Sin cartel o sin nombre claro</h3>` + d.sinNombre.map((s) =>
+      `<div class="item anon">${esc(s.descripcion)}</div>`).join('') + `</div>`);
+  }
+
+  if (d.noEsperados.length) {
+    partes.push(`<div class="bloque"><h3>Está en la vitrina y no en el sistema</h3>` + d.noEsperados.map((n) =>
+      `<div class="item extra"><b>${esc(n.cartel)}</b><div class="nota">${esc(n.nota)}</div></div>`).join('') + `</div>`);
+  }
+
+  if (!faltan.length && !dudas.length && !d.sinNombre.length && !d.noEsperados.length) {
+    partes.push(`<div class="ok-todo">Todo en orden: la vitrina coincide con lo que el sistema espera.</div>`);
+  }
+
+  if (d.observaciones) partes.push(`<div class="msg info">${esc(d.observaciones)}</div>`);
+  if (d.incompleto) partes.push(`<div class="msg err">La vitrina tiene muchos productos y la lectura se cortó: revisá también a ojo.</div>`);
+
+  document.getElementById('resultado').innerHTML = `<div class="card">${partes.join('')}</div>`;
+}
+
+async function cargarHistorial() {
+  try {
+    const r = await fetch('/api/revision-vitrina');
+    const d = await r.json();
+    if (!d.ok) return;
+    const filas = (d.revisiones || []).map((v) =>
+      `${esc(v.tienda)} · ${v.tipo === 'helados' ? 'helados' : 'pastelería'}: revisada ${esc(v.hace)} por ${esc(v.revisadoPor)}` +
+      (v.faltantes ? ` — ${v.faltantes} faltante(s)` : ' — sin faltantes'));
+    const nunca = (d.sinRevisarNunca || []).map((v) => `${esc(v.tienda)} · ${v.tipo}: nunca revisada`);
+    const todo = [...filas, ...nunca];
+    document.getElementById('historial').innerHTML = todo.length
+      ? '<h2>Últimas revisiones</h2>' + todo.join('<br>')
+      : '';
+  } catch { /* el historial es un extra: si falla, no molesta */ }
+}
+
+document.getElementById('ayuda').innerHTML = AYUDAS.helados;
+fetch('/api/me').then((r) => r.json()).then((p) => {
+  if (p?.role === 'admin') document.getElementById('selector-tienda').style.display = '';
+  if (p?.tienda) document.getElementById('sub').textContent = p.tienda;
+}).catch(() => {});
+cargarHistorial();
+</script>
+</body>
+</html>

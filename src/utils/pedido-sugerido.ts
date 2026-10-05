@@ -64,6 +64,75 @@ const unidadLinda = (u: string) => {
   return t.charAt(0).toUpperCase() + t.slice(1).toLowerCase();
 };
 
+// Para agrupar: sin tildes, en minúscula y en singular, así "SACO" y "SACOS"
+// cuentan como la misma unidad.
+const claveUnidad = (u: string) => {
+  const t = (u || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  return t.endsWith("s") && t.length > 3 ? t.slice(0, -1) : t;
+};
+
+// La unidad de un producto es la que más se repite en su historial, no la de la
+// última compra.
+//
+// Grecka tipea mal de vez en cuando: las paletas de degustación figuran como
+// CAJA en 3 de 40 compras y como BOLSA en las otras 37, y los vasos
+// compostables como CAJA en 28 de 181. Tomando la última fila, una sola de esas
+// mandaba sobre decenas correctas y el pedido pedía cajas de algo que viene en
+// bolsa — que es justo el tipo de error que hace llegar diez veces de más.
+function unidadHabitual(compras: { unidad: string }[]): string {
+  const conteo = new Map<string, { n: number; textos: Map<string, number> }>();
+  for (const c of compras) {
+    const clave = claveUnidad(c.unidad);
+    if (!clave) continue;
+    if (!conteo.has(clave)) conteo.set(clave, { n: 0, textos: new Map() });
+    const e = conteo.get(clave)!;
+    e.n++;
+    const txt = unidadLinda(c.unidad);
+    e.textos.set(txt, (e.textos.get(txt) || 0) + 1);
+  }
+  if (!conteo.size) return "un";
+
+  const [, ganadora] = [...conteo.entries()].sort((a, b) => b[1].n - a[1].n)[0];
+  // Dentro de la unidad ganadora, la forma escrita más usada ("Bolsa" y no "Bolsas").
+  return [...ganadora.textos.entries()].sort((a, b) => b[1] - a[1])[0][0];
+}
+
+// La unidad se decide con TODO el historial del producto y no con las semanas
+// del cálculo: en un tramo corto las tres filas mal tipeadas pueden ser mayoría
+// y gana el error. Solo se leen dos columnas de toda la tabla, y el resultado
+// se guarda un día porque la unidad de un producto no cambia.
+const UNIDADES_TTL_MS = 24 * 60 * 60 * 1000;
+let unidadesCache: { mapa: Map<string, string>; ts: number } | null = null;
+
+type ClienteSupabase = ReturnType<typeof createAdminClient>;
+
+async function unidadesHabituales(supabase: ClienteSupabase): Promise<Map<string, string>> {
+  if (unidadesCache && Date.now() - unidadesCache.ts < UNIDADES_TTL_MS) return unidadesCache.mapa;
+
+  const PAGINA = 1000;
+  const porSku = new Map<string, { unidad: string }[]>();
+  for (let inicio = 0; ; inicio += PAGINA) {
+    const { data, error } = await supabase
+      .from("ventas_grecka")
+      .select("sku, descripcion, unidad")
+      .range(inicio, inicio + PAGINA - 1);
+    if (error) throw new Error(`No se pudieron leer las unidades: ${error.message}`);
+    if (!data?.length) break;
+    for (const f of data as { sku: string; descripcion: string; unidad: string }[]) {
+      const clave = f.sku || f.descripcion;
+      if (!clave) continue;
+      if (!porSku.has(clave)) porSku.set(clave, []);
+      porSku.get(clave)!.push({ unidad: f.unidad });
+    }
+    if (data.length < PAGINA) break;
+  }
+
+  const mapa = new Map<string, string>();
+  for (const [sku, compras] of porSku) mapa.set(sku, unidadHabitual(compras));
+  unidadesCache = { mapa, ts: Date.now() };
+  return mapa;
+}
+
 export async function pedidoSugerido(opciones: {
   semanas?: number;
   semanasDeCobertura?: number;
@@ -79,14 +148,16 @@ export async function pedidoSugerido(opciones: {
   const filas: FilaCompra[] = [];
   const PAGINA = 1000;
   for (let inicio = 0; ; inicio += PAGINA) {
-    let consulta = supabase
+    // Se traen todas las tiendas aunque se pida una sola: la unidad de un
+    // producto se decide con su historial completo, y filtrando en la consulta
+    // una tienda con pocas compras heredaría el error de tipeo de una fila.
+    const consulta = supabase
       .from("ventas_grecka")
       .select("tienda, fecha, sku, descripcion, grupo, cantidad, unidad, precio_unitario, neto")
       .gte("fecha", desde)
       .in("grupo", GRUPOS_DE_CONSUMO)
       .order("fecha", { ascending: true })
       .range(inicio, inicio + PAGINA - 1);
-    if (tienda) consulta = consulta.eq("tienda", tienda);
 
     const { data, error } = await consulta;
     if (error) throw new Error(`No se pudieron leer las compras a Grecka: ${error.message}`);
@@ -94,6 +165,8 @@ export async function pedidoSugerido(opciones: {
     filas.push(...(data as FilaCompra[]));
     if (data.length < PAGINA) break;
   }
+
+  const unidadPorSku = await unidadesHabituales(supabase);
 
   const tiendasAMostrar = tienda ? [tienda] : [...TIENDAS];
   const resultado: PedidoTienda[] = [];
@@ -153,7 +226,7 @@ export async function pedidoSugerido(opciones: {
       productos.push({
         sku,
         producto: reciente.descripcion,
-        unidad: unidadLinda(reciente.unidad),
+        unidad: unidadPorSku.get(sku) ?? unidadLinda(reciente.unidad),
         grupo: reciente.grupo,
         totalPeriodo: Math.round(total * 10) / 10,
         promedioSemanal: Math.round(promedio * 10) / 10,

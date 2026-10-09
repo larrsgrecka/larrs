@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Proyección de compras · Larrs</title>
+<style>
+:root { color-scheme: light; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f2f7; color: #1e293b; padding: 14px; font-size: 14px; }
+.container { max-width: 1060px; margin: 0 auto; }
+.header { background: linear-gradient(135deg, #111418, #1e293b); border-radius: 12px; padding: 18px 22px; margin-bottom: 12px; color: #fff; }
+.logo-img { height: 44px; width: auto; display: block; }
+.header .title { font-size: 15px; font-weight: 700; color: #e2e8f0; margin-top: 10px; }
+.header .subtitle { font-size: 12px; color: #94a3b8; margin-top: 2px; }
+.note { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 9px 13px; font-size: 12px; color: #1e40af; margin-bottom: 12px; line-height: 1.55; }
+.toolbar { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; display: flex; align-items: flex-end; gap: 14px; flex-wrap: wrap; }
+label.lbl { display: block; font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 4px; }
+select, input[type=number] { font-size: 13px; border: 1px solid #e2e8f0; border-radius: 6px; padding: 7px 9px; background: #f8fafc; color: #1e293b; }
+input[type=number] { width: 84px; }
+.acciones { margin-left: auto; display: flex; gap: 8px; }
+.btn { font-size: 12px; font-weight: 700; border: 1px solid #e2e8f0; background: #f8fafc; color: #334155; border-radius: 6px; padding: 7px 12px; cursor: pointer; }
+.btn-primary { background: #1e293b; border-color: #1e293b; color: #fff; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-bottom: 12px; }
+.kpi { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 14px; }
+.kpi .n { font-size: 21px; font-weight: 800; }
+.kpi .lbl2 { font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: .04em; margin-top: 2px; }
+.card { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; margin-bottom: 12px; }
+.card h2 { font-size: 13px; padding: 11px 14px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; }
+.meses { padding: 14px; display: flex; flex-direction: column; gap: 9px; }
+.mes { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+.mes .nom { width: 118px; flex-shrink: 0; font-weight: 600; }
+.mes .barra { flex: 1; background: #f1f5f9; border-radius: 5px; height: 22px; overflow: hidden; }
+.mes .barra i { display: block; height: 100%; background: linear-gradient(90deg, #1e293b, #475569); }
+.mes .val { width: 118px; text-align: right; font-weight: 700; }
+.mes .idx { width: 64px; text-align: right; font-size: 11px; color: #94a3b8; }
+table { width: 100%; border-collapse: collapse; }
+th { padding: 8px 10px; text-align: left; font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .04em; background: #f8fafc; }
+th.r, td.r { text-align: right; }
+td { padding: 8px 10px; border-top: 1px solid #f1f5f9; font-size: 13px; }
+tr:hover td { background: #f8fafc; }
+.prod { font-weight: 600; }
+.sku { font-size: 10px; color: #94a3b8; }
+.dim { color: #94a3b8; font-size: 11px; }
+.flojo { color: #b45309; font-size: 10px; font-weight: 700; }
+.estac { padding: 12px 14px; display: flex; gap: 5px; flex-wrap: wrap; }
+.estac .m { flex: 1; min-width: 56px; text-align: center; font-size: 11px; }
+.estac .m .b { background: #f1f5f9; border-radius: 4px; height: 46px; display: flex; align-items: flex-end; overflow: hidden; }
+.estac .m .b i { display: block; width: 100%; background: #94a3b8; }
+.estac .m.alto .b i { background: #1e293b; }
+.estac .m .n { font-weight: 700; margin-top: 3px; }
+.empty { padding: 30px; text-align: center; color: #94a3b8; }
+.last { font-size: 11px; color: #b0bac8; text-align: center; margin-top: 6px; }
+@media print {
+  @page { size: A4; margin: 10mm; }
+  body { background: #fff; padding: 0; font-size: 11px; }
+  .toolbar, .note { display: none !important; }
+  .header { background: #fff !important; color: #1e293b; padding: 0 0 8px; }
+  .header .title { color: #1e293b; }
+  .logo-img { filter: invert(1); height: 30px; }
+  .card { border: 0; }
+  tr { break-inside: avoid; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <img src="/larrs-logo.png" alt="Larrs" class="logo-img">
+    <div class="title">Proyección de compras a Grecka</div>
+    <div class="subtitle">Cuánto habrá que comprar en los próximos meses, según el consumo real y la estación</div>
+  </div>
+
+  <div class="note" id="metodo"></div>
+
+  <div class="toolbar">
+    <div><label class="lbl">Período</label>
+      <select id="f-meses" onchange="cargar()">
+        <option value="3" selected>Próximos 3 meses</option>
+        <option value="6">Próximos 6 meses</option>
+        <option value="12">Próximos 12 meses</option>
+      </select></div>
+    <div><label class="lbl">Crecimiento esperado</label>
+      <input type="number" id="f-crec" value="0" step="5" min="-50" max="100" onchange="cargar()"> <span class="dim">%</span></div>
+    <div class="acciones">
+      <button class="btn" onclick="descargarCSV()">⬇ Excel</button>
+      <button class="btn btn-primary" onclick="window.print()">🖨 Imprimir</button>
+    </div>
+  </div>
+
+  <div id="contenido"><div class="card"><div class="empty">Calculando…</div></div></div>
+  <div class="last" id="last"></div>
+</div>
+
+<script>
+let datos = null;
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const $ = (n) => '$' + Math.round(n).toLocaleString('es-CL');
+const mm = (n) => '$' + (n / 1000000).toFixed(1) + 'M';
+
+async function cargar() {
+  document.getElementById('contenido').innerHTML = '<div class="card"><div class="empty">Calculando…</div></div>';
+  const p = new URLSearchParams({
+    meses: document.getElementById('f-meses').value,
+    crecimiento: document.getElementById('f-crec').value || '0',
+  });
+  try {
+    const resp = await fetch('/api/proyeccion-insumos?' + p);
+    const texto = await resp.text();
+    let d;
+    try { d = JSON.parse(texto); }
+    catch { throw new Error(`el servidor respondió ${resp.status} sin datos.`); }
+    if (!d.ok) throw new Error(d.error || 'No se pudo calcular');
+    datos = d;
+    render();
+  } catch (e) {
+    document.getElementById('contenido').innerHTML = `<div class="card"><div class="empty">Error: ${esc(e.message)}</div></div>`;
+  }
+  document.getElementById('last').textContent = 'Calculado: ' + new Date().toLocaleString('es-CL');
+}
+
+function render() {
+  const d = datos;
+  document.getElementById('metodo').innerHTML =
+    `Cada producto se proyecta con su consumo de los últimos 12 meses, ajustado por la estación del mes que viene. ` +
+    `La estacionalidad sale de ${d.estacionalidad.reduce((s, e) => s + e.anios, 0)} mediciones mensuales del historial. ` +
+    `<b>Los precios son los de la última compra</b>: si Grecka cambia lista, los montos cambian. No incluye repuestos ni servicios.`;
+
+  const maxMes = Math.max(...d.meses.map((m) => m.monto), 1);
+  const picos = [...d.estacionalidad].sort((a, b) => b.indice - a.indice).slice(0, 3).map((e) => e.mes);
+
+  document.getElementById('contenido').innerHTML = `
+    <div class="kpis">
+      <div class="kpi"><div class="n">${mm(d.montoTotal)}</div><div class="lbl2">Total ${d.mesesProyectados} meses</div></div>
+      <div class="kpi"><div class="n">${mm(d.montoTotal / d.mesesProyectados)}</div><div class="lbl2">Promedio por mes</div></div>
+      <div class="kpi"><div class="n">${d.productos.length}</div><div class="lbl2">Productos</div></div>
+      ${d.porGrupo.map((g) => `<div class="kpi"><div class="n">${mm(g.monto)}</div><div class="lbl2">${esc(g.grupo)}</div></div>`).join('')}
+    </div>
+
+    <div class="card">
+      <h2>Mes a mes</h2>
+      <div class="meses">
+        ${d.meses.map((m) => `<div class="mes">
+          <span class="nom">${esc(m.etiqueta)}</span>
+          <span class="idx">×${m.indice.toFixed(2)}</span>
+          <span class="barra"><i style="width:${Math.round((m.monto / maxMes) * 100)}%"></i></span>
+          <span class="val">${$(m.monto)}</span>
+        </div>`).join('')}
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Cómo se mueve el año <span class="dim">· 1,00 es un mes normal</span></h2>
+      <div class="estac">
+        ${d.estacionalidad.map((e) => `<div class="m ${picos.includes(e.mes) ? 'alto' : ''}">
+          <div class="b"><i style="height:${Math.min(100, Math.round((e.indice / 1.6) * 100))}%"></i></div>
+          <div class="n">${e.indice.toFixed(2)}</div>
+          <div class="dim">${esc(e.nombre.slice(0, 3))}</div>
+        </div>`).join('')}
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Qué comprar <span class="dim">· ordenado por lo que más pesa en plata</span></h2>
+      <table>
+        <thead><tr>
+          <th>Producto</th><th class="r">Total</th>
+          ${d.meses.map((m) => `<th class="r">${esc(m.etiqueta.split(' ')[0].slice(0, 3))}</th>`).join('')}
+          <th class="r">Monto</th>
+        </tr></thead>
+        <tbody>${d.productos.slice(0, 60).map((p) => `<tr>
+          <td><div class="prod">${esc(p.producto)}</div><div class="sku">${esc(p.sku)} · ${esc(p.grupo)} · ${p.nivelMensual}/mes ${p.pocoHistorial ? '<span class="flojo">· poco historial</span>' : ''}</div></td>
+          <td class="r"><b>${p.cantidadTotal}</b> <span class="dim">${esc(p.unidad)}</span></td>
+          ${p.porMes.map((m) => `<td class="r dim">${m.cantidad}</td>`).join('')}
+          <td class="r">${$(p.montoTotal)}</td>
+        </tr>`).join('')}</tbody>
+      </table>
+      ${d.productos.length > 60 ? `<div class="dim" style="padding:10px 14px">Se muestran los 60 que más pesan, de ${d.productos.length}. El Excel los trae todos.</div>` : ''}
+    </div>`;
+}
+
+function descargarCSV() {
+  if (!datos) return;
+  const cab = ['SKU', 'Producto', 'Grupo', 'Unidad', 'Consumo mensual', 'Precio unitario', 'Total periodo', ...datos.meses.map((m) => m.etiqueta), 'Monto total'];
+  const filas = [cab, ...datos.productos.map((p) => [
+    p.sku, p.producto, p.grupo, p.unidad, p.nivelMensual, p.precioUnitario, p.cantidadTotal,
+    ...p.porMes.map((m) => m.cantidad), p.montoTotal,
+  ])];
+  // Punto y coma y BOM para que Excel en español abra las columnas derecho.
+  const csv = '﻿' + filas.map((f) => f.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(';')).join('\n');
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `proyeccion-compras-${datos.mesesProyectados}meses-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+cargar();
+</script>
+</body>
+</html>

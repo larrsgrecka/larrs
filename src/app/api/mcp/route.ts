@@ -12,6 +12,7 @@ import { generarInformeSemanal } from "@/utils/informe-semanal";
 import { pedidoSugerido } from "@/utils/pedido-sugerido";
 import { ultimasRevisiones } from "@/utils/revision-vitrina";
 import { alertasGuardadas, refrescarAlertas } from "@/utils/alertas";
+import { proyeccionInsumos } from "@/utils/proyeccion-insumos";
 import {
   dotacionPorLocal, costoLaboralPorLocal, ausenciasYLicencias, vacaciones,
   movimientosDePersonal,
@@ -354,6 +355,30 @@ const handler = createMcpHandler(
         if (recalcular) return responder(await refrescarAlertas());
         const guardadas = await alertasGuardadas();
         return responder(guardadas ?? await refrescarAlertas());
+      }
+    );
+
+    server.registerTool(
+      "proyeccion_de_compras",
+      {
+        title: "Cuánto habrá que comprarle a Grecka",
+        description:
+          "Proyección de compras de insumos y accesorios para los próximos meses, producto por producto y mes " +
+          "a mes, con el monto estimado. Cada producto se proyecta con su consumo de los últimos 12 meses " +
+          "ajustado por la estación: noviembre, diciembre y enero son los meses altos y mayo y junio los más " +
+          "bajos, medido sobre el historial real. Los precios son los de la última compra de cada producto, " +
+          "así que un cambio de lista de Grecka mueve los montos. Sirve para presupuestar y para negociar " +
+          "volumen, no es un pedido.",
+        inputSchema: z.object({
+          meses: z.number().int().min(1).max(12).optional().describe("Cuántos meses proyectar; por defecto 3"),
+          crecimientoPct: z.number().min(-50).max(100).optional()
+            .describe("Crecimiento esperado sobre el consumo histórico, en porcentaje"),
+        }),
+      },
+      async ({ meses, crecimientoPct }) => {
+        const p = await proyeccionInsumos({ meses, crecimientoPct });
+        // La lista completa son cientos de productos: se entregan los que pesan.
+        return responder({ ...p, productos: p.productos.slice(0, 40), productosOmitidos: Math.max(0, p.productos.length - 40) });
       }
     );
   },

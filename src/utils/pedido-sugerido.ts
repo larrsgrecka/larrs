@@ -58,7 +58,7 @@ const dias = (a: string, b: string) =>
 
 // "BOLSA", "Bolsa" y "bolsa" son la misma unidad; sin esto el mismo producto
 // aparecería dos veces en el pedido.
-const unidadLinda = (u: string) => {
+export const unidadLinda = (u: string) => {
   const t = (u || "").trim();
   if (!t) return "un";
   return t.charAt(0).toUpperCase() + t.slice(1).toLowerCase();
@@ -79,7 +79,7 @@ const claveUnidad = (u: string) => {
 // compostables como CAJA en 28 de 181. Tomando la última fila, una sola de esas
 // mandaba sobre decenas correctas y el pedido pedía cajas de algo que viene en
 // bolsa — que es justo el tipo de error que hace llegar diez veces de más.
-function unidadHabitual(compras: { unidad: string }[]): string {
+export function unidadHabitual(compras: { unidad: string }[]): string {
   const conteo = new Map<string, { n: number; textos: Map<string, number> }>();
   for (const c of compras) {
     const clave = claveUnidad(c.unidad);

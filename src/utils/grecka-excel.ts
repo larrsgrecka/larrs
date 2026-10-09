@@ -64,6 +64,12 @@ const ALIAS: Record<string, string[]> = {
   destino: ["af_destino", "destino", "nombre destino"],
 };
 
+// La marca es opcional: los archivos viejos no la traen y el importador tiene
+// que seguir funcionando igual, solo que sin poder agrupar por marca.
+const ALIAS_OPCIONALES: Record<string, string[]> = {
+  marca: ["r_marca", "marca", "nombre marca"],
+};
+
 export function normalizar(texto: unknown): string {
   return String(texto ?? "")
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
@@ -74,6 +80,12 @@ export function ubicarColumnas(encabezado: unknown[]) {
   const normalizados = (encabezado || []).map(normalizar);
   const indices: Record<string, number> = {};
   const faltantes: string[] = [];
+
+  for (const [clave, alias] of Object.entries(ALIAS_OPCIONALES)) {
+    const esperados = alias.map(normalizar);
+    const i = normalizados.findIndex((h) => esperados.includes(h));
+    if (i !== -1) indices[clave] = i;
+  }
 
   for (const [clave, alias] of Object.entries(ALIAS)) {
     // Los alias se normalizan con la misma regla que los encabezados: escritos

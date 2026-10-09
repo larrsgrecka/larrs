@@ -4,6 +4,7 @@ import { createAdminClient } from "@/utils/supabase/admin";
 import { getProfile } from "@/utils/auth";
 import * as XLSX from "xlsx";
 import { mapTienda, parseDate, ubicarColumnas } from "@/utils/grecka-excel";
+import { registrarMarcas } from "@/utils/grecka-marcas";
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
@@ -46,6 +47,7 @@ export async function POST(request: NextRequest) {
 
   const rows: object[] = [];
   const destinosIgnorados = new Set<string>();
+  const marcas: Record<string, string> = {};
   let filasDeLarrs = 0;
 
   for (let i = 1; i < rawRows.length; i++) {
@@ -53,6 +55,14 @@ export async function POST(request: NextRequest) {
     const nombreCli = (row[col.cliente] || "").toString().toUpperCase();
     if (!nombreCli.includes("CRISTIANO FERRERO") && !nombreCli.includes("FACTORIA DE HELADOS")) continue;
     filasDeLarrs++;
+
+    // La marca se guarda aparte, por SKU: la tabla de compras no tiene esa
+    // columna y agregarla obligaría a recargar todo el histórico.
+    if (col.marca !== undefined) {
+      const sku = (row[col.sku] || "").toString().trim();
+      const marca = (row[col.marca] || "").toString().trim();
+      if (sku && marca) marcas[sku] = marca;
+    }
 
     const destinoRaw = (row[col.destino] || "").toString();
     const tienda = mapTienda(destinoRaw);
@@ -105,5 +115,16 @@ export async function POST(request: NextRequest) {
     tiendaCount[r.tienda] = (tiendaCount[r.tienda] || 0) + 1;
   }
 
-  return NextResponse.json({ ok: true, total: rows.length, porTienda: tiendaCount });
+  // Las marcas se guardan después del upsert: que falle esto no puede tirar
+  // abajo una importación que ya quedó escrita.
+  let marcasInfo: { total: number; agregadas: number } | null = null;
+  if (Object.keys(marcas).length) {
+    try {
+      marcasInfo = await registrarMarcas(marcas);
+    } catch (e) {
+      console.error("[upload-ventas] no se pudieron guardar las marcas:", e);
+    }
+  }
+
+  return NextResponse.json({ ok: true, total: rows.length, porTienda: tiendaCount, marcas: marcasInfo });
 }

@@ -81,6 +81,8 @@ tr:hover td { background: #f8fafc; }
       </select></div>
     <div><label class="lbl">Crecimiento esperado</label>
       <input type="number" id="f-crec" value="0" step="5" min="-50" max="100" onchange="cargar()"> <span class="dim">%</span></div>
+    <div><label class="lbl">Marca</label>
+      <select id="f-marca" onchange="render()"><option value="">Todas</option></select></div>
     <div class="acciones">
       <button class="btn" onclick="descargarCSV()">⬇ Excel</button>
       <button class="btn btn-primary" onclick="window.print()">🖨 Imprimir</button>
@@ -111,6 +113,7 @@ async function cargar() {
     catch { throw new Error(`el servidor respondió ${resp.status} sin datos.`); }
     if (!d.ok) throw new Error(d.error || 'No se pudo calcular');
     datos = d;
+    document.getElementById('f-marca').innerHTML = '<option value="">Todas</option>';
     render();
   } catch (e) {
     document.getElementById('contenido').innerHTML = `<div class="card"><div class="empty">Error: ${esc(e.message)}</div></div>`;
@@ -120,6 +123,18 @@ async function cargar() {
 
 function render() {
   const d = datos;
+  const marca = document.getElementById('f-marca').value;
+  const visibles = marca ? d.productos.filter((p) => p.marca === marca) : d.productos;
+
+  // El selector se arma con las marcas que realmente aparecen en el período.
+  const sel = document.getElementById('f-marca');
+  if (sel.options.length <= 1) {
+    for (const m of d.porMarca) {
+      const o = document.createElement('option');
+      o.value = m.marca; o.textContent = `${m.marca} (${$(m.monto)})`;
+      sel.appendChild(o);
+    }
+  }
   document.getElementById('metodo').innerHTML =
     `Cada producto se proyecta con su consumo de los últimos 12 meses, ajustado por la estación del mes que viene. ` +
     `La estacionalidad sale de ${d.estacionalidad.reduce((s, e) => s + e.anios, 0)} mediciones mensuales del historial. ` +
@@ -160,29 +175,46 @@ function render() {
     </div>
 
     <div class="card">
-      <h2>Qué comprar <span class="dim">· ordenado por lo que más pesa en plata</span></h2>
+      <h2>Por marca <span class="dim">· sirve para negociar volumen con cada proveedor</span></h2>
+      <table>
+        <thead><tr>
+          <th>Marca</th><th class="r">Productos</th>
+          ${d.meses.map((m) => `<th class="r">${esc(m.etiqueta.split(' ')[0].slice(0, 3))}</th>`).join('')}
+          <th class="r">Total</th>
+        </tr></thead>
+        <tbody>${d.porMarca.map((m) => `<tr>
+          <td class="prod">${esc(m.marca)}${m.marca === 'Sin marca' ? ' <span class="dim">· falta importar el archivo que los incluya</span>' : ''}</td>
+          <td class="r dim">${m.productos}</td>
+          ${m.porMes.map((x) => `<td class="r dim">${$(x.monto)}</td>`).join('')}
+          <td class="r"><b>${$(m.monto)}</b></td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>Qué comprar <span class="dim">· ordenado por lo que más pesa en plata${marca ? ` · solo ${esc(marca)}` : ''}</span></h2>
       <table>
         <thead><tr>
           <th>Producto</th><th class="r">Total</th>
           ${d.meses.map((m) => `<th class="r">${esc(m.etiqueta.split(' ')[0].slice(0, 3))}</th>`).join('')}
           <th class="r">Monto</th>
         </tr></thead>
-        <tbody>${d.productos.slice(0, 60).map((p) => `<tr>
-          <td><div class="prod">${esc(p.producto)}</div><div class="sku">${esc(p.sku)} · ${esc(p.grupo)} · ${p.nivelMensual}/mes ${p.pocoHistorial ? '<span class="flojo">· poco historial</span>' : ''}</div></td>
+        <tbody>${visibles.slice(0, 60).map((p) => `<tr>
+          <td><div class="prod">${esc(p.producto)}</div><div class="sku">${esc(p.marca)} · ${esc(p.sku)} · ${p.nivelMensual}/mes ${p.pocoHistorial ? '<span class="flojo">· poco historial</span>' : ''}</div></td>
           <td class="r"><b>${p.cantidadTotal}</b> <span class="dim">${esc(p.unidad)}</span></td>
           ${p.porMes.map((m) => `<td class="r dim">${m.cantidad}</td>`).join('')}
           <td class="r">${$(p.montoTotal)}</td>
         </tr>`).join('')}</tbody>
       </table>
-      ${d.productos.length > 60 ? `<div class="dim" style="padding:10px 14px">Se muestran los 60 que más pesan, de ${d.productos.length}. El Excel los trae todos.</div>` : ''}
+      ${visibles.length > 60 ? `<div class="dim" style="padding:10px 14px">Se muestran los 60 que más pesan, de ${visibles.length}. El Excel los trae todos.</div>` : ''}
     </div>`;
 }
 
 function descargarCSV() {
   if (!datos) return;
-  const cab = ['SKU', 'Producto', 'Grupo', 'Unidad', 'Consumo mensual', 'Precio unitario', 'Total periodo', ...datos.meses.map((m) => m.etiqueta), 'Monto total'];
+  const cab = ['SKU', 'Producto', 'Marca', 'Grupo', 'Unidad', 'Consumo mensual', 'Precio unitario', 'Total periodo', ...datos.meses.map((m) => m.etiqueta), 'Monto total'];
   const filas = [cab, ...datos.productos.map((p) => [
-    p.sku, p.producto, p.grupo, p.unidad, p.nivelMensual, p.precioUnitario, p.cantidadTotal,
+    p.sku, p.producto, p.marca, p.grupo, p.unidad, p.nivelMensual, p.precioUnitario, p.cantidadTotal,
     ...p.porMes.map((m) => m.cantidad), p.montoTotal,
   ])];
   // Punto y coma y BOM para que Excel en español abra las columnas derecho.

@@ -13,6 +13,7 @@
 
 import { createAdminClient } from "@/utils/supabase/admin";
 import { unidadHabitual } from "@/utils/pedido-sugerido";
+import { marcasPorSku, SIN_MARCA } from "@/utils/grecka-marcas";
 
 const GRUPOS_DE_CONSUMO = ["Insumos", "Accesorios"];
 
@@ -30,6 +31,7 @@ export type ProductoProyectado = {
   producto: string;
   unidad: string;
   grupo: string;
+  marca: string;
   /** Consumo mensual limpio de estación, en unidades. */
   nivelMensual: number;
   precioUnitario: number;
@@ -56,6 +58,13 @@ export type Proyeccion = {
   productos: ProductoProyectado[];
   montoTotal: number;
   porGrupo: { grupo: string; monto: number }[];
+  /** El corte que pidió Gustavo: cuánto por marca, y cuánto de esa marca cada mes. */
+  porMarca: {
+    marca: string; monto: number; productos: number;
+    porMes: { mes: string; etiqueta: string; monto: number }[];
+  }[];
+  /** Productos sin marca conocida: su monto está en "Sin marca". */
+  sinMarca: { productos: number; monto: number };
   nota: string;
 };
 
@@ -207,6 +216,7 @@ export async function proyeccionInsumos(opciones: {
   }
   if (!compras.length) throw new Error("No hay compras a Grecka cargadas todavía.");
 
+  const marcas = await marcasPorSku().catch(() => ({} as Record<string, string>));
   const estacionalidad = estacionalidadDe(compras);
   const indiceDe = (mes: number) => estacionalidad[mes - 1]?.indice || 1;
 
@@ -300,6 +310,7 @@ export async function proyeccionInsumos(opciones: {
       producto: ultima.descripcion,
       unidad: unidadBase,
       grupo: ultima.grupo,
+      marca: marcas[sku] || SIN_MARCA,
       lineasIgnoradas: ignoradas,
       nivelMensual: Math.round(nivel * 10) / 10,
       precioUnitario: precio,
@@ -326,6 +337,31 @@ export async function proyeccionInsumos(opciones: {
   const grupos = new Map<string, number>();
   for (const p of productos) grupos.set(p.grupo, (grupos.get(p.grupo) || 0) + p.montoTotal);
 
+  const marcasAgrupadas = new Map<string, { monto: number; productos: number; porMes: Map<string, number> }>();
+  for (const p of productos) {
+    if (!marcasAgrupadas.has(p.marca)) {
+      marcasAgrupadas.set(p.marca, { monto: 0, productos: 0, porMes: new Map() });
+    }
+    const m = marcasAgrupadas.get(p.marca)!;
+    m.monto += p.montoTotal;
+    m.productos++;
+    for (const x of p.porMes) m.porMes.set(x.mes, (m.porMes.get(x.mes) || 0) + x.monto);
+  }
+
+  const porMarca = [...marcasAgrupadas.entries()]
+    .map(([marca, v]) => ({
+      marca,
+      monto: Math.round(v.monto),
+      productos: v.productos,
+      porMes: mesesFuturos.map((f) => ({ mes: f.mes, etiqueta: f.etiqueta, monto: Math.round(v.porMes.get(f.mes) || 0) })),
+    }))
+    // "Sin marca" al final aunque pese: es un pendiente de datos, no un proveedor.
+    .sort((a, b) =>
+      a.marca === SIN_MARCA ? 1 : b.marca === SIN_MARCA ? -1 : b.monto - a.monto
+    );
+
+  const sinMarcaItems = productos.filter((p) => p.marca === SIN_MARCA);
+
   return {
     generadoEn: new Date().toISOString(),
     desde: desdeNivel,
@@ -336,9 +372,16 @@ export async function proyeccionInsumos(opciones: {
     productos,
     montoTotal: productos.reduce((s, p) => s + p.montoTotal, 0),
     porGrupo: [...grupos.entries()].map(([grupo, monto]) => ({ grupo, monto })).sort((a, b) => b.monto - a.monto),
+    porMarca,
+    sinMarca: {
+      productos: sinMarcaItems.length,
+      monto: Math.round(sinMarcaItems.reduce((s2, p) => s2 + p.montoTotal, 0)),
+    },
     nota:
       `Cada producto se proyecta con su consumo de los últimos ${MESES_DE_NIVEL} meses, limpiado de estación y ` +
       "vuelto a ajustar por el mes que viene. Los precios son los de la última compra de cada producto: si Grecka " +
-      "ajusta lista, los montos cambian. Son compras de insumos y accesorios; repuestos y servicios quedan fuera.",
+      "ajusta lista, los montos cambian. Son compras de insumos y accesorios; repuestos y servicios quedan fuera. " +
+      "La marca sale de los archivos de Grecka ya importados: un producto cuya marca todavía no se cargó aparece " +
+      "en \"Sin marca\", y se corrige subiendo un archivo que lo incluya.",
   };
 }

@@ -14,6 +14,7 @@
 import { createAdminClient } from "@/utils/supabase/admin";
 import { unidadHabitual } from "@/utils/pedido-sugerido";
 import { marcasPorSku, SIN_MARCA } from "@/utils/grecka-marcas";
+import { unidadesCorregidas } from "@/utils/grecka-unidades";
 
 const GRUPOS_DE_CONSUMO = ["Insumos", "Accesorios"];
 
@@ -45,6 +46,8 @@ export type ProductoProyectado = {
   pocoHistorial: boolean;
   /** Compras que usaban una unidad sin equivalencia clara y no se contaron. */
   lineasIgnoradas: number;
+  /** true cuando la unidad la fijó una persona y no la dedujo el sistema. */
+  unidadCorregida: boolean;
 };
 
 export type Proyeccion = {
@@ -81,10 +84,10 @@ const claveUnidad = (u: string) => {
 };
 
 /** Precio por unidad base, tomando la mediana de las compras hechas en esa unidad. */
-function precioDe(compras: Compra[], unidadBase: string): number {
+function precioDe(compras: Compra[], unidadBase: string, desde?: string): number {
   const base = claveUnidad(unidadBase);
   const precios = compras
-    .filter((c) => claveUnidad(c.unidad) === base && Number(c.cantidad) > 0)
+    .filter((c) => claveUnidad(c.unidad) === base && Number(c.cantidad) > 0 && (!desde || c.fecha >= desde))
     .map((c) => Number(c.neto) / Number(c.cantidad))
     .filter((v) => Number.isFinite(v) && v > 0)
     .sort((a, b) => a - b);
@@ -99,17 +102,46 @@ function precioDe(compras: Compra[], unidadBase: string): number {
 // Sale de los precios: el mismo vaso aparece como "1 CAJA $150.288" y como
 // "8 BOLSA $18.786 cada una", así que la caja trae ocho bolsas. Sin esto, el
 // precio de la caja se multiplicaba por una cantidad contada en bolsas.
-function equivalenciasDe(compras: Compra[], unidadBase: string): Map<string, number> {
+function equivalenciasDe(compras: Compra[], unidadBase: string, porCajaConocido?: number): Map<string, number> {
   const base = claveUnidad(unidadBase);
-  const precioBase = precioDe(compras, unidadBase);
   const mapa = new Map<string, number>([[base, 1]]);
-  if (!precioBase) return mapa;
+
+  // Un dato corregido a mano no se discute: si alguien dijo que la caja trae 10
+  // bolsas, son 10.
+  if (porCajaConocido && porCajaConocido > 1) {
+    if (base === "caja") mapa.set("bolsa", 1 / porCajaConocido);
+    else mapa.set("caja", porCajaConocido);
+  }
+
+  // Los precios se comparan dentro del mismo período. Medir la caja de 2026
+  // contra la mediana histórica de la bolsa —que venía de 2023— daba una razón
+  // de 7,22 para un producto que trae exactamente 8 por caja: no es que la
+  // equivalencia no existiera, es que el precio de la bolsa había bajado.
+  const anios = [...new Set(compras.map((c) => c.fecha.slice(0, 4)))].sort().reverse();
 
   for (const otra of new Set(compras.map((c) => claveUnidad(c.unidad)))) {
-    if (!otra || otra === base) continue;
-    const precioOtra = precioDe(compras, otra);
-    if (!precioOtra) continue;
-    const razon = precioOtra / precioBase;
+    if (!otra || otra === base || mapa.has(otra)) continue;
+
+    let razon = 0;
+    for (const anio of anios) {
+      const pBase = precioDe(compras, base, `${anio}-01-01`);
+      const pOtra = precioDe(compras, otra, `${anio}-01-01`);
+      // El primer año en que existen las dos: el más reciente que sirva.
+      if (pBase > 0 && pOtra > 0) {
+        const candidatas = compras.filter((c) => c.fecha.slice(0, 4) === anio);
+        const pb = precioDe(candidatas, base);
+        const po = precioDe(candidatas, otra);
+        if (pb > 0 && po > 0) { razon = po / pb; break; }
+      }
+    }
+    if (!razon) {
+      const pBase = precioDe(compras, base);
+      const pOtra = precioDe(compras, otra);
+      if (pBase > 0 && pOtra > 0) razon = pOtra / pBase;
+    }
+    if (!razon) continue;
+
+    const precioOtra = razon;
     const redondeada = Math.round(razon);
     // Solo se acepta un múltiplo entero y con poco error: si la razón es 7,4 no
     // hay una equivalencia real, hay dos productos distintos o un precio mal
@@ -216,7 +248,10 @@ export async function proyeccionInsumos(opciones: {
   }
   if (!compras.length) throw new Error("No hay compras a Grecka cargadas todavía.");
 
-  const marcas = await marcasPorSku().catch(() => ({} as Record<string, string>));
+  const [marcas, correcciones] = await Promise.all([
+    marcasPorSku().catch(() => ({} as Record<string, string>)),
+    unidadesCorregidas().catch(() => ({}) as Awaited<ReturnType<typeof unidadesCorregidas>>),
+  ]);
   const estacionalidad = estacionalidadDe(compras);
   const indiceDe = (mes: number) => estacionalidad[mes - 1]?.indice || 1;
 
@@ -258,8 +293,11 @@ export async function proyeccionInsumos(opciones: {
     // Nivel desestacionalizado: cada mes se divide por su índice antes de
     // promediar, así un producto que se compró solo en noviembre no proyecta
     // como si ese volumen fuera su normal.
-    const unidadBase = unidadHabitual(todas);
-    const equivalencias = equivalenciasDe(todas, unidadBase);
+    // La corrección manual gana sobre la deducción: quien hace el pedido sabe
+    // en qué unidad se pide, y el historial a veces dice otra cosa.
+    const corregida = correcciones[sku];
+    const unidadBase = corregida?.unidad ?? unidadHabitual(todas);
+    const equivalencias = equivalenciasDe(todas, unidadBase, corregida?.porCaja);
 
     const porMesCantidad = new Map<string, number>();
     let ignoradas = 0;
@@ -312,6 +350,7 @@ export async function proyeccionInsumos(opciones: {
       grupo: ultima.grupo,
       marca: marcas[sku] || SIN_MARCA,
       lineasIgnoradas: ignoradas,
+      unidadCorregida: !!corregida,
       nivelMensual: Math.round(nivel * 10) / 10,
       precioUnitario: precio,
       porMes,

@@ -42,6 +42,9 @@ tr:hover td { background: #f8fafc; }
 .sku { font-size: 10px; color: #94a3b8; }
 .dim { color: #94a3b8; font-size: 11px; }
 .flojo { color: #b45309; font-size: 10px; font-weight: 700; }
+.lapiz { border: 0; background: none; cursor: pointer; color: #cbd5e1; font-size: 13px; padding: 0 2px; }
+.lapiz:hover { color: #1e293b; }
+.corregida { color: #15803d; font-size: 11px; font-weight: 700; }
 .estac { padding: 12px 14px; display: flex; gap: 5px; flex-wrap: wrap; }
 .estac .m { flex: 1; min-width: 56px; text-align: center; font-size: 11px; }
 .estac .m .b { background: #f1f5f9; border-radius: 4px; height: 46px; display: flex; align-items: flex-end; overflow: hidden; }
@@ -201,13 +204,44 @@ function render() {
         </tr></thead>
         <tbody>${visibles.slice(0, 60).map((p) => `<tr>
           <td><div class="prod">${esc(p.producto)}</div><div class="sku">${esc(p.marca)} · ${esc(p.sku)} · ${p.nivelMensual}/mes ${p.pocoHistorial ? '<span class="flojo">· poco historial</span>' : ''}</div></td>
-          <td class="r"><b>${p.cantidadTotal}</b> <span class="dim">${esc(p.unidad)}</span></td>
+          <td class="r"><b>${p.cantidadTotal}</b> <span class="dim">${esc(p.unidad)}</span>
+            <button class="lapiz no-print" title="Corregir la unidad de este producto" onclick="corregir('${esc(p.sku)}','${esc(p.unidad)}')">✎</button>
+            ${p.unidadCorregida ? '<span class="corregida" title="Unidad corregida a mano">✓</span>' : ''}</td>
           ${p.porMes.map((m) => `<td class="r dim">${m.cantidad}</td>`).join('')}
           <td class="r">${$(p.montoTotal)}</td>
         </tr>`).join('')}</tbody>
       </table>
       ${visibles.length > 60 ? `<div class="dim" style="padding:10px 14px">Se muestran los 60 que más pesan, de ${visibles.length}. El Excel los trae todos.</div>` : ''}
     </div>`;
+}
+
+// La unidad deducida del historial se equivoca cuando Grecka cambia el formato
+// o tipea mal: quien hace el pedido sabe en qué unidad se pide, así que puede
+// corregirla acá y su corrección manda sobre el cálculo para siempre.
+async function corregir(sku, unidadActual) {
+  const unidad = window.prompt(
+    `¿En qué unidad se pide este producto?\n\nCódigo: ${sku}\nAhora dice: ${unidadActual}`,
+    unidadActual
+  );
+  if (!unidad || unidad.trim() === unidadActual) return;
+
+  let porCaja;
+  if (!/caja/i.test(unidad)) {
+    const r = window.prompt(`¿Cuántas ${unidad.toLowerCase()} trae una caja?\n\nDejalo vacío si no viene en cajas.`, '');
+    if (r && Number(r) > 1) porCaja = Number(r);
+  }
+
+  try {
+    const resp = await fetch('/api/grecka-unidades', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sku, unidad: unidad.trim(), porCaja }),
+    });
+    const d = await resp.json();
+    if (!d.ok) throw new Error(d.error || 'No se pudo guardar');
+    cargar();
+  } catch (e) {
+    window.alert('No se pudo guardar la corrección: ' + e.message);
+  }
 }
 
 function descargarCSV() {

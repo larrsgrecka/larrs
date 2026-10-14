@@ -9,6 +9,7 @@
 // comprado, para que el jefe de local la ajuste, no un pedido automático.
 
 import { createAdminClient } from "@/utils/supabase/admin";
+import { unidadesCorregidas } from "@/utils/grecka-unidades";
 
 // Repuestos y Servicios quedan fuera: son hechos puntuales (una reparación, un
 // proyecto), no consumo que se repone. Meterlos arruinaría cualquier promedio.
@@ -166,7 +167,10 @@ export async function pedidoSugerido(opciones: {
     if (data.length < PAGINA) break;
   }
 
-  const unidadPorSku = await unidadesHabituales(supabase);
+  const [unidadPorSku, correcciones] = await Promise.all([
+    unidadesHabituales(supabase),
+    unidadesCorregidas().catch(() => ({}) as Awaited<ReturnType<typeof unidadesCorregidas>>),
+  ]);
 
   const tiendasAMostrar = tienda ? [tienda] : [...TIENDAS];
   const resultado: PedidoTienda[] = [];
@@ -226,7 +230,8 @@ export async function pedidoSugerido(opciones: {
       productos.push({
         sku,
         producto: reciente.descripcion,
-        unidad: unidadPorSku.get(sku) ?? unidadLinda(reciente.unidad),
+        // La corrección manual manda; después la deducción del historial.
+        unidad: correcciones[sku]?.unidad ?? unidadPorSku.get(sku) ?? unidadLinda(reciente.unidad),
         grupo: reciente.grupo,
         totalPeriodo: Math.round(total * 10) / 10,
         promedioSemanal: Math.round(promedio * 10) / 10,

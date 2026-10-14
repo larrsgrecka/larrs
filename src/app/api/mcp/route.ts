@@ -27,7 +27,7 @@ import {
 // decenas de segundos.
 export const maxDuration = 60;
 
-const TIENDAS = ["Costanera", "Dominicos", "Trapenses"] as const;
+const TIENDAS = ["Costanera", "Dominicos", "Trapenses", "Módulo Costanera"] as const;
 const tienda = z.enum(TIENDAS).optional().describe("Tienda; si se omite, todas");
 
 const responder = (datos: unknown) => ({

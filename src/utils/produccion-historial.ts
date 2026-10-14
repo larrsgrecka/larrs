@@ -4,7 +4,9 @@
 // desde la app. Reimplementa el mismo parseo de columnas que ya usan
 // produccion.html y produccion-recetas-consumidas.ts (misma fuente de datos).
 
-const TIENDAS = ["Costanera", "Dominicos", "Trapenses"] as const;
+import { TIENDAS_QUE_PRODUCEN } from "@/utils/tiendas";
+
+const TIENDAS = TIENDAS_QUE_PRODUCEN;
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
 export type ItemPesaje = { sabor: string; kg: number };

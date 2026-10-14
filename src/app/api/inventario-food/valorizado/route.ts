@@ -8,7 +8,9 @@ import { getStockActualPorClave } from "@/utils/inventario-food-stock";
 // cuando el Apps Script arranca en frío.
 export const maxDuration = 60;
 
-const TIENDAS = ["Costanera", "Dominicos", "Trapenses"];
+import { NOMBRES_TIENDAS } from "@/utils/tiendas";
+
+const TIENDAS = NOMBRES_TIENDAS;
 
 export async function GET() {
   const supabase = await createClient();

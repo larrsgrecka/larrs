@@ -8,6 +8,7 @@
 // y con otros nombres, así que esto es una sugerencia basada en el consumo real
 // comprado, para que el jefe de local la ajuste, no un pedido automático.
 
+import { TIENDAS_QUE_COMPRAN } from "@/utils/tiendas";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { unidadesCorregidas } from "@/utils/grecka-unidades";
 
@@ -15,7 +16,7 @@ import { unidadesCorregidas } from "@/utils/grecka-unidades";
 // proyecto), no consumo que se repone. Meterlos arruinaría cualquier promedio.
 const GRUPOS_DE_CONSUMO = ["Insumos", "Accesorios"];
 
-const TIENDAS = ["Costanera", "Dominicos", "Trapenses"] as const;
+const TIENDAS = TIENDAS_QUE_COMPRAN;
 
 type FilaCompra = {
   tienda: string; fecha: string; sku: string; descripcion: string;

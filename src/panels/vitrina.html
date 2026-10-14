@@ -74,7 +74,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
   <div class="header">
     <img class="logo-img" src="https://heladerialarrs.cl/cdn/shop/t/2/assets/logo-footer.png?v=41616879924709803011609269083" alt="Larrs">
     <div class="title">Vitrina por tienda</div>
-    <div class="subtitle">Configura los 24 sabores en exhibición — se actualiza aprox. cada 2 semanas</div>
+    <div class="subtitle" id="subtitulo-slots">Configura los 24 sabores en exhibición — se actualiza aprox. cada 2 semanas</div>
   </div>
 
   <div class="toolbar">
@@ -92,7 +92,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 
   <div class="card">
     <div class="hint"><span id="caja-hint">Caja al costado</span> · desliza de lado para ver toda la vitrina</div>
-    <div class="fila-label">Fila superior (slots 1–12) · Fila inferior (slots 13–24)</div>
+    <div class="fila-label" id="fila-label">Fila superior (slots 1–12) · Fila inferior (slots 13–24)</div>
     <div class="caso" id="caso"></div>
   </div>
 
@@ -109,7 +109,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 <div id="vitrina-print"></div>
 
 <script>
-const TIENDAS = ['Costanera', 'Dominicos', 'Trapenses'];
+const TIENDAS = ['Costanera', 'Dominicos', 'Trapenses', 'Módulo Costanera'];
+
+// Cuántos sabores entran en cada vitrina. El módulo del Mall Costanera tiene 16
+// y el resto 24: la grilla, el PDF y los textos se arman con este número, así
+// que agregar una vitrina de otro tamaño es una línea acá.
+const SLOTS_POR_TIENDA = { 'Módulo Costanera': 16 };
+const slotsDe = (t) => SLOTS_POR_TIENDA[t] || 24;
+const porFilaDe = (t) => slotsDe(t) / 2;
 // Lado de la caja según la vitrina física (ver PDF de referencia).
 const CAJA_LADO = { Dominicos: 'right', Trapenses: 'left', Costanera: 'left' };
 const tiendaFija = window._LARRS_TIENDA || null;
@@ -261,8 +268,9 @@ function imprimirVitrina() {
     </div>`;
   };
 
+  const porFila = porFilaDe(tienda);
   let cols = '';
-  for (let i = 1; i <= 12; i++) cols += `<div class="p-col">${ficha(i)}${ficha(i + 12)}</div>`;
+  for (let i = 1; i <= porFila; i++) cols += `<div class="p-col">${ficha(i)}${ficha(i + porFila)}</div>`;
   const caja = '<div class="p-caja"><span>CAJA</span></div>';
 
   const asignados = Object.values(vitrinaActual).filter(Boolean).length;
@@ -273,9 +281,9 @@ function imprimirVitrina() {
     <div class="p-head">
       <div>
         <div class="p-titulo">Vitrina · ${esc(tienda)}</div>
-        <div class="p-sub">Fila superior: slots 1 a 12 · Fila inferior: slots 13 a 24
+        <div class="p-sub">Fila superior: slots 1 a ${porFila} · Fila inferior: slots ${porFila + 1} a ${porFila * 2}
           · Caja ${lado === 'right' ? 'a la derecha' : 'a la izquierda'}
-          · ${asignados} de 24 slots con sabor${precioKg && !ocultarCostos
+          · ${asignados} de ${slotsDe(tienda)} slots con sabor${precioKg && !ocultarCostos
             ? ` · Margen calculado sobre el formato ${esc(precioKg.formato)}: $${precioKg.porKilo.toLocaleString('es-CL')}/kg`
             : ''}</div>
       </div>
@@ -291,12 +299,20 @@ function renderCaso() {
   const lado = CAJA_LADO[tienda] || 'left';
   document.getElementById('caja-hint').textContent = lado === 'right' ? 'Caja a la derecha' : 'Caja a la izquierda';
 
+  const porFila = porFilaDe(tienda);
   let cols = '';
-  for (let i = 1; i <= 12; i++) {
-    cols += `<div class="col">${slotHtml(i)}${slotHtml(i + 12)}</div>`;
+  for (let i = 1; i <= porFila; i++) {
+    cols += `<div class="col">${slotHtml(i)}${slotHtml(i + porFila)}</div>`;
   }
   const caja = '<div class="caja"><span>CAJA</span></div>';
   document.getElementById('caso').innerHTML = lado === 'right' ? cols + caja : caja + cols;
+
+  // Los textos también cambian con el tamaño: una vitrina de 16 que dice
+  // "slots 13–24" manda a buscar cubetas que no existen.
+  const fl = document.getElementById('fila-label');
+  if (fl) fl.textContent = `Fila superior (slots 1–${porFila}) · Fila inferior (slots ${porFila + 1}–${porFila * 2})`;
+  const sub = document.getElementById('subtitulo-slots');
+  if (sub) sub.textContent = `Configura los ${slotsDe(tienda)} sabores en exhibición — se actualiza aprox. cada 2 semanas`;
 }
 
 function initTiendaSelect() {

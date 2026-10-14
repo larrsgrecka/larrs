@@ -8,7 +8,9 @@ import { getStockMinimos, type ItemStockMinimo } from "@/utils/stock-minimos";
 import { getActividadTiendas } from "@/utils/actividad-tiendas";
 import { atrasosYAusencias, horasTrabajadas } from "@/utils/geovictoria";
 
-const TIENDAS = ["Costanera", "Dominicos", "Trapenses"] as const;
+import { NOMBRES_TIENDAS, produce } from "@/utils/tiendas";
+
+const TIENDAS = NOMBRES_TIENDAS;
 
 export type Alerta = {
   tienda: string;
@@ -158,23 +160,31 @@ export async function generarInformeSemanal(
     const variacion = prev.kg > 0 ? (act.kg - prev.kg) / prev.kg : null;
 
     // Producción: sin nada en la semana, o un salto que conviene mirar.
-    if (act.kg === 0 && prev.kg > 0) {
+    //
+    // Solo para las tiendas que producen. El Módulo Costanera se abastece desde
+    // la tienda Costanera, así que no tiene pesaje propio: avisar todas las
+    // semanas que "no registró producción" sería una alerta falsa fija, y una
+    // alerta que siempre está es una que nadie lee.
+    const estaProduce = produce(tienda);
+    if (estaProduce && act.kg === 0 && prev.kg > 0) {
       alertas.push({
         tienda, tipo: "produccion", gravedad: "alta",
         mensaje: enCurso
           ? `No registró producción en lo que va de la semana (el mismo tramo de la semana pasada fueron ${prev.kg.toFixed(0)} kg).`
           : `No registró producción en toda la semana (la anterior fueron ${prev.kg.toFixed(0)} kg).`,
       });
-    } else if (variacion !== null && variacion <= -0.3) {
+    } else if (estaProduce && variacion !== null && variacion <= -0.3) {
       alertas.push({ tienda, tipo: "produccion", gravedad: "alta", mensaje: `Produjo ${Math.abs(variacion * 100).toFixed(0)}% menos que ${referencia} (${act.kg.toFixed(0)} kg contra ${prev.kg.toFixed(0)} kg).` });
-    } else if (variacion !== null && variacion >= 0.5) {
+    } else if (estaProduce && variacion !== null && variacion >= 0.5) {
       alertas.push({ tienda, tipo: "produccion", gravedad: "media", mensaje: `Produjo ${(variacion * 100).toFixed(0)}% más que ${referencia} (${act.kg.toFixed(0)} kg contra ${prev.kg.toFixed(0)} kg): vale revisar que no sea una carga duplicada.` });
     }
 
     // Módulos sin registrar.
     const mod = (actividad.actividad as Record<string, Record<string, string | null>>)[tienda] || {};
     const erroresActividad = (actividad.errores ?? {}) as Record<string, string>;
-    const etiquetas: Record<string, string> = { mermas: "Mermas", inventario: "Inventario Food", pesaje: "Pesaje de producción", recepcion: "Recepción" };
+    const etiquetas: Record<string, string> = { mermas: "Mermas", inventario: "Inventario Food", recepcion: "Recepción" };
+    // El pesaje solo se le pide a quien produce.
+    if (estaProduce) etiquetas.pesaje = "Pesaje de producción";
     const sinRegistrar: { modulo: string; dias: number | null; sinDatos?: boolean }[] = [];
     for (const [clave, nombre] of Object.entries(etiquetas)) {
       // Si la consulta de ese módulo falló, no se sabe si registraron o no.

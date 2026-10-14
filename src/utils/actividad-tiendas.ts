@@ -5,7 +5,9 @@
 
 import { conRespaldo, antiguedadEnPalabras } from "@/utils/cache-persistente";
 
-const TIENDAS = ["Costanera", "Dominicos", "Trapenses"] as const;
+import { NOMBRES_TIENDAS } from "@/utils/tiendas";
+
+const TIENDAS = NOMBRES_TIENDAS;
 
 export type ActividadTienda = {
   mermas: string | null;

@@ -72,7 +72,11 @@ td { padding: 10px; border-top: 1px solid #f1f5f9; font-size: 13px; vertical-ali
 </div>
 
 <script>
-const ORDEN_TIENDAS = ['Costanera', 'Dominicos', 'Trapenses'];
+const ORDEN_TIENDAS = ['Costanera', 'Dominicos', 'Trapenses', 'Módulo Costanera'];
+
+// El Módulo Costanera se abastece desde la tienda Costanera: no tiene pesaje
+// propio, así que esa celda no se le reclama.
+const NO_PRODUCEN = ['Módulo Costanera'];
 const MODULOS = [
   { key: 'mermas', label: 'Mermas' },
   { key: 'inventario', label: 'Inventario Food' },
@@ -134,7 +138,12 @@ async function cargar() {
 
     tbody.innerHTML = ORDEN_TIENDAS.map((t, idx) => {
       const a = actividad[t] || {};
-      const celdas = MODULOS.map(m => `<td class="r">${celdaEstado(a[m.key], errores[m.key], respaldos[m.key])}</td>`).join('');
+      const celdas = MODULOS.map(m => {
+        if (m.key === 'pesaje' && NO_PRODUCEN.includes(t)) {
+          return '<td class="r"><span class="estado nunca" title="Se abastece desde otra tienda: no produce helado">no aplica</span></td>';
+        }
+        return `<td class="r">${celdaEstado(a[m.key], errores[m.key], respaldos[m.key])}</td>`;
+      }).join('');
       const piloto = idx === 0 ? '<span class="piloto">Piloto</span>' : '';
       return `<tr>
         <td class="tienda-cell">${esc(t)}${piloto}</td>

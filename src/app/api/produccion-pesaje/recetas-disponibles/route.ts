@@ -9,7 +9,9 @@ import { fetchAppsScriptJson, urlAppsScript } from "@/utils/apps-script";
 // header) — más lento que los otros catálogos, damos margen extra.
 export const maxDuration = 60;
 
-const TIENDAS = ["Costanera", "Dominicos", "Trapenses"];
+import { TIENDAS_QUE_PRODUCEN } from "@/utils/tiendas";
+
+const TIENDAS = TIENDAS_QUE_PRODUCEN;
 
 function recepcionConfig() {
   const url = process.env.RECEPCION_APPS_SCRIPT_URL;

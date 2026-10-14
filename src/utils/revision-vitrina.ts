@@ -12,6 +12,7 @@
 // "Limón" contra "Limon 40". Ningún parecido de strings resuelve eso; leer los
 // dos nombres y decidir si son lo mismo, sí.
 
+import { NOMBRES_TIENDAS, vitrinasDe } from "@/utils/tiendas";
 import Anthropic from "@anthropic-ai/sdk";
 import { fetchAppsScriptJson, urlAppsScript } from "@/utils/apps-script";
 import { getStockMinimos } from "@/utils/stock-minimos";
@@ -242,7 +243,7 @@ Reglas:
 
 // ─── historial ───
 
-const TIENDAS = ["Costanera", "Dominicos", "Trapenses"];
+const TIENDAS = NOMBRES_TIENDAS;
 
 export async function ultimasRevisiones(tienda?: string) {
   const tiendas = tienda ? [tienda] : TIENDAS;
@@ -252,7 +253,9 @@ export async function ultimasRevisiones(tienda?: string) {
   }[] = [];
 
   for (const t of tiendas) {
-    for (const tipo of ["helados", "pasteleria"] as TipoVitrina[]) {
+    // Solo las vitrinas que esa tienda tiene: el módulo no tiene pastelería, y
+    // listarla como "nunca revisada" sería una alerta que nunca se puede cerrar.
+    for (const tipo of vitrinasDe(t)) {
       const copia = await leerCopia<ResultadoRevision>(`revision-vitrina:${t}:${tipo}`);
       if (!copia) continue;
       out.push({
@@ -269,7 +272,7 @@ export async function ultimasRevisiones(tienda?: string) {
   }
 
   const sinRevisar = tiendas.flatMap((t) =>
-    (["helados", "pasteleria"] as TipoVitrina[])
+    vitrinasDe(t)
       .filter((tipo) => !out.some((r) => r.tienda === t && r.tipo === tipo))
       .map((tipo) => ({ tienda: t, tipo }))
   );

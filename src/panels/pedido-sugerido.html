@@ -45,6 +45,8 @@ tr.desmarcado td { opacity: .42; }
 .tag.sube { background: #f0fdf4; color: #15803d; }
 .tag.baja { background: #fef2f2; color: #b91c1c; }
 .dim { color: #94a3b8; font-size: 11px; }
+.marcar { border: 0; background: none; color: #cbd5e1; font-size: 10px; cursor: pointer; padding: 0 0 0 6px; text-decoration: underline; }
+.marcar:hover { color: #b91c1c; }
 .empty { padding: 30px; text-align: center; color: #94a3b8; font-size: 13px; }
 .last { font-size: 11px; color: #b0bac8; text-align: center; margin-top: 6px; }
 #impresion-hint { display: none; }
@@ -169,7 +171,11 @@ function render() {
       const cada = p.cadaCuantosDias ? `cada ~${p.cadaCuantosDias} d` : `${p.vecesPedido}× en el período`;
       return `<tr data-t="${esc(t.tienda)}" data-i="${i}">
         <td class="c no-print"><input type="checkbox" checked onchange="marcar(this)"></td>
-        <td><div class="prod">${esc(p.producto)}</div><div class="sku">${esc(p.sku)} · ${esc(p.grupo)}</div></td>
+        <td><div class="prod">${esc(p.producto)}</div>
+          <div class="sku">${esc(p.sku)} · ${esc(p.grupo)}
+            <button class="marcar no-print" title="Este producto es de la sala de producción: sacarlo de los pedidos de tienda"
+              onclick="marcarProduccion('${esc(p.sku)}','${esc(p.producto).replace(/'/g, "")}')">no es de tienda</button>
+          </div></td>
         <td class="r"><span class="cant">${p.sugerido}</span> <span class="dim">${esc(p.unidad)}</span></td>
         <td class="r dim">${p.promedioSemanal}/sem</td>
         <td>${p.toca ? '<span class="tag toca">toca pedir</span> ' : ''}<span class="dim">${cuando} · ${cada}</span></td>
@@ -208,6 +214,24 @@ function seleccionDe(tienda) {
   return [...document.querySelectorAll(`tr[data-t="${CSS.escape(tienda)}"]`)]
     .filter((tr) => tr.querySelector('input')?.checked)
     .map((tr) => t.productos[Number(tr.dataset.i)]);
+}
+
+// Grecka factura a veces a una tienda cosas que son de la sala de producción
+// —el detergente de la lavavajillas de aluminio, por ejemplo—, y el pedido se
+// las termina recomendando a la tienda. Esto las saca de una vez y para siempre.
+async function marcarProduccion(sku, producto) {
+  if (!window.confirm(`¿Sacar este producto de los pedidos de tienda?\n\n${producto}\n\nQueda como producto de la sala de producción. Se puede revertir.`)) return;
+  try {
+    const resp = await fetch('/api/grecka-unidades', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sku, soloProduccion: true }),
+    });
+    const d = await resp.json();
+    if (!d.ok) throw new Error(d.error || 'No se pudo guardar');
+    cargar();
+  } catch (e) {
+    window.alert('No se pudo marcar: ' + e.message);
+  }
 }
 
 function copiarWhatsApp() {

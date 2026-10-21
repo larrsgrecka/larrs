@@ -190,6 +190,10 @@ export async function pedidoSugerido(opciones: {
     const productos: ProductoSugerido[] = [];
 
     for (const [sku, compras] of porSku) {
+      // Productos que son de la sala de producción no se le piden a una tienda,
+      // aunque Grecka los haya facturado a su nombre alguna vez.
+      if (correcciones[sku]?.soloProduccion) continue;
+
       const total = compras.reduce((s, c) => s + c.cantidad, 0);
       if (total <= 0) continue;
 

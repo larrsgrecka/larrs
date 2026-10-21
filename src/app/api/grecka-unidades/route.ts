@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { getProfile } from "@/utils/auth";
-import { unidadesCorregidas, corregirUnidad, borrarCorreccion } from "@/utils/grecka-unidades";
+import { unidadesCorregidas, corregirUnidad, borrarCorreccion, marcarSoloProduccion } from "@/utils/grecka-unidades";
 
 async function soloAdmin() {
   const supabase = await createClient();
@@ -26,9 +26,22 @@ export async function POST(request: NextRequest) {
 
   const body = await request.json();
   const sku = String(body.sku || "").trim();
+  if (!sku) return NextResponse.json({ error: "Falta el código del producto" }, { status: 400 });
+
+  // Marcar un producto como de la sala de producción es su propia operación: no
+  // cambia la unidad, solo saca el producto de los pedidos de tienda.
+  if (body.soloProduccion !== undefined) {
+    const unidades = await marcarSoloProduccion(
+      sku,
+      !!body.soloProduccion,
+      auth.profile!.name || auth.user!.email || ""
+    );
+    return NextResponse.json({ ok: true, unidades });
+  }
+
   const unidad = String(body.unidad || "").trim();
-  if (!sku || !unidad) {
-    return NextResponse.json({ error: "Hacen falta el código y la unidad" }, { status: 400 });
+  if (!unidad) {
+    return NextResponse.json({ error: "Hace falta la unidad" }, { status: 400 });
   }
 
   const porCaja = Number(body.porCaja) || undefined;

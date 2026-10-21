@@ -15,9 +15,18 @@ const CLAVE = "grecka-unidades";
 
 export type UnidadCorregida = {
   /** Unidad en la que se pide: "Bolsa", "Caja", "Balde"… */
-  unidad: string;
+  unidad?: string;
   /** Cuántas unidades de ésas trae una caja, si aplica. */
   porCaja?: number;
+  /**
+   * El producto es de la sala de producción y no se le pide a las tiendas,
+   * aunque Grecka lo haya facturado a una.
+   *
+   * Pasa de verdad: el detergente F865 para lavavajillas de aluminio figura
+   * tres veces facturado a Trapenses y es de la sala de producción. Sin esto, el
+   * pedido sugerido se lo iba a recomendar a la tienda en algún momento.
+   */
+  soloProduccion?: boolean;
   corregidoPor?: string;
   corregidoEn?: string;
 };
@@ -46,9 +55,35 @@ export async function corregirUnidad(
   if (!sku || !unidad) throw new Error("Hacen falta el código y la unidad");
 
   mapa[sku.trim()] = {
+    // Se conserva lo ya corregido de ese producto (por ejemplo, que sea de
+    // producción) en vez de reemplazarlo entero.
+    ...(mapa[sku.trim()] ?? {}),
     unidad: unidad.charAt(0).toUpperCase() + unidad.slice(1).toLowerCase(),
     ...(datos.porCaja && datos.porCaja > 1 ? { porCaja: Math.round(datos.porCaja) } : {}),
     corregidoPor: datos.corregidoPor,
+    corregidoEn: new Date().toISOString(),
+  };
+
+  await guardarCopia(CLAVE, mapa);
+  cache = { mapa, ts: Date.now() };
+  return mapa;
+}
+
+/** Marca (o desmarca) un producto como de uso exclusivo de la sala de producción. */
+export async function marcarSoloProduccion(
+  sku: string,
+  soloProduccion: boolean,
+  corregidoPor?: string
+): Promise<Mapa> {
+  const previas = (await leerCopia<Mapa>(CLAVE))?.datos ?? {};
+  const mapa = { ...previas };
+  const clave = (sku || "").trim();
+  if (!clave) throw new Error("Falta el código del producto");
+
+  mapa[clave] = {
+    ...(mapa[clave] ?? {}),
+    soloProduccion,
+    corregidoPor,
     corregidoEn: new Date().toISOString(),
   };
 

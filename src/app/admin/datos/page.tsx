@@ -4,8 +4,23 @@ import { useState, useRef } from "react";
 
 export default function DatosPage() {
   const [status, setStatus] = useState<"idle" | "loading" | "ok" | "error">("idle");
-  const [result, setResult] = useState<{ total: number; porTienda: Record<string, number> } | null>(null);
+  const [result, setResult] = useState<{
+    total: number;
+    leidas: number;
+    formato: "facturas" | "pedidos";
+    periodo: { desde: string; hasta: string };
+    porTienda: Record<string, number>;
+    avisos?: {
+      pedidosAbiertos: number; sinFecha: number; repetidasEnElArchivo: number;
+      skusSinGrupo: string[]; destinosIgnorados: string[];
+      reemplazadas?: number; conservadas?: number; copiasRepetidas?: number;
+    };
+  } | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
+  // El nombre del archivo vive en el estado y no se lee del input al dibujar:
+  // leer la ref durante el render no vuelve a dibujar, así que el recuadro
+  // seguía diciendo "haz clic para seleccionar" con el archivo ya elegido.
+  const [nombreArchivo, setNombreArchivo] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -54,7 +69,10 @@ export default function DatosPage() {
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
           <h2 className="text-sm font-bold text-slate-700 mb-1">Archivo de ventas Grecka → Larrs</h2>
           <p className="text-xs text-gray-400 mb-5">
-            Sube el Excel exportado desde el sistema de Grecka. Los datos nuevos se agregan automáticamente — los existentes no se duplican.
+            Sube el reporte que exporta Grecka, en .xlsx o .csv. Sirven los dos:
+            el de facturas (trae grupo y marca) y el de pedidos (el que puedes
+            sacar tú). El de pedidos manda sobre el período que cubre: lo que
+            vuelve a traer reemplaza lo que había, y lo que no trae se conserva.
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -64,15 +82,18 @@ export default function DatosPage() {
             >
               <div className="text-3xl mb-2">📊</div>
               <p className="text-sm text-gray-500">
-                {inputRef.current?.files?.[0]?.name || "Haz clic para seleccionar el archivo .xlsx"}
+                {nombreArchivo || "Haz clic para seleccionar el archivo"}
               </p>
-              <p className="text-xs text-gray-300 mt-1">Solo archivos .xlsx</p>
+              <p className="text-xs text-gray-300 mt-1">Archivos .xlsx o .csv</p>
               <input
                 ref={inputRef}
                 type="file"
-                accept=".xlsx"
+                accept=".xlsx,.csv"
                 className="hidden"
-                onChange={() => setStatus("idle")}
+                onChange={(e) => {
+                  setStatus("idle");
+                  setNombreArchivo(e.target.files?.[0]?.name ?? "");
+                }}
               />
             </div>
 
@@ -87,8 +108,12 @@ export default function DatosPage() {
 
           {status === "ok" && result && (
             <div className="mt-4 rounded-xl bg-green-50 border border-green-200 p-4">
-              <p className="text-sm font-bold text-green-700 mb-2">
+              <p className="text-sm font-bold text-green-700">
                 ✓ {result.total.toLocaleString()} registros importados
+              </p>
+              <p className="text-xs text-green-600 mb-3">
+                Reporte de {result.formato === "pedidos" ? "pedidos" : "facturas"} ·{" "}
+                {result.periodo.desde} a {result.periodo.hasta} · {result.leidas.toLocaleString()} líneas leídas
               </p>
               <div className="space-y-1">
                 {Object.entries(result.porTienda).map(([tienda, count]) => (
@@ -98,6 +123,51 @@ export default function DatosPage() {
                   </div>
                 ))}
               </div>
+
+              {/* Lo que el archivo no pudo contar se dice acá. Una importación
+                  que calla lo que dejó afuera es la que después aparece como un
+                  número raro en la proyección, sin nada que lo explique. */}
+              {result.avisos && (
+                <ul className="mt-3 space-y-1 border-t border-green-200 pt-3 text-xs text-green-700">
+                  {result.avisos.reemplazadas ? (
+                    <li>
+                      Reemplazó {result.avisos.reemplazadas.toLocaleString()} líneas que ya
+                      estaban del mismo período
+                      {result.avisos.conservadas
+                        ? `, y conservó ${result.avisos.conservadas.toLocaleString()} que este reporte no trae (notas de crédito, repuestos).`
+                        : "."}
+                    </li>
+                  ) : null}
+                  {result.avisos.copiasRepetidas ? (
+                    <li>
+                      Eliminó {result.avisos.copiasRepetidas.toLocaleString()} copias que
+                      habían quedado repetidas de una carga anterior.
+                    </li>
+                  ) : null}
+                  {result.avisos.pedidosAbiertos > 0 && (
+                    <li>
+                      Dejó fuera {result.avisos.pedidosAbiertos} línea
+                      {result.avisos.pedidosAbiertos === 1 ? "" : "s"} de pedidos todavía no
+                      facturados (&quot;Abierto&quot;).
+                    </li>
+                  )}
+                  {result.avisos.sinFecha > 0 && (
+                    <li>{result.avisos.sinFecha} líneas sin fecha legible quedaron fuera.</li>
+                  )}
+                  {result.avisos.skusSinGrupo.length > 0 && (
+                    <li>
+                      {result.avisos.skusSinGrupo.length} producto
+                      {result.avisos.skusSinGrupo.length === 1 ? "" : "s"} sin grupo conocido
+                      (nunca se compraron antes): {result.avisos.skusSinGrupo.slice(0, 8).join(", ")}
+                      {result.avisos.skusSinGrupo.length > 8 ? "…" : ""}. No entran en la
+                      proyección hasta que se clasifiquen.
+                    </li>
+                  )}
+                  {result.avisos.destinosIgnorados.length > 0 && (
+                    <li>Destinos que no son tienda de Larrs: {result.avisos.destinosIgnorados.join(", ")}.</li>
+                  )}
+                </ul>
+              )}
             </div>
           )}
 
@@ -110,7 +180,7 @@ export default function DatosPage() {
 
         <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-xs text-amber-700 space-y-1">
           <p className="font-bold">¿Cuándo subir?</p>
-          <p>Cada vez que Grecka te envíe el reporte actualizado. Los datos se acumulan — puedes subir el mismo archivo varias veces sin duplicar.</p>
+          <p>Cada vez que tengas el reporte actualizado. Puedes subir el mismo archivo varias veces sin duplicar nada, y conviene pedirlo desde el 1 de enero para que una sola carga arregle todo el año.</p>
         </div>
       </div>
     </div>

@@ -361,11 +361,22 @@ export async function pedidoSugerido(opciones: {
         diasSinPedir: sinPedir,
         cadaCuantosDias: cadaCuantos,
         ritmoSegun,
-        // Sin intervalo confiable —menos de dos compras en todo el historial—
-        // el producto es raro, no semanal: marcarlo a las tres semanas, como se
-        // hacía, lo dejaba en rojo casi siempre. Dos meses es el umbral que no
-        // grita por algo que se compra una vez al año.
-        toca: sinPedir === null ? false : cadaCuantos !== null ? sinPedir >= cadaCuantos : sinPedir >= 60,
+        // Con intervalo conocido, toca cuando se pasó de su propio ritmo.
+        //
+        // Sin intervalo, el umbral es de dos meses y no de tres semanas: un
+        // producto con dos compras en un año es raro, no semanal, y marcarlo a
+        // las tres semanas lo dejaba en rojo casi siempre.
+        //
+        // Y con una sola compra en todo el historial no se marca nunca: una
+        // compra no es un patrón. La crema de leche de Trapenses son 36 litros
+        // pedidos una vez en julio, y salía "toca pedir" solo por llevar 88
+        // días —una alarma inventada sobre un dato suelto.
+        toca:
+          sinPedir === null || fechas.length < 2
+            ? false
+            : cadaCuantos !== null
+            ? sinPedir >= cadaCuantos
+            : sinPedir >= 60,
         tendenciaPct: tendencia,
         precioUnitario: Math.round(reciente.precio_unitario),
         costoEstimado: Math.round(reciente.precio_unitario * sugerido),

@@ -75,7 +75,7 @@ tr.desmarcado td { opacity: .42; }
   <div class="header">
     <img src="/larrs-logo.png" alt="Larrs" class="logo-img">
     <div class="title">Pedido sugerido a Grecka</div>
-    <div class="subtitle">Según lo que cada tienda consumió de verdad en las últimas semanas</div>
+    <div class="subtitle">Cuánto, según lo consumido en las últimas semanas · cada cuánto, según un año de pedidos</div>
   </div>
 
   <div class="note">
@@ -92,7 +92,7 @@ tr.desmarcado td { opacity: .42; }
 
   <div class="toolbar">
     <div><label>Tienda</label><br><select id="f-tienda" onchange="cargar()"><option value="">Todas</option><option>Costanera</option><option>Dominicos</option><option>Trapenses</option></select></div>
-    <div><label>Historial</label><br><select id="f-semanas" onchange="cargar()"><option value="4">4 semanas</option><option value="8" selected>8 semanas</option><option value="12">12 semanas</option><option value="26">6 meses</option></select></div>
+    <div><label>Promediar</label><br><select id="f-semanas" onchange="cargar()"><option value="4">4 semanas</option><option value="8" selected>8 semanas</option><option value="12">12 semanas</option><option value="26">6 meses</option></select></div>
     <div><label>Pedir para</label><br><select id="f-cobertura" onchange="cargar()"><option value="1" selected>1 semana</option><option value="2">2 semanas</option><option value="3">3 semanas</option><option value="4">4 semanas</option></select></div>
     <div class="acciones">
       <button class="btn" onclick="copiarWhatsApp()" id="btn-wa">📋 Copiar para WhatsApp</button>
@@ -156,7 +156,8 @@ function render() {
 
   document.getElementById('impresion-hint').textContent =
     `Pedido sugerido para ${d.semanasDeCobertura === 1 ? 'una semana' : d.semanasDeCobertura + ' semanas'}, ` +
-    `calculado sobre el consumo del ${d.periodo.desde} al ${d.periodo.hasta}.`;
+    `calculado sobre el consumo del ${d.periodo.desde} al ${d.periodo.hasta}` +
+    (d.factorEstacional && d.factorEstacional !== 1 ? `, ajustado por estación ×${d.factorEstacional}` : '') + '.';
 
   document.getElementById('contenido').innerHTML = d.tiendas.map((t) => {
     if (!t.productos.length) {
@@ -168,7 +169,10 @@ function render() {
         : p.tendenciaPct <= -15 ? `<span class="tag baja">${p.tendenciaPct}%</span>` : '';
       const cuando = p.diasSinPedir === null ? '—'
         : p.diasSinPedir === 0 ? 'hoy' : `hace ${p.diasSinPedir} d`;
-      const cada = p.cadaCuantosDias ? `cada ~${p.cadaCuantosDias} d` : `${p.vecesPedido}× en el período`;
+      const cada = p.cadaCuantosDias ? `cada ~${p.cadaCuantosDias} d` : `${p.vecesPedido}× en el año`;
+      // Un producto lento puede no haberse pedido en las semanas del promedio:
+      // su ritmo sale del año, y conviene que se vea de dónde salió.
+      const lento = p.ritmoSegun === 'historial' ? ' <span class="dim">(ritmo del año)</span>' : '';
       return `<tr data-t="${esc(t.tienda)}" data-i="${i}">
         <td class="c no-print"><input type="checkbox" checked onchange="marcar(this)"></td>
         <td><div class="prod">${esc(p.producto)}</div>
@@ -177,7 +181,7 @@ function render() {
               onclick="marcarProduccion('${esc(p.sku)}','${esc(p.producto).replace(/'/g, "")}')">no es de tienda</button>
           </div></td>
         <td class="r"><span class="cant">${p.sugerido}</span> <span class="dim">${esc(p.unidad)}</span></td>
-        <td class="r dim">${p.promedioSemanal}/sem</td>
+        <td class="r dim">${p.promedioSemanal}/sem${lento}</td>
         <td>${p.toca ? '<span class="tag toca">toca pedir</span> ' : ''}<span class="dim">${cuando} · ${cada}</span></td>
         <td class="r">${tend}</td>
         <td class="r dim">${$(p.costoEstimado)}</td>

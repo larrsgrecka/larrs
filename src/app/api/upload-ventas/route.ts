@@ -249,11 +249,17 @@ async function reemplazarVentana(
   // entero, así que se cruza por tienda, producto y cantidad dentro de 20 días.
   const TOLERANCIA_DIAS = 20;
   const dia = 24 * 60 * 60 * 1000;
-  const porClave = new Map<string, number[]>();
+  //
+  // El cruce es uno a uno: cada línea del archivo responde por una sola línea
+  // de la base. Preguntar "¿hay alguna parecida cerca?" no alcanza en lo que se
+  // compra todas las semanas —el café, los vasos—, porque tres compras viejas
+  // se dan por representadas con dos líneas nuevas y la tercera se borra sin
+  // que nada la reemplace.
+  const porClave = new Map<string, { t: number; usada: boolean }[]>();
   for (const f of filas) {
     const k = `${f.tienda}|${f.sku}|${f.cantidad}`;
     const t = new Date(f.fecha!).getTime();
-    porClave.set(k, [...(porClave.get(k) ?? []), t]);
+    porClave.set(k, [...(porClave.get(k) ?? []), { t, usada: false }]);
   }
 
   // Las copias que dejó la carga doble de junio se van igual, las traiga o no
@@ -263,15 +269,23 @@ async function reemplazarVentana(
   const yaVisto = new Set<string>();
   const aBorrar: number[] = [];
   let copiasRepetidas = 0;
-  for (const e of existentes) {
+  // En orden de fecha, para que el emparejamiento no dependa del orden en que
+  // Postgres devolvió las filas.
+  for (const e of [...existentes].sort((a, b) => a.fecha.localeCompare(b.fecha))) {
     const identidad = `${e.ndoc}|${e.fecha}|${e.sku}|${Number(e.cantidad)}`;
     if (yaVisto.has(identidad)) { aBorrar.push(e.id); copiasRepetidas++; continue; }
     yaVisto.add(identidad);
 
-    const fechas = porClave.get(`${e.tienda}|${e.sku}|${Number(e.cantidad)}`);
-    if (!fechas) continue;
+    const candidatas = porClave.get(`${e.tienda}|${e.sku}|${Number(e.cantidad)}`);
+    if (!candidatas) continue;
     const t = new Date(e.fecha).getTime();
-    if (fechas.some((f) => Math.abs(f - t) <= TOLERANCIA_DIAS * dia)) aBorrar.push(e.id);
+    // De las que siguen libres se toma la de fecha más cercana, y queda tomada.
+    let elegida: { t: number; usada: boolean } | null = null;
+    for (const c of candidatas) {
+      if (c.usada || Math.abs(c.t - t) > TOLERANCIA_DIAS * dia) continue;
+      if (!elegida || Math.abs(c.t - t) < Math.abs(elegida.t - t)) elegida = c;
+    }
+    if (elegida) { elegida.usada = true; aBorrar.push(e.id); }
   }
 
   for (let i = 0; i < aBorrar.length; i += LOTE) {

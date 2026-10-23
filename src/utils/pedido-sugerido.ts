@@ -11,6 +11,7 @@
 import { TIENDAS_QUE_COMPRAN } from "@/utils/tiendas";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { unidadesCorregidas } from "@/utils/grecka-unidades";
+import { estacionalidadDe } from "@/utils/proyeccion-insumos";
 
 // Repuestos y Servicios quedan fuera: son hechos puntuales (una reparación, un
 // proyecto), no consumo que se repone. Meterlos arruinaría cualquier promedio.
@@ -38,14 +39,19 @@ export type ProductoSugerido = {
   vecesPedido: number;
   ultimaCompra: string | null;
   diasSinPedir: number | null;
-  /** Cada cuántos días suele pedirse, para saber si ya toca. */
+  /** Cada cuántos días suele pedirse, para saber si ya toca.
+   *  Sale de todo el historial, no de la ventana del cálculo. */
   cadaCuantosDias: number | null;
+  /** De dónde salió el ritmo: de las últimas semanas o del historial largo. */
+  ritmoSegun: "ventana" | "historial";
   /** true cuando pasó más tiempo del habitual desde el último pedido. */
   toca: boolean;
   /** Variación entre la primera y la segunda mitad del período, en %. */
   tendenciaPct: number | null;
   precioUnitario: number;
   costoEstimado: number;
+  /** Ajuste estacional aplicado al sugerido (1 = ninguno). */
+  factorEstacional: number;
 };
 
 export type PedidoTienda = {
@@ -135,15 +141,95 @@ async function unidadesHabituales(supabase: ClienteSupabase): Promise<Map<string
   return mapa;
 }
 
+// El índice estacional necesita dos años de historia, bastante más de lo que
+// usa el pedido. Se piden dos columnas de toda la tabla y se guarda un día: la
+// estación de un mes no cambia de una semana a otra.
+const ESTACIONAL_TTL_MS = 24 * 60 * 60 * 1000;
+let estacionalCache: { indices: { mes: number; indice: number }[]; ts: number } | null = null;
+
+async function indiceEstacional(supabase: ReturnType<typeof createAdminClient>) {
+  if (estacionalCache && Date.now() - estacionalCache.ts < ESTACIONAL_TTL_MS) return estacionalCache.indices;
+
+  const compras: { fecha: string; neto: number }[] = [];
+  const PAGINA = 1000;
+  for (let inicio = 0; ; inicio += PAGINA) {
+    const { data, error } = await supabase
+      .from("ventas_grecka")
+      .select("fecha, neto")
+      .in("grupo", GRUPOS_DE_CONSUMO)
+      .in("tienda", [...TIENDAS])
+      .order("fecha", { ascending: true })
+      .range(inicio, inicio + PAGINA - 1);
+    if (error) throw new Error(`No se pudo leer la estacionalidad: ${error.message}`);
+    if (!data?.length) break;
+    compras.push(...(data as { fecha: string; neto: number }[]));
+    if (data.length < PAGINA) break;
+  }
+
+  const indices = estacionalidadDe(compras as Parameters<typeof estacionalidadDe>[0]);
+  estacionalCache = { indices, ts: Date.now() };
+  return indices;
+}
+
+/** Cuánto más (o menos) se consume en las semanas que el pedido va a cubrir,
+ *  comparado con las semanas que se usaron para medir el ritmo.
+ *
+ *  Sin esto el pedido de fin de noviembre mira octubre y noviembre —1,09 y
+ *  1,01— para abastecer diciembre, que es 1,36: un 30% corto en el mes de más
+ *  venta del año. El resto del año el ajuste es de unos pocos puntos y no
+ *  molesta.
+ */
+function factorEntre(
+  indices: { mes: number; indice: number }[] | null,
+  hoy: Date,
+  fin: Date,
+  semanasDeVentana: number
+) {
+  if (!indices?.length) return 1;
+  const porMes = new Map(indices.map((i) => [i.mes, i.indice]));
+  const promedioEntre = (desde: Date, hasta: Date) => {
+    // Se promedia día por día: así una cobertura que cruza de mes pondera cada
+    // mes por los días que le tocan, en vez de saltar de golpe.
+    let suma = 0, n = 0;
+    for (let t = desde.getTime(); t <= hasta.getTime(); t += 86400000) {
+      suma += porMes.get(new Date(t).getMonth() + 1) ?? 1;
+      n++;
+    }
+    return n ? suma / n : 1;
+  };
+  const inicioVentana = new Date(hoy.getTime() - semanasDeVentana * 7 * 86400000);
+  const base = promedioEntre(inicioVentana, hoy);
+  if (base <= 0) return 1;
+  const factor = promedioEntre(hoy, fin) / base;
+  // Se acota: el índice de un mes con pocos años de muestra no puede duplicar
+  // un pedido ni dejarlo en la mitad.
+  return Math.round(Math.min(Math.max(factor, 0.75), 1.5) * 100) / 100;
+}
+
 export async function pedidoSugerido(opciones: {
   semanas?: number;
   semanasDeCobertura?: number;
+  semanasHistorial?: number;
   tienda?: string;
   hoy?: Date;
 } = {}) {
-  const { semanas = 8, semanasDeCobertura = 1, tienda, hoy = new Date() } = opciones;
+  const {
+    semanas = 8,
+    semanasDeCobertura = 1,
+    // Cada cuánto se pide un producto no se puede medir en la ventana del
+    // cálculo. Medido sobre las compras reales, casi la mitad de los productos
+    // de cada tienda se piden cada más de cuatro semanas —el jabón de Costanera
+    // cada 92 días— y hacen falta tres compras para tener un intervalo: en ocho
+    // semanas eso es imposible, así que todos esos caían en el "si lleva 21
+    // días, toca" y aparecían atrasados cada tres semanas sin estarlo.
+    semanasHistorial = 52,
+    tienda,
+    hoy = new Date(),
+  } = opciones;
 
-  const desde = new Date(hoy.getTime() - semanas * 7 * 86400000).toISOString().slice(0, 10);
+  const ventana = Math.min(semanas, semanasHistorial);
+  const desde = new Date(hoy.getTime() - semanasHistorial * 7 * 86400000).toISOString().slice(0, 10);
+  const desdeVentana = new Date(hoy.getTime() - ventana * 7 * 86400000).toISOString().slice(0, 10);
   const hasta = hoy.toISOString().slice(0, 10);
 
   const supabase = createAdminClient();
@@ -168,10 +254,16 @@ export async function pedidoSugerido(opciones: {
     if (data.length < PAGINA) break;
   }
 
-  const [unidadPorSku, correcciones] = await Promise.all([
+  const [unidadPorSku, correcciones, estacional] = await Promise.all([
     unidadesHabituales(supabase),
     unidadesCorregidas().catch(() => ({}) as Awaited<ReturnType<typeof unidadesCorregidas>>),
+    indiceEstacional(supabase).catch(() => null),
   ]);
+
+  // El pedido de esta semana abastece las próximas, así que lo que importa no
+  // es la estación del mes en curso sino la de las semanas que va a cubrir.
+  const finCobertura = new Date(hoy.getTime() + semanasDeCobertura * 7 * 86400000);
+  const factorEstacional = factorEntre(estacional, hoy, finCobertura, ventana);
 
   const tiendasAMostrar = tienda ? [tienda] : [...TIENDAS];
   const resultado: PedidoTienda[] = [];
@@ -179,6 +271,7 @@ export async function pedidoSugerido(opciones: {
   for (const t of tiendasAMostrar) {
     // Producción compra para todos y no se repone por local: nunca entra acá.
     const suyas = filas.filter((f) => f.tienda === t && f.cantidad > 0);
+    const enVentana = (f: FilaCompra) => f.fecha >= desdeVentana;
     const porSku = new Map<string, FilaCompra[]>();
     for (const f of suyas) {
       const clave = f.sku || f.descripcion;
@@ -186,7 +279,7 @@ export async function pedidoSugerido(opciones: {
       porSku.get(clave)!.push(f);
     }
 
-    const mitad = new Date(hoy.getTime() - (semanas / 2) * 7 * 86400000).toISOString().slice(0, 10);
+    const mitad = new Date(hoy.getTime() - (ventana / 2) * 7 * 86400000).toISOString().slice(0, 10);
     const productos: ProductoSugerido[] = [];
 
     for (const [sku, compras] of porSku) {
@@ -194,12 +287,23 @@ export async function pedidoSugerido(opciones: {
       // aunque Grecka los haya facturado a su nombre alguna vez.
       if (correcciones[sku]?.soloProduccion) continue;
 
-      const total = compras.reduce((s, c) => s + c.cantidad, 0);
-      if (total <= 0) continue;
-
       const fechas = [...new Set(compras.map((c) => c.fecha))].sort();
       const ultima = fechas[fechas.length - 1] ?? null;
       const reciente = compras[compras.length - 1];
+
+      // Lo comprado en la ventana da el ritmo; el historial largo da el
+      // intervalo y sirve de respaldo para los productos lentos, que pueden no
+      // haberse pedido ni una vez en las últimas ocho semanas y aun así tocar.
+      const deVentana = compras.filter(enVentana);
+      const totalVentana = deVentana.reduce((s, c) => s + c.cantidad, 0);
+      const totalHistorial = compras.reduce((s, c) => s + c.cantidad, 0);
+      if (totalHistorial <= 0) continue;
+
+      const ritmoSegun: "ventana" | "historial" = totalVentana > 0 ? "ventana" : "historial";
+      const total = ritmoSegun === "ventana" ? totalVentana : totalHistorial;
+      const promedio = ritmoSegun === "ventana"
+        ? totalVentana / ventana
+        : totalHistorial / semanasHistorial;
 
       // El intervalo típico sale de los días entre pedidos, no de dividir el
       // período: un producto que se pidió tres veces seguidas y nunca más no
@@ -213,13 +317,24 @@ export async function pedidoSugerido(opciones: {
       if (fechas.length >= 3) {
         const huecos = fechas.slice(1).map((f, i) => dias(fechas[i], f));
         cadaCuantos = Math.round(huecos.reduce((s, h) => s + h, 0) / huecos.length);
+      } else if (fechas.length === 2) {
+        // Con un año de historial, dos compras separadas por meses sí dicen
+        // algo: lo que no decía nada era ver dos semanas seguidas dentro de una
+        // ventana de ocho. Por eso se acepta el hueco único solo si es largo.
+        const hueco = dias(fechas[0], fechas[1]);
+        if (hueco >= 21) cadaCuantos = hueco;
       }
 
       const sinPedir = ultima ? dias(ultima, hasta) : null;
-      const promedio = total / semanas;
 
-      const primeraMitad = compras.filter((c) => c.fecha < mitad).reduce((s, c) => s + c.cantidad, 0);
-      const segundaMitad = total - primeraMitad;
+      // Un producto que dejó de pedirse hace mucho no es parte del pedido de
+      // esta semana: sin esto, algo comprado dos veces en enero seguiría
+      // apareciendo todo el año solo porque el historial ahora es largo.
+      const limiteActivo = cadaCuantos !== null ? Math.max(cadaCuantos * 2, 60) : 120;
+      if (sinPedir !== null && sinPedir > limiteActivo) continue;
+
+      const primeraMitad = deVentana.filter((c) => c.fecha < mitad).reduce((s, c) => s + c.cantidad, 0);
+      const segundaMitad = totalVentana - primeraMitad;
       // Sobre una base de una o dos unidades cualquier variación da un número
       // enorme —salía "+2000%" por pasar de 1 a 21 bolsas de paletas— y eso no
       // es una tendencia, es ruido. Sin base suficiente, mejor no decir nada.
@@ -229,7 +344,7 @@ export async function pedidoSugerido(opciones: {
 
       // Se redondea hacia arriba: quedarse corto en el local es peor que traer
       // una unidad de más, y estos productos no se venden fraccionados.
-      const sugerido = Math.ceil(promedio * semanasDeCobertura);
+      const sugerido = Math.ceil(promedio * semanasDeCobertura * factorEstacional);
       if (sugerido <= 0) continue;
 
       productos.push({
@@ -245,12 +360,16 @@ export async function pedidoSugerido(opciones: {
         ultimaCompra: ultima,
         diasSinPedir: sinPedir,
         cadaCuantosDias: cadaCuantos,
-        // Sin intervalo confiable, "toca" solo si lleva tres semanas sin pedirse:
-        // más vale no marcar nada que marcar todo.
-        toca: sinPedir === null ? false : cadaCuantos !== null ? sinPedir >= cadaCuantos : sinPedir >= 21,
+        ritmoSegun,
+        // Sin intervalo confiable —menos de dos compras en todo el historial—
+        // el producto es raro, no semanal: marcarlo a las tres semanas, como se
+        // hacía, lo dejaba en rojo casi siempre. Dos meses es el umbral que no
+        // grita por algo que se compra una vez al año.
+        toca: sinPedir === null ? false : cadaCuantos !== null ? sinPedir >= cadaCuantos : sinPedir >= 60,
         tendenciaPct: tendencia,
         precioUnitario: Math.round(reciente.precio_unitario),
         costoEstimado: Math.round(reciente.precio_unitario * sugerido),
+        factorEstacional,
       });
     }
 
@@ -276,8 +395,9 @@ export async function pedidoSugerido(opciones: {
   const diasDesdeUltimoDato = ultimaRegistrada ? dias(ultimaRegistrada, hasta) : null;
 
   return {
-    periodo: { desde, hasta, semanas },
+    periodo: { desde: desdeVentana, hasta, semanas: ventana, desdeHistorial: desde, semanasHistorial },
     semanasDeCobertura,
+    factorEstacional,
     datos: {
       ultimaCompraRegistrada: ultimaRegistrada,
       diasDesdeUltimoDato,
@@ -285,8 +405,13 @@ export async function pedidoSugerido(opciones: {
     },
     tiendas: resultado,
     nota:
-      `Sugerencia calculada sobre lo que cada tienda le compró a Grecka en las últimas ${semanas} semanas ` +
-      `(grupos ${GRUPOS_DE_CONSUMO.join(" y ")}; repuestos y servicios quedan fuera por ser puntuales). ` +
+      `Cuánto pedir sale de lo que cada tienda le compró a Grecka en las últimas ${ventana} semanas; ` +
+      `cada cuánto se pide, de ${semanasHistorial} semanas de historial, porque casi la mitad de los productos ` +
+      `se piden cada más de un mes y en ocho semanas no alcanzan a mostrar su ritmo. ` +
+      `(Grupos ${GRUPOS_DE_CONSUMO.join(" y ")}; repuestos y servicios quedan fuera por ser puntuales.) ` +
+      (factorEstacional !== 1
+        ? `Las cantidades van ajustadas ${factorEstacional > 1 ? "hacia arriba" : "hacia abajo"} por estación (×${factorEstacional}). `
+        : "") +
       "No descuenta stock existente en la tienda, así que hay que revisarla contra lo que haya en bodega antes de enviarla." +
       (diasDesdeUltimoDato !== null && diasDesdeUltimoDato > 10
         ? ` ATENCIÓN: la última compra registrada es del ${ultimaRegistrada} (hace ${diasDesdeUltimoDato} días): falta subir el archivo de Grecka más reciente, así que varios productos van a figurar atrasados sin estarlo.`

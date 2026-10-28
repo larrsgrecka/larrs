@@ -244,7 +244,7 @@ async function loadValorizado() {
   const card = document.getElementById('valorizado-card');
   try {
     const resp = await fetch('/api/inventario-food/valorizado');
-    const data = await resp.json();
+    const data = await leerJson(resp);
     if (!data.ok) throw new Error(data.error || 'Error al cargar valorizado');
     const tiendas = data.tiendas || {};
     let total = 0, sinPrecioTotal = 0;
@@ -269,7 +269,7 @@ async function loadRecetasStock() {
   const card = document.getElementById('recetas-stock-card');
   try {
     const resp = await fetch('/api/produccion-pesaje/recetas-disponibles?tienda=Todas');
-    const data = await resp.json();
+    const data = await leerJson(resp);
     if (!data.ok) throw new Error(data.error || 'Error al cargar recetas disponibles');
     const items = data.items || [];
     if (!items.length) { card.style.display = 'none'; return; }
@@ -371,7 +371,7 @@ async function loadCatalogo() {
   const sel = document.getElementById('f-categoria');
   try {
     const resp = await fetch('/api/inventario-food/catalogo');
-    const data = await resp.json();
+    const data = await leerJson(resp);
     if (!data.ok) throw new Error(data.error || 'Error al cargar catálogo');
     catalogo = data.categorias || [];
   } catch (e) {
@@ -425,6 +425,28 @@ function onCategoriaChange() {
       : '';
     return encabezado + cat.productos.map(p => filaProducto(cat, p)).join('');
   }).join('');
+}
+
+// Leer la respuesta sin suponer que es JSON.
+//
+// resp.json() a secas se cae con "The string did not match the expected
+// pattern" —el mensaje de Safari— cada vez que vuelve algo que no es JSON: la
+// página de error de la plataforma cuando la función se pasa de tiempo, o el
+// HTML del login cuando se cerró la sesión. Ese mensaje no dice qué pasó ni,
+// peor en una pantalla de conteo, si el registro alcanzó a guardarse.
+async function leerJson(resp) {
+  const texto = await resp.text();
+  try {
+    return JSON.parse(texto);
+  } catch {
+    if (resp.status === 401) throw new Error('Se cerró la sesión. Vuelve a entrar y repite el conteo');
+    if (resp.status === 504 || resp.status === 502 || /timed out/i.test(texto)) {
+      throw new Error('El servicio de Google tardó demasiado y la operación se cortó. ' +
+        'Revisa en "Stock actual" si el conteo alcanzó a guardarse ANTES de volver a ingresarlo');
+    }
+    throw new Error(`El servidor respondió algo inesperado (HTTP ${resp.status}). ` +
+      'Revisa en "Stock actual" si alcanzó a guardarse antes de repetir');
+  }
 }
 
 async function submitConteo() {
@@ -512,7 +534,7 @@ async function submitConteo() {
           nombre_operador: nombreOperador || undefined,
         }),
       });
-      const data = await resp.json();
+      const data = await leerJson(resp);
       // Si falla en la mitad hay que decir qué alcanzó a guardarse: lo ya
       // guardado no se pierde y hay que saber qué queda por recontar.
       if (!data.ok) throw new Error(data.error || 'Error al registrar');
@@ -544,7 +566,7 @@ async function loadStock() {
   try {
     const qs = (!tiendaFija && tiendaActiva !== 'Todas') ? `?tienda=${encodeURIComponent(tiendaActiva)}` : '';
     const resp = await fetch('/api/inventario-food' + qs);
-    const data = await resp.json();
+    const data = await leerJson(resp);
     if (!data.ok) throw new Error(data.error || 'Error al cargar stock');
     stockItems = data.items || [];
     editingId = null;
@@ -641,7 +663,7 @@ async function guardarEdicionStock(id) {
         observaciones: it.observaciones || '',
       }),
     });
-    const data = await resp.json();
+    const data = await leerJson(resp);
     if (!data.ok) throw new Error(data.error || 'Error al guardar');
     loadStock();
   } catch (e) {
@@ -657,7 +679,7 @@ async function eliminarStock(id) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id }),
     });
-    const data = await resp.json();
+    const data = await leerJson(resp);
     if (!data.ok) throw new Error(data.error || 'Error al eliminar');
     loadStock();
   } catch (e) {

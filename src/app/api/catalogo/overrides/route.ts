@@ -80,7 +80,11 @@ export async function POST(request: NextRequest) {
       const f = faltantes[0];
       const pista = f.sugerencia ? ` ¿Quisiste decir "${f.sugerencia}"?` : "";
       return NextResponse.json(
-        { error: `"${f.sabor}" no existe como columna en la planilla de producción, así que no se podría pesar.${pista}` },
+        {
+          error:
+            `"${f.sabor}" no existe como columna en la planilla de producción, así que no se podría pesar.${pista}` +
+            ` Si acabas de crear la columna, revisa que el encabezado tenga el "#;" y el código como los demás sabores.`,
+        },
         { status: 400 }
       );
     }

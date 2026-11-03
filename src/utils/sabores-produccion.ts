@@ -36,6 +36,14 @@ function nombreSabor(header: string): string {
   return header.slice(0, Math.min(cutBracket, cutHash)).trim();
 }
 
+// La planilla usa columnas separadoras ("---", "----") para agrupar visualmente
+// los sabores, y traen "#;" igual que los de verdad. Sin esto aparecen como
+// sabores en Vitrina, Pesaje y el catalogo: nombres que nadie puede pesar ni
+// reconocer.
+function esSeparador(nombre: string): boolean {
+  return !/[a-z0-9]/i.test(nombre);
+}
+
 let cache: { sabores: string[]; ts: number } | null = null;
 const CACHE_TTL_MS = 30 * 60 * 1000;
 // Normalmente hay ~166 sabores — si el fetch trae bastante menos, no fue el
@@ -44,8 +52,8 @@ const CACHE_TTL_MS = 30 * 60 * 1000;
 // fuera la lista completa (rompería Vitrina/Pesaje/Inventario Food a la vez).
 const MIN_SABORES_ESPERADOS = 50;
 
-async function getSaboresBase(): Promise<string[]> {
-  if (cache && Date.now() - cache.ts < CACHE_TTL_MS) return cache.sabores;
+async function getSaboresBase(forzarRelectura = false): Promise<string[]> {
+  if (!forzarRelectura && cache && Date.now() - cache.ts < CACHE_TTL_MS) return cache.sabores;
 
   const url = process.env.PRODUCCION_APPS_SCRIPT_URL;
   const token = process.env.PRODUCCION_APPS_SCRIPT_TOKEN;
@@ -58,6 +66,7 @@ async function getSaboresBase(): Promise<string[]> {
   const sabores = headers
     .filter((h) => h.includes("#;"))
     .map(nombreSabor)
+    .filter((n) => !esSeparador(n))
     .sort((a, b) => a.localeCompare(b));
 
   if (sabores.length < MIN_SABORES_ESPERADOS) {
@@ -76,8 +85,8 @@ async function getSaboresBase(): Promise<string[]> {
 // Solo los sabores que EXISTEN como columna en la planilla, sin los overrides
 // que un admin haya agregado a mano: son los únicos nombres en los que el Apps
 // Script puede escribir un pesaje (busca la columna por nombre exacto).
-export async function getSaboresEnPlanilla(): Promise<string[]> {
-  return getSaboresBase();
+export async function getSaboresEnPlanilla(forzarRelectura = false): Promise<string[]> {
+  return getSaboresBase(forzarRelectura);
 }
 
 // Para comparar nombres tipeados a mano: ignora mayúsculas, tildes, espacios y
@@ -123,15 +132,7 @@ export function sugerirSabor(nombre: string, enPlanilla: string[]): string | nul
   return mejor && mejorDist <= tolerancia ? mejor : null;
 }
 
-// Traduce los nombres que llegan del panel (vitrina, overrides, texto viejo) al
-// nombre exacto de la columna de la planilla. Lo que no tiene columna no se
-// puede guardar: se devuelve aparte para avisarlo, en vez de dejar que el Apps
-// Script rechace el pesaje completo por un solo nombre mal escrito.
-export async function resolverSaboresEnPlanilla(nombres: string[]): Promise<{
-  canonico: Record<string, string>;
-  faltantes: { sabor: string; sugerencia: string | null }[];
-}> {
-  const enPlanilla = await getSaboresEnPlanilla();
+function resolverContra(enPlanilla: string[], nombres: string[]) {
   const exactos = new Set(enPlanilla);
   const porNorm = new Map(enPlanilla.map((n) => [normalizarSabor(n), n]));
 
@@ -143,6 +144,30 @@ export async function resolverSaboresEnPlanilla(nombres: string[]): Promise<{
     else faltantes.push({ sabor: nombre, sugerencia: sugerirSabor(nombre, enPlanilla) });
   }
   return { canonico, faltantes };
+}
+
+// Traduce los nombres que llegan del panel (vitrina, overrides, texto viejo) al
+// nombre exacto de la columna de la planilla. Lo que no tiene columna no se
+// puede guardar: se devuelve aparte para avisarlo, en vez de dejar que el Apps
+// Script rechace el pesaje completo por un solo nombre mal escrito.
+export async function resolverSaboresEnPlanilla(nombres: string[]): Promise<{
+  canonico: Record<string, string>;
+  faltantes: { sabor: string; sugerencia: string | null }[];
+}> {
+  const tsAntes = cache?.ts ?? 0;
+  const resultado = resolverContra(await getSaboresEnPlanilla(), nombres);
+  if (!resultado.faltantes.length) return resultado;
+
+  // Acabar de crear la columna en la planilla y que el panel diga "no existe"
+  // durante media hora es peor que releer: el cache de 30 min era justo lo que
+  // pasaba con "Chocolate suizo". Antes de negar un sabor se relee la planilla
+  // una vez — solo si lo anterior salio del cache, para no pagar dos veces los
+  // ~7s del CSV.
+  if (cache?.ts !== tsAntes) return resultado;
+  console.log(
+    `[sabores-produccion] "${resultado.faltantes.map((f) => f.sabor).join('", "')}" no estaba en el cache; releyendo la planilla`
+  );
+  return resolverContra(await getSaboresEnPlanilla(true), nombres);
 }
 
 // Los admins pueden agregar/excluir sabores puntuales sin tocar código vía

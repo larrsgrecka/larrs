@@ -4,8 +4,12 @@ import { getProfile } from "@/utils/auth";
 import { resolverSaboresEnPlanilla } from "@/utils/sabores-produccion";
 import { fetchAppsScriptJson, urlAppsScript } from "@/utils/apps-script";
 
-// Validar un sabor implica leer el CSV de producción, que puede tardar.
-export const maxDuration = 30;
+// Agregar un sabor hace dos viajes a Google seguidos: primero lee la planilla
+// para comprobar que la columna existe y después escribe el override. Los dos
+// presupuestos (20 s + 30 s, repartidos más abajo) tienen que caber acá con
+// margen para responder, o la función muere sin poder explicar nada y el panel
+// recibe el HTML de error de la plataforma en vez de un mensaje.
+export const maxDuration = 60;
 
 function appsScriptConfig() {
   const url = process.env.CATALOGO_APPS_SCRIPT_URL;
@@ -75,7 +79,10 @@ export async function POST(request: NextRequest) {
   // guardar, y de paso hacía fallar el pesaje completo (caso real: "Banana
   // split vet. Striacciatella", con el nombre mal escrito).
   if (body.catalogo === "sabores" && body.tipo === "incluir") {
-    const { canonico, faltantes } = await resolverSaboresEnPlanilla([String(body.nombre)]);
+    const { canonico, faltantes } = await resolverSaboresEnPlanilla(
+      [String(body.nombre)],
+      { presupuestoMs: 20_000 }
+    );
     if (faltantes.length) {
       const f = faltantes[0];
       const pista = f.sugerencia ? ` ¿Quisiste decir "${f.sugerencia}"?` : "";
@@ -108,6 +115,7 @@ export async function POST(request: NextRequest) {
     servicio: "Catálogo",
     method: "POST",
     body: JSON.stringify(payload),
+    presupuestoMs: 30_000,
   });
   if (!data.ok) {
     return NextResponse.json({ error: data.error || "Error en Apps Script" }, { status: 502 });

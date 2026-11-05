@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { getProfile } from "@/utils/auth";
 import { resolverSaboresEnPlanilla } from "@/utils/sabores-produccion";
+import { invalidarPlanilla } from "@/utils/produccion-planilla";
 import { fetchAppsScriptJson, urlAppsScript } from "@/utils/apps-script";
 
 // El POST resuelve los nombres contra el CSV de producción antes de escribir
@@ -71,8 +72,14 @@ export async function POST(request: NextRequest) {
   // columna en la planilla, así que acá se traducen: los que difieren solo en
   // mayúsculas/tildes se corrigen solos y los que no existen se dejan fuera con
   // aviso, para no perder el resto del pesaje.
+  //
+  // Los 15 s de acá más los 35 del POST caben en los 60 que da la plataforma.
+  // Sin repartir el tiempo, leer y escribir con el presupuesto completo cada
+  // uno mataba la función antes de que pudiera explicar nada — el error "The
+  // string did not match the expected pattern" que vio Daniela.
   const { canonico, faltantes } = await resolverSaboresEnPlanilla(
-    validItems.map((it) => it.sabor)
+    validItems.map((it) => it.sabor),
+    { presupuestoMs: 15_000 }
   );
   const itemsEnviables = validItems
     .filter((it) => canonico[it.sabor])
@@ -101,10 +108,16 @@ export async function POST(request: NextRequest) {
     servicio: "Pesaje de producción",
     method: "POST",
     body: JSON.stringify(payload),
+    presupuestoMs: 35_000,
   });
   if (!data.ok) {
     return NextResponse.json({ error: data.error || "Error en Apps Script" }, { status: 502 });
   }
+
+  // La planilla acaba de cambiar: lo que haya guardado en memoria ya no sirve.
+  // Sin esto, quien pesa y mira el historial no ve su propio pesaje hasta que
+  // venza la copia, y lo natural es creer que no se guardó y pesar de nuevo.
+  invalidarPlanilla();
 
   return NextResponse.json({ ...data, omitidos: faltantes });
 }

@@ -17,9 +17,9 @@
 // mismos criterios de fila válida.
 
 import { matchCostos, type RecetaCosto } from "./recetario-costos";
+import { leerPlanilla } from "@/utils/produccion-planilla";
 
 const TIENDAS = ["Costanera", "Dominicos", "Trapenses"] as const;
-const CACHE_TTL_MS = 20 * 60 * 1000;
 
 type FilaConsumo = { tienda: string; sabor: string; fecha: string; recetas: number };
 
@@ -77,16 +77,9 @@ function parseFechaDMY(s: string, fallbackYear?: number): string | null {
   return `${yr}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
 }
 
-let cache: { filas: FilaConsumo[]; ts: number } | null = null;
-
 async function calcularFilas(recetas: RecetaCosto[]): Promise<FilaConsumo[]> {
-  const url = process.env.PRODUCCION_APPS_SCRIPT_URL;
-  const token = process.env.PRODUCCION_APPS_SCRIPT_TOKEN;
-  if (!url || !token) throw new Error("Apps Script de producción no configurado");
-
-  const resp = await fetch(`${url}?token=${encodeURIComponent(token)}`);
-  const text = await resp.text();
-  const rows = parseCSV(text);
+  const { texto } = await leerPlanilla("csv");
+  const rows = parseCSV(texto);
   if (rows.length < 2) return [];
   const headers = rows[0];
 
@@ -132,11 +125,11 @@ async function calcularFilas(recetas: RecetaCosto[]): Promise<FilaConsumo[]> {
   return filas;
 }
 
+// El caché propio se fue con la lectura: lo caro era bajar el CSV, y de eso ya
+// se encarga produccion-planilla (que además se invalida al guardar un pesaje,
+// cosa que un caché de 20 minutos acá se comía).
 async function getFilas(recetas: RecetaCosto[]): Promise<FilaConsumo[]> {
-  if (cache && Date.now() - cache.ts < CACHE_TTL_MS) return cache.filas;
-  const filas = await calcularFilas(recetas);
-  cache = { filas, ts: Date.now() };
-  return filas;
+  return calcularFilas(recetas);
 }
 
 // cortePorTiendaYSabor: tienda -> sabor -> fecha (yyyy-mm-dd) de la PRIMERA

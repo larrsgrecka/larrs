@@ -4,6 +4,7 @@ import { leerStockActual } from "@/utils/inventario-food-stock";
 import { getCatalogoFood } from "@/utils/catalogo-food";
 import { getStockMinimos } from "@/utils/stock-minimos";
 import { refrescarAlertas } from "@/utils/alertas";
+import { refrescarPlanilla } from "@/utils/produccion-planilla";
 
 // Mantiene despiertos los Apps Script de Google.
 //
@@ -89,6 +90,23 @@ export async function GET(request: NextRequest) {
       resultado.alertas = { altas: a.altas, medias: a.medias, fuentesQueFallaron: a.fuentesQueFallaron.length };
     } catch (e) {
       resultado.alertas = { error: (e as Error).message };
+    }
+  }
+
+  // La planilla de producción (~450 KB, entre 2 y 19 s según el humor de
+  // Google) la leen el panel, el historial de pesajes, los sabores y las
+  // recetas consumidas. Refrescarla acá es lo que hace que ninguno de ellos
+  // tenga que esperar a Google: pagan los 7 s el cron y no la persona.
+  // En la pasada pesada (stock, mínimos y alertas) no: esa ya va justa de
+  // tiempo, y las otras tres pasadas de cada hora alcanzan de sobra.
+  if (request.nextUrl.searchParams.get("stock") !== "1") {
+    try {
+      const planilla = await refrescarPlanilla("csv", 20_000);
+      resultado.planillaProduccion = planilla.errorDeGoogle
+        ? { error: planilla.errorDeGoogle, copiaDeHaceMin: Math.round(planilla.edadMs / 60000) }
+        : { bytes: planilla.texto.length };
+    } catch (e) {
+      resultado.planillaProduccion = { error: (e as Error).message };
     }
   }
 

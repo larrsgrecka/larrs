@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { getProfile } from "@/utils/auth";
+import { leerPlanilla } from "@/utils/produccion-planilla";
 
 // Proxy del Apps Script de producción para el panel /produccion.
 //
@@ -10,16 +11,12 @@ import { getProfile } from "@/utils/auth";
 // usuario alcanzara a Google — un bloqueador de contenido, un proxy corporativo
 // o una caída de DNS daban un "Failed to fetch" sin explicación. Pasando por
 // acá el fetch lo hace el servidor, con el token en variables de entorno.
+//
+// Los reintentos, el caché y el respaldo ya no viven acá: son los mismos que
+// usan el historial de pesajes, los sabores y las recetas consumidas, que leen
+// esta misma planilla (ver produccion-planilla.ts). Antes cada uno tenía su
+// propia versión, y la de acá era la única con copia vencida de emergencia.
 export const maxDuration = 60;
-
-// El CSV de la planilla son ~360 KB y Google lo entrega entre 2 y 19 s según su
-// humor (medido). El panel pide dos cosas seguidas —la planilla y las ventas— y
-// Apps Script serializa las ejecuciones del mismo script, así que sin caché la
-// segunda espera a la primera y cualquier recarga vuelve a pagar todo. Un caché
-// corto en memoria hace que las llamadas siguientes salgan al instante; el mismo
-// patrón que ya usa produccion-historial.ts.
-const CACHE_TTL_MS = 3 * 60 * 1000;
-const cache = new Map<string, { texto: string; ts: number }>();
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
@@ -32,120 +29,44 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Sin permiso" }, { status: 403 });
   }
 
-  const url = process.env.PRODUCCION_APPS_SCRIPT_URL;
-  const token = process.env.PRODUCCION_APPS_SCRIPT_TOKEN;
-  if (!url || !token) {
-    return NextResponse.json({ error: "Apps Script de producción no configurado" }, { status: 500 });
-  }
-
   // Única acción extra soportada: el panel también pide las ventas, que el
   // mismo Apps Script devuelve como JSON.
   const esVentas = request.nextUrl.searchParams.get("action") === "getSales";
 
-  // Se arma con URL en vez de concatenar: la variable de entorno puede venir
-  // con el token ya pegado (así estaba escrita en el panel) o con una barra
-  // final, y concatenar "?token=" daría una URL con dos querystrings que Google
-  // responde con 404.
-  let destino: string;
   try {
-    const u = new URL(url.trim());
-    // Una barra final ("/exec/") hace que Google responda 404 con una página
-    // HTML — verificado —, y es un typo fácil de dejar en una variable de
-    // entorno, así que se normaliza acá en vez de depender de cómo esté escrita.
-    u.pathname = u.pathname.replace(/\/+$/, "");
-    u.searchParams.set("token", token);
-    if (esVentas) u.searchParams.set("action", "getSales");
-    destino = u.toString();
-  } catch {
-    return NextResponse.json(
-      { error: "La URL del Apps Script de producción está mal formada. Revisa PRODUCCION_APPS_SCRIPT_URL." },
-      { status: 500 }
-    );
-  }
-
-  const claveCache = esVentas ? "ventas" : "csv";
-  const guardado = cache.get(claveCache);
-  if (guardado && Date.now() - guardado.ts < CACHE_TTL_MS) {
-    return respuesta(guardado.texto, esVentas);
-  }
-
-  // Dos intentos en vez de uno. Cuando el primero se corta por tiempo, el Apps
-  // Script no se detiene: sigue ejecutándose del lado de Google y queda
-  // caliente, así que el segundo intento suele responder en segundos. Un solo
-  // intento de 25 s convertía cada arranque en frío en una pantalla de error
-  // que el usuario tenía que reintentar a mano — que es exactamente lo que el
-  // reintento hace ahora, pero sin molestarlo.
-  //
-  // Los tiempos suman menos que el maxDuration de 60 s: si la plataforma cortara
-  // la función, el panel recibiría HTML donde espera datos.
-  const INTENTOS_MS = [25_000, 28_000];
-  let resp: Response | null = null;
-  let texto = "";
-  let ultimoFueTimeout = false;
-
-  for (let i = 0; i < INTENTOS_MS.length; i++) {
-    try {
-      resp = await fetch(destino, { signal: AbortSignal.timeout(INTENTOS_MS[i]) });
-      texto = await resp.text();
-      break;
-    } catch (e) {
-      ultimoFueTimeout = (e as Error)?.name === "TimeoutError";
-      resp = null;
-      if (i === 0) {
-        console.warn(`[produccion/datos] intento 1 falló (${ultimoFueTimeout ? "timeout" : "red"}), reintentando`);
-        await new Promise((r) => setTimeout(r, 1000));
-      }
+    const lectura = await leerPlanilla(esVentas ? "ventas" : "csv");
+    if (lectura.errorDeGoogle) {
+      console.warn(
+        `[produccion/datos] sirviendo copia de hace ${Math.round(lectura.edadMs / 60000)} min:`,
+        lectura.errorDeGoogle
+      );
     }
+    return respuesta(lectura.texto, esVentas, lectura);
+  } catch (e) {
+    const mensaje = (e as Error).message;
+    if (/no configurado/i.test(mensaje)) {
+      return NextResponse.json({ error: mensaje }, { status: 500 });
+    }
+    // Sin datos y sin copia: recién acá se muestra un error.
+    return NextResponse.json({ error: mensaje }, { status: 502 });
   }
-
-  if (!resp) {
-    // Antes de dar error, sirve la copia vencida si hay: un dato de hace unos
-    // minutos es infinitamente mejor que una pantalla de error.
-    if (guardado) return respuesta(guardado.texto, esVentas);
-    return NextResponse.json(
-      {
-        error: ultimoFueTimeout
-          ? "Google no respondió en dos intentos (la planilla es grande y arranca en frío). Vuelve a intentar en un momento: el segundo intento suele andar."
-          : "No se pudo conectar con la planilla de producción.",
-      },
-      { status: 504 }
-    );
-  }
-
-  // Google a veces responde una página de error o de login en vez de los datos:
-  // sin este guard el panel recibía HTML y reventaba al parsearlo.
-  const pareceHtml = texto.trimStart().startsWith("<");
-  if (!resp.ok || pareceHtml) {
-    console.error(
-      "[produccion/datos] respuesta inesperada:", resp.status,
-      "| host:", (() => { try { return new URL(destino).host; } catch { return "?"; } })(),
-      "| ruta:", (() => { try { return new URL(destino).pathname; } catch { return "?"; } })(),
-      "|", texto.slice(0, 200)
-    );
-    if (guardado) return respuesta(guardado.texto, esVentas);
-    return NextResponse.json(
-      {
-        error:
-          resp.status === 404
-            // 404 no es una falla pasajera: es que esa implementación del Apps
-            // Script no existe. Casi siempre, la variable de entorno del
-            // servidor apunta a un deployment viejo del script.
-            ? "La planilla de producción respondió 404: la URL del Apps Script no existe. Hay que revisar PRODUCCION_APPS_SCRIPT_URL en el servidor (debe ser la URL /exec de la implementación activa)."
-            : `La planilla de producción no respondió con datos (HTTP ${resp.status}). Puede ser una falla temporal de Google: vuelve a intentar en un momento.`,
-      },
-      { status: 502 }
-    );
-  }
-
-  cache.set(claveCache, { texto, ts: Date.now() });
-  return respuesta(texto, esVentas);
 }
 
-function respuesta(texto: string, esVentas: boolean) {
+// La antigüedad viaja en cabeceras porque el cuerpo es el CSV crudo que el
+// panel parsea: no hay dónde meterla adentro sin cambiarle el formato. El
+// panel la usa para avisar cuando lo que muestra no es de ahora.
+function respuesta(
+  texto: string,
+  esVentas: boolean,
+  lectura: { edadMs: number; desdeEspejo: boolean; errorDeGoogle?: string }
+) {
   return new NextResponse(texto, {
     headers: {
       "Content-Type": esVentas ? "application/json; charset=utf-8" : "text/csv; charset=utf-8",
       "Cache-Control": "no-store",
+      "X-Datos-Edad-Ms": String(Math.round(lectura.edadMs)),
+      "X-Datos-Desde-Espejo": lectura.desdeEspejo ? "1" : "0",
+      ...(lectura.errorDeGoogle ? { "X-Datos-Google-Fallo": "1" } : {}),
     },
   });
 }

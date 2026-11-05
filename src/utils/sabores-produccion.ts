@@ -3,6 +3,7 @@
 // header) — Bases ("$;") y PreRecetas/insumos ("[;") quedan fuera, igual
 // que en produccion.html.
 import { getOverrides } from "@/utils/catalogo-overrides";
+import { leerPlanilla, type LecturaPlanilla } from "@/utils/produccion-planilla";
 
 function parseCsvFirstLine(text: string): string[] {
   const rows: string[][] = [];
@@ -44,49 +45,29 @@ function esSeparador(nombre: string): boolean {
   return !/[a-z0-9]/i.test(nombre);
 }
 
-let cache: { sabores: string[]; ts: number } | null = null;
-const CACHE_TTL_MS = 30 * 60 * 1000;
-// Normalmente hay ~166 sabores — si el fetch trae bastante menos, no fue el
-// CSV real (Apps Script caído, página de error, redirect, etc.), fue una
-// falla disfrazada de éxito. No hay que cachear eso ni devolverlo como si
-// fuera la lista completa (rompería Vitrina/Pesaje/Inventario Food a la vez).
-const MIN_SABORES_ESPERADOS = 50;
-
-async function getSaboresBase(forzarRelectura = false): Promise<string[]> {
-  if (!forzarRelectura && cache && Date.now() - cache.ts < CACHE_TTL_MS) return cache.sabores;
-
-  const url = process.env.PRODUCCION_APPS_SCRIPT_URL;
-  const token = process.env.PRODUCCION_APPS_SCRIPT_TOKEN;
-  if (!url || !token) throw new Error("Apps Script de producción no configurado");
-
-  const resp = await fetch(`${url}?token=${encodeURIComponent(token)}`);
-  const text = await resp.text();
-  const headers = parseCsvFirstLine(text);
-
-  const sabores = headers
+// La lectura del CSV, los reintentos y el espejo viven en produccion-planilla:
+// acá solo se interpretan los encabezados. Antes este módulo tenía su propio
+// fetch y su propio caché de 30 minutos en memoria, y ese caché —que se pierde
+// en cada deploy y no lo comparten las instancias— fue lo que hizo que el
+// catálogo rechazara "Chocolate suizo" media hora después de crear la columna.
+async function leerSabores(
+  forzarRelectura = false,
+  presupuestoMs?: number
+): Promise<{ sabores: string[]; lectura: LecturaPlanilla }> {
+  const lectura = await leerPlanilla("csv", { forzar: forzarRelectura, presupuestoMs });
+  const sabores = parseCsvFirstLine(lectura.texto)
     .filter((h) => h.includes("#;"))
     .map(nombreSabor)
     .filter((n) => !esSeparador(n))
     .sort((a, b) => a.localeCompare(b));
-
-  if (sabores.length < MIN_SABORES_ESPERADOS) {
-    console.error(
-      `[sabores-produccion] Fetch sospechoso: solo ${sabores.length} sabores (esperados ${MIN_SABORES_ESPERADOS}+). ` +
-      `HTTP ${resp.status}, primeros 200 chars: ${text.slice(0, 200)}`
-    );
-    if (cache) return cache.sabores; // sirve el cache viejo (aunque esté vencido) antes que una lista vacía
-    throw new Error("El CSV de producción no devolvió sabores válidos (falla temporal del Apps Script)");
-  }
-
-  cache = { sabores, ts: Date.now() };
-  return sabores;
+  return { sabores, lectura };
 }
 
 // Solo los sabores que EXISTEN como columna en la planilla, sin los overrides
 // que un admin haya agregado a mano: son los únicos nombres en los que el Apps
 // Script puede escribir un pesaje (busca la columna por nombre exacto).
 export async function getSaboresEnPlanilla(forzarRelectura = false): Promise<string[]> {
-  return getSaboresBase(forzarRelectura);
+  return (await leerSabores(forzarRelectura)).sabores;
 }
 
 // Para comparar nombres tipeados a mano: ignora mayúsculas, tildes, espacios y
@@ -150,24 +131,40 @@ function resolverContra(enPlanilla: string[], nombres: string[]) {
 // nombre exacto de la columna de la planilla. Lo que no tiene columna no se
 // puede guardar: se devuelve aparte para avisarlo, en vez de dejar que el Apps
 // Script rechace el pesaje completo por un solo nombre mal escrito.
-export async function resolverSaboresEnPlanilla(nombres: string[]): Promise<{
+export async function resolverSaboresEnPlanilla(
+  nombres: string[],
+  // Presupuesto para TODA la resolución, relectura incluida. Quien llama
+  // después tiene que escribir (el pesaje) y los dos tiempos tienen que caber
+  // en el minuto de la función.
+  opciones: { presupuestoMs?: number } = {}
+): Promise<{
   canonico: Record<string, string>;
   faltantes: { sabor: string; sugerencia: string | null }[];
 }> {
-  const tsAntes = cache?.ts ?? 0;
-  const resultado = resolverContra(await getSaboresEnPlanilla(), nombres);
+  const inicio = Date.now();
+  const { presupuestoMs } = opciones;
+  const restante = () => (presupuestoMs ?? Infinity) - (Date.now() - inicio);
+
+  const { sabores, lectura } = await leerSabores(false, presupuestoMs);
+  const resultado = resolverContra(sabores, nombres);
   if (!resultado.faltantes.length) return resultado;
 
-  // Acabar de crear la columna en la planilla y que el panel diga "no existe"
-  // durante media hora es peor que releer: el cache de 30 min era justo lo que
-  // pasaba con "Chocolate suizo". Antes de negar un sabor se relee la planilla
-  // una vez — solo si lo anterior salio del cache, para no pagar dos veces los
-  // ~7s del CSV.
-  if (cache?.ts !== tsAntes) return resultado;
+  // Acabar de crear la columna y que el panel diga "no existe" es peor que
+  // releer: pasó con "Chocolate suizo". Si lo que miramos no venía recién de
+  // Google, el sabor puede ser más nuevo que la copia — así que se relee una
+  // vez antes de negarlo. Si ya era una lectura fresca, no existe y punto.
+  if (lectura.edadMs === 0) return resultado;
+  // Y si no queda tiempo para releer, se devuelve lo que hay: equivocarse
+  // diciendo "no existe" es malo, pero matar la función es peor — ahí el
+  // usuario no recibe ningún mensaje.
+  const MINIMO_PARA_RELEER = 6_000;
+  if (restante() < MINIMO_PARA_RELEER) return resultado;
+
   console.log(
-    `[sabores-produccion] "${resultado.faltantes.map((f) => f.sabor).join('", "')}" no estaba en el cache; releyendo la planilla`
+    `[sabores-produccion] "${resultado.faltantes.map((f) => f.sabor).join('", "')}" no está en la copia de hace ${Math.round(lectura.edadMs / 1000)}s; releyendo la planilla`
   );
-  return resolverContra(await getSaboresEnPlanilla(true), nombres);
+  const relectura = await leerSabores(true, Math.max(MINIMO_PARA_RELEER, restante()));
+  return resolverContra(relectura.sabores, nombres);
 }
 
 // Los admins pueden agregar/excluir sabores puntuales sin tocar código vía
@@ -176,7 +173,7 @@ export async function resolverSaboresEnPlanilla(nombres: string[]): Promise<{
 // vez de encadenarlos, para no sumar tiempo extra a un fetch ya lento.
 export async function getSaboresProduccion(): Promise<string[]> {
   const [base, { incluir, excluirNombres }] = await Promise.all([
-    getSaboresBase(),
+    getSaboresEnPlanilla(),
     getOverrides("sabores"),
   ]);
 

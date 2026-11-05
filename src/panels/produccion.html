@@ -122,6 +122,22 @@ td.r { text-align: right; }
 // token no viaja al navegador y la carga no depende de que la red del usuario
 // alcance a Google (un bloqueador o un proxy daban "Failed to fetch" sin más).
 const DATOS_URL = '/api/produccion/datos';
+
+// De cuándo son los datos que se están mostrando. La ruta sirve una copia
+// guardada cuando Google no responde —mucho mejor que una pantalla de error—,
+// pero entonces decir "Actualizado: ahora" sería mentira, y alguien podría
+// decidir una producción mirando la planilla de hace horas.
+let datosEdadMs = 0;
+let datosGoogleFallo = false;
+
+function haceCuanto(ms) {
+  const min = Math.round(ms / 60000);
+  if (min < 60) return `hace ${min} ${min === 1 ? 'minuto' : 'minutos'}`;
+  const h = Math.round(min / 60);
+  if (h < 24) return `hace ${h} ${h === 1 ? 'hora' : 'horas'}`;
+  const d = Math.round(h / 24);
+  return `hace ${d} ${d === 1 ? 'día' : 'días'}`;
+}
 const _solo = window._LARRS_TIENDA || null;
 const TIENDAS = _solo ? new Set([_solo]) : new Set(['Costanera', 'Dominicos', 'Trapenses']);
 const T_ORDEN = _solo ? [_solo] : ['Costanera', 'Dominicos', 'Trapenses'];
@@ -1951,7 +1967,18 @@ function render(data, prevData) {
     buildProdVsVentasChart();
     if (salesData && salesData.length > 0) { buildSalesChart(salesData); buildPptoChart(); }
   }, 50);
-  document.getElementById('last-update').textContent = `Actualizado: ${new Date().toLocaleString('es-CL')}`;
+  const linea = document.getElementById('last-update');
+  // Un minuto y medio de margen: por debajo de eso el dato es de ahora para
+  // cualquier efecto práctico y poner "hace 1 minuto" solo confunde.
+  if (datosEdadMs > 90000) {
+    linea.textContent = datosGoogleFallo
+      ? `⚠ Planilla de ${haceCuanto(datosEdadMs)}: Google no respondió y se está mostrando la última copia buena`
+      : `Planilla de ${haceCuanto(datosEdadMs)} · revisado ${new Date().toLocaleString('es-CL')}`;
+    linea.style.color = datosGoogleFallo ? '#b45309' : '';
+  } else {
+    linea.textContent = `Actualizado: ${new Date().toLocaleString('es-CL')}`;
+    linea.style.color = '';
+  }
 }
 
 // ========== SWITCH WEEK ==========
@@ -2077,6 +2104,8 @@ async function loadData(intento = 1) {
     if (response.redirected && response.url.includes('/login')) {
       throw new Error('Tu sesión expiró. Recarga la página para volver a entrar.');
     }
+    datosEdadMs = Number(response.headers.get('X-Datos-Edad-Ms') || 0);
+    datosGoogleFallo = response.headers.get('X-Datos-Google-Fallo') === '1';
     const csvText = await response.text();
     if (!response.ok) {
       // La ruta explica la falla en JSON; si ni eso llega, queda el código HTTP.

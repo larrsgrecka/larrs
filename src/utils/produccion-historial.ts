@@ -5,9 +5,9 @@
 // produccion.html y produccion-recetas-consumidas.ts (misma fuente de datos).
 
 import { TIENDAS_QUE_PRODUCEN } from "@/utils/tiendas";
+import { leerPlanilla } from "@/utils/produccion-planilla";
 
 const TIENDAS = TIENDAS_QUE_PRODUCEN;
-const CACHE_TTL_MS = 5 * 60 * 1000;
 
 export type ItemPesaje = { sabor: string; kg: number };
 export type RegistroPesaje = {
@@ -83,16 +83,8 @@ function marcaTemporalKey(s: string): string {
   return `${fecha} ${horaParte || ""}`;
 }
 
-let cache: { registros: RegistroPesaje[]; ts: number } | null = null;
-
-async function calcularRegistros(): Promise<RegistroPesaje[]> {
-  const url = process.env.PRODUCCION_APPS_SCRIPT_URL;
-  const token = process.env.PRODUCCION_APPS_SCRIPT_TOKEN;
-  if (!url || !token) throw new Error("Apps Script de producción no configurado");
-
-  const resp = await fetch(`${url}?token=${encodeURIComponent(token)}`);
-  const text = await resp.text();
-  const rows = parseCSV(text);
+function calcularRegistros(texto: string): RegistroPesaje[] {
+  const rows = parseCSV(texto);
   if (rows.length < 2) return [];
   const headers = rows[0];
 
@@ -151,10 +143,21 @@ async function calcularRegistros(): Promise<RegistroPesaje[]> {
   return registros;
 }
 
+// Sin caché por tiempo: el de produccion-planilla cubre la lectura, que es lo
+// caro, y además se invalida cuando alguien guarda un pesaje. Con un caché por
+// minutos acá, quien acaba de pesar no veía su propio pesaje en el historial.
+//
+// Lo que sí se guarda es el parseo, pero atado al texto exacto que se parseó:
+// mientras la planilla sea la misma el resultado también lo es, y en cuanto
+// cambia se recalcula solo. Importa porque un informe que pide las tres tiendas
+// parsearía 450 KB tres veces.
+let parseado: { texto: string; registros: RegistroPesaje[] } | null = null;
+
 async function getRegistros(): Promise<RegistroPesaje[]> {
-  if (cache && Date.now() - cache.ts < CACHE_TTL_MS) return cache.registros;
-  const registros = await calcularRegistros();
-  cache = { registros, ts: Date.now() };
+  const { texto } = await leerPlanilla("csv");
+  if (parseado && parseado.texto === texto) return parseado.registros;
+  const registros = calcularRegistros(texto);
+  parseado = { texto, registros };
   return registros;
 }
 

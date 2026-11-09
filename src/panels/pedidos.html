@@ -126,6 +126,75 @@ function stepWeek(n){ weekMonday.setDate(weekMonday.getDate()+n*7); weekMonday=n
 function goNow(){ weekMonday=mondayOf(new Date()); cargarPedidoAnterior(); }
 function onLoc(){ buildHist(document.getElementById('loc').value); cargarPedidoAnterior(); }
 let pedAnteriorMap={};
+
+// Las unidades de este archivo son una foto del día que se escribió. Grecka
+// cambió el vaso de 93 ml de bolsa a caja en abril de 2026 y acá siguió
+// diciendo "bolsa" medio año, porque no había nada mirando. Esto es ese algo:
+// la unidad vigente sale del historial real de compras y manda sobre lo que
+// diga el archivo.
+let UNID=null, unidErr='';
+async function cargarUnidades(){
+  try{
+    const ctl=new AbortController();
+    const reloj=setTimeout(()=>ctl.abort(), 20000);
+    const r=await fetch('/api/grecka-unidades/vigentes',{signal:ctl.signal});
+    clearTimeout(reloj);
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const j=await r.json();
+    if(!j||!j.unidades) throw new Error(j&&j.error?j.error:'respuesta sin unidades');
+    UNID=j.unidades; unidErr='';
+  }catch(e){
+    // No se inventa nada: se muestra lo del archivo y se dice que no se pudo
+    // verificar, que es distinto de decir que está verificado.
+    UNID=null; unidErr=(e&&e.name==='AbortError')?'tardó demasiado':((e&&e.message)||'no se pudo leer');
+  }
+}
+function claveU(u){
+  const t=(u||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  return t.endsWith('s')&&t.length>3?t.slice(0,-1):t;
+}
+// Trae el ítem a la unidad vigente, convirtiendo TAMBIÉN la cantidad: una caja
+// trae ocho bolsas, así que cambiar "4 bolsas" por "4 cajas" pide ocho veces
+// de más, que es peor que el error que se venía a arreglar.
+function conUnidadVigente(x){
+  const v=UNID&&UNID[x.sku];
+  if(!v||!v.unidad) return x;
+  const kv=claveU(v.unidad), kf=claveU(x.um);
+  // Misma unidad: se deja la grafía del archivo. "BOLSA" y "Bolsa" son lo
+  // mismo y reescribir todas las filas sería ruido que esconde los cambios
+  // de verdad.
+  if(kv===kf) return x;
+  // Si la unidad del archivo nunca apareció en una factura de este producto,
+  // no era un tamaño: era una palabra de relleno. Todas las pastas de
+  // Huechuraba dicen "UNIDAD" en el archivo y se compran siempre en balde —un
+  // balde de 3,5 kg ES la unidad—, así que ahí solo se corrige la palabra y la
+  // cantidad queda igual. Marcarlas sería llenar el panel de avisos que nadie
+  // va a leer, y entonces tampoco se leería el que importa.
+  const vistas=v.unidadesVistas||[];
+  if(vistas.indexOf(kf)===-1) return Object.assign({},x,{um:v.unidad});
+
+  const f=v.equivalencias?v.equivalencias[kf]:undefined;
+  // Acá sí era un tamaño real y hay que convertir. Un factor de 1 entre dos
+  // palabras distintas no se puede creer: a veces es cierto —la funda de cono
+  // se llamó bolsa y después caja, y siempre valió los mismos 71.567— y a veces
+  // es el período de transición, cuando Grecka ya escribe "caja" pero sigue
+  // cobrando el precio de la bolsa y el precio real de la caja aparece meses
+  // después. En el vaso de 132 ml esas filas de transición son mayoría y la
+  // equivalencia automática da 1 cuando en realidad son 8.
+  if(typeof f!=='number'||!(f>0)||f===1){
+    // Adivinar acá es justo lo que hace llegar ocho veces de más, así que se
+    // muestra el problema y lo decide quien hace el pedido. Para zanjarlo está
+    // la corrección manual en /api/grecka-unidades, que manda sobre cualquier
+    // deducción.
+    return Object.assign({},x,{um:v.unidad,revisar:x.um});
+  }
+  return Object.assign({},x,{
+    um:v.unidad,
+    antes:x.sem+' '+x.um,
+    sem:Math.round(x.sem*f*100)/100,
+    m2025:x.m2025?Math.max(1,Math.round(x.m2025*f)):x.m2025
+  });
+}
 async function cargarPedidoAnterior(){
   const loc=document.getElementById('loc').value;
   const antes=weekMonday.toISOString().slice(0,10);
@@ -157,10 +226,14 @@ function render(){
   grpSel.innerHTML='<option value="all">Todos</option>'+grupos.map(g=>'<option value="'+g+'"'+(g===curGrp?' selected':'')+'>'+g+'</option>').join('');
   if(curGrp!=='all') items=items.filter(x=>x.grupo===curGrp);
   if(q) items=items.filter(x=>(x.sku+' '+x.desc).toLowerCase().includes(q));
+  // Antes de _ord, para que el Excel, el historial y el copiar salgan todos
+  // con la misma unidad que se ve en pantalla.
+  items=items.map(conUnidadVigente);
   window._ord=items.slice();
   const fac=(FAC[loc]&&FAC[loc][mm])||1; const facEl=document.getElementById('fac');
   if(loc==='Huechuraba') facEl.innerHTML='🏭 <b>Huechuraba</b> (producción): sugerencia según lo que se produce <b>ahora</b> — compras reales 2026 (promedio últimos meses) +10%. No usa 2025.';
   else { facEl.innerHTML='📦 Cantidades según el <b>ritmo real de compra 2026</b> (últimos meses) +10% margen. Los ítems sin historia 2026 usan 2025 × meta de ventas.'; }
+  if(unidErr) facEl.innerHTML+='<div style="margin-top:6px;color:#c2410c;font-weight:600">⚠ No se pudieron verificar las unidades contra el historial de compras ('+unidErr+'). Las que ves son las del archivo: revísalas antes de enviar el pedido.</div>';
   document.getElementById('kpis').innerHTML='<div class="kpi"><div class="v">'+items.length+'</div><div class="l">SKUs a pedir</div></div><div class="kpi"><div class="v">'+loc+'</div><div class="l">Local</div></div><div class="kpi"><div class="v">'+fmtD(weekMonday)+'</div><div class="l">Lunes entrega</div></div>';
   if(!items.length){ document.getElementById('tbl').innerHTML='<div class="empty">Sin base del año anterior para este local en '+MESES[weekMonday.getMonth()+1]+'.</div>'; }
   else {
@@ -173,9 +246,14 @@ function render(){
         const qcell = '<input type="number" class="qty-input" data-sku="'+x.sku+'" data-default="'+defaultQty+'" value="'+defaultQty+'" min="0" step="1" oninput="this.classList.toggle(\'modified\',+this.value!==+this.dataset.default)">';
         const ucell = x.um + ((x.sem<1&&x.cada)?(' · c/'+x.cada+' sem'):'');
         const warn = x.old ? ' <span class="repl">↔ auto: reemplaza a '+x.old+'</span>' : (x.nuevo ? ' <span class="nuevo">🆕 nuevo 2026</span>' : '');
+        // Cuando la unidad cambió, se dice. Una cantidad que cambia sola de 4 a
+        // 1 sin explicación es indistinguible de un error.
+        const uwarn = x.revisar
+          ? ' <span class="warn">⚠ ahora se pide por '+x.um+', antes '+x.revisar+' — revisa la cantidad</span>'
+          : (x.antes ? ' <span class="repl">↔ antes '+x.antes+'</span>' : '');
         const ant=pedAnteriorMap[x.sku];
         const antCell = ant ? Math.round(ant.cantidad) : '<span style="color:#cbd5e1">—</span>';
-        html+='<tr'+(x.old?' class="replrow"':(x.nuevo?' class="newrow"':''))+'><td class="sku">'+x.sku+'</td><td>'+x.desc+warn+'</td><td class="r" style="color:#94a3b8;font-size:12px">'+x.m2025+'</td><td class="r" style="color:#64748b">'+antCell+'</td><td class="r">'+qcell+'</td><td class="um">'+ucell+'</td></tr>';
+        html+='<tr'+(x.revisar?' class="revrow"':(x.old?' class="replrow"':(x.nuevo?' class="newrow"':'')))+'><td class="sku">'+x.sku+'</td><td>'+x.desc+warn+uwarn+'</td><td class="r" style="color:#94a3b8;font-size:12px">'+x.m2025+'</td><td class="r" style="color:#64748b">'+antCell+'</td><td class="r">'+qcell+'</td><td class="um">'+ucell+'</td></tr>';
       });
     });
     html+='</tbody></table>';
@@ -185,7 +263,7 @@ function render(){
   document.getElementById('nuevos').innerHTML = nv.length ? (
     '<div class="section-title">🆕 Nuevos en 2026 · '+loc+' — revisar si reemplazan a otro SKU</div>'+
     '<div class="card"><table><thead><tr><th>Código</th><th>Descripción del artículo</th><th>Unidad</th><th class="r">Meses en 2026</th></tr></thead><tbody>'+
-    nv.map(n=>'<tr><td class="sku">'+n.sku+'</td><td>'+n.desc+'</td><td class="um">'+n.um+'</td><td class="r">'+n.meses26+'</td></tr>').join('')+
+    nv.map(n=>'<tr><td class="sku">'+n.sku+'</td><td>'+n.desc+'</td><td class="um">'+(((UNID&&UNID[n.sku]||{}).unidad)||n.um)+'</td><td class="r">'+n.meses26+'</td></tr>').join('')+
     '</tbody></table></div>') : '';
   document.getElementById('last').textContent='Semana '+fmtD(weekMonday)+'–'+fmtD(sun)+' · base '+MESES[weekMonday.getMonth()+1]+' 2025 +10% · factor ×'+fac;
 }
@@ -271,7 +349,10 @@ function agregarProductoManual(){
   document.getElementById('am-cant').value='';
   document.getElementById('am-um').value='';
 }
-(function(){ const locSel=document.getElementById('loc'); locSel.innerHTML=LOCS.filter(l=>PED[l]).map(l=>'<option value="'+l+'">'+l+'</option>').join(''); if(window._LARRS_TIENDA){ locSel.value=window._LARRS_TIENDA; locSel.disabled=true; } onLoc(); })();
+(function(){ const locSel=document.getElementById('loc'); locSel.innerHTML=LOCS.filter(l=>PED[l]).map(l=>'<option value="'+l+'">'+l+'</option>').join(''); if(window._LARRS_TIENDA){ locSel.value=window._LARRS_TIENDA; locSel.disabled=true; } onLoc();
+  // En paralelo: leer la tabla de compras tarda unos segundos y el panel no
+  // tiene por qué quedarse esperando. Cuando llega, se vuelve a dibujar.
+  cargarUnidades().then(render); })();
 </script>
 </body>
 </html>

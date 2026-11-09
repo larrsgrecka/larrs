@@ -78,13 +78,18 @@ const ZONA = "America/Santiago";
 const mesISO = (d: Date) =>
   new Intl.DateTimeFormat("en-CA", { timeZone: ZONA, year: "numeric", month: "2-digit" }).format(d);
 
-const claveUnidad = (u: string) => {
+export const claveUnidad = (u: string) => {
   const t = (u || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   return t.endsWith("s") && t.length > 3 ? t.slice(0, -1) : t;
 };
 
+/** Lo mínimo que hace falta para deducir precios y equivalencias de un producto. */
+export type CompraParaEquivalencia = {
+  fecha: string; unidad: string; cantidad: number; neto: number;
+};
+
 /** Precio por unidad base, tomando la mediana de las compras hechas en esa unidad. */
-function precioDe(compras: Compra[], unidadBase: string, desde?: string): number {
+function precioDe(compras: CompraParaEquivalencia[], unidadBase: string, desde?: string): number {
   const base = claveUnidad(unidadBase);
   const precios = compras
     .filter((c) => claveUnidad(c.unidad) === base && Number(c.cantidad) > 0 && (!desde || c.fecha >= desde))
@@ -102,7 +107,11 @@ function precioDe(compras: Compra[], unidadBase: string, desde?: string): number
 // Sale de los precios: el mismo vaso aparece como "1 CAJA $150.288" y como
 // "8 BOLSA $18.786 cada una", así que la caja trae ocho bolsas. Sin esto, el
 // precio de la caja se multiplicaba por una cantidad contada en bolsas.
-function equivalenciasDe(compras: Compra[], unidadBase: string, porCajaConocido?: number): Map<string, number> {
+export function equivalenciasDe(
+  compras: CompraParaEquivalencia[],
+  unidadBase: string,
+  porCajaConocido?: number
+): Map<string, number> {
   const base = claveUnidad(unidadBase);
   const mapa = new Map<string, number>([[base, 1]]);
 

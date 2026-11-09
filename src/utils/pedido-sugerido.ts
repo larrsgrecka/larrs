@@ -79,15 +79,34 @@ const claveUnidad = (u: string) => {
   return t.endsWith("s") && t.length > 3 ? t.slice(0, -1) : t;
 };
 
-// La unidad de un producto es la que más se repite en su historial, no la de la
-// última compra.
+// La unidad de un producto es la que más se repite en su historial, salvo que
+// las últimas compras digan otra cosa de forma sostenida.
 //
-// Grecka tipea mal de vez en cuando: las paletas de degustación figuran como
-// CAJA en 3 de 40 compras y como BOLSA en las otras 37, y los vasos
-// compostables como CAJA en 28 de 181. Tomando la última fila, una sola de esas
-// mandaba sobre decenas correctas y el pedido pedía cajas de algo que viene en
-// bolsa — que es justo el tipo de error que hace llegar diez veces de más.
-export function unidadHabitual(compras: { unidad: string }[]): string {
+// Dos cosas distintas se ven casi igual en los datos. Una es que Grecka tipea
+// mal de vez en cuando: las paletas de degustación figuran como CAJA en 3 de 40
+// compras y como BOLSA en las otras 37. Tomando la última fila, una sola de
+// esas mandaba sobre decenas correctas y el pedido pedía cajas de algo que
+// viene en bolsa — que es justo el tipo de error que hace llegar ocho veces de
+// más. Para eso está la mayoría.
+//
+// La otra es que Grecka cambia de verdad la unidad en que factura. El vaso de
+// 93 ml se compró por bolsa 136 veces desde 2022 y pasa a caja el 29 de abril
+// de 2026; el 2 de junio hay una nota de crédito que anula una bolsa y la
+// vuelve a emitir como caja, y desde el 8 de julio la caja se cobra a 117.600,
+// exactamente ocho veces los 14.700 de la bolsa. La mayoría histórica dejaba el
+// pedido pidiendo bolsas que el proveedor ya no vende.
+//
+// Lo que separa un caso del otro es dónde están las filas distintas: el error
+// anda salpicado por el historial, el cambio está pegado al final. Por eso, si
+// las últimas CORRIDA_DE_CAMBIO compras coinciden entre ellas, esa es la
+// unidad aunque sean minoría en el total. Con este umbral cambian tres
+// productos en toda la tabla —los dos vasos compostables y la funda de cono— y
+// las paletas siguen en bolsa, que es lo que corresponde.
+const CORRIDA_DE_CAMBIO = 5;
+
+type CompraParaUnidad = { unidad: string; fecha?: string; cantidad?: number };
+
+export function unidadHabitual(compras: CompraParaUnidad[]): string {
   const conteo = new Map<string, { n: number; textos: Map<string, number> }>();
   for (const c of compras) {
     const clave = claveUnidad(c.unidad);
@@ -100,15 +119,35 @@ export function unidadHabitual(compras: { unidad: string }[]): string {
   }
   if (!conteo.size) return "un";
 
-  const [, ganadora] = [...conteo.entries()].sort((a, b) => b[1].n - a[1].n)[0];
-  // Dentro de la unidad ganadora, la forma escrita más usada ("Bolsa" y no "Bolsas").
-  return [...ganadora.textos.entries()].sort((a, b) => b[1] - a[1])[0][0];
+  // Dentro de una unidad, la forma escrita más usada ("Bolsa" y no "Bolsas").
+  const escrita = (clave: string) =>
+    [...conteo.get(clave)!.textos.entries()].sort((a, b) => b[1] - a[1])[0][0];
+
+  const [mayoria] = [...conteo.entries()].sort((a, b) => b[1].n - a[1].n)[0];
+
+  // Las notas de crédito reabren la unidad vieja para anularla —el vaso tiene
+  // una bolsa en -8 el mismo día que la caja que la reemplaza—, así que una
+  // cantidad negativa no cuenta como compra reciente.
+  const recientes = compras
+    .filter((c) => c.fecha && claveUnidad(c.unidad) && (c.cantidad === undefined || c.cantidad > 0))
+    .sort((a, b) => (a.fecha! < b.fecha! ? 1 : a.fecha! > b.fecha! ? -1 : 0))
+    .slice(0, CORRIDA_DE_CAMBIO)
+    .map((c) => claveUnidad(c.unidad));
+
+  const cambio =
+    recientes.length === CORRIDA_DE_CAMBIO &&
+    new Set(recientes).size === 1 &&
+    recientes[0] !== mayoria;
+
+  return escrita(cambio ? recientes[0] : mayoria);
 }
 
 // La unidad se decide con TODO el historial del producto y no con las semanas
 // del cálculo: en un tramo corto las tres filas mal tipeadas pueden ser mayoría
-// y gana el error. Solo se leen dos columnas de toda la tabla, y el resultado
-// se guarda un día porque la unidad de un producto no cambia.
+// y gana el error. Se leen cuatro columnas de toda la tabla —hacen falta la
+// fecha y la cantidad para distinguir un cambio de unidad de un error de
+// tipeo— y el resultado se guarda un día: cuando la unidad cambia, cambia una
+// vez y para siempre, no de una hora a la otra.
 const UNIDADES_TTL_MS = 24 * 60 * 60 * 1000;
 let unidadesCache: { mapa: Map<string, string>; ts: number } | null = null;
 
@@ -118,19 +157,19 @@ async function unidadesHabituales(supabase: ClienteSupabase): Promise<Map<string
   if (unidadesCache && Date.now() - unidadesCache.ts < UNIDADES_TTL_MS) return unidadesCache.mapa;
 
   const PAGINA = 1000;
-  const porSku = new Map<string, { unidad: string }[]>();
+  const porSku = new Map<string, CompraParaUnidad[]>();
   for (let inicio = 0; ; inicio += PAGINA) {
     const { data, error } = await supabase
       .from("ventas_grecka")
-      .select("sku, descripcion, unidad")
+      .select("sku, descripcion, unidad, fecha, cantidad")
       .range(inicio, inicio + PAGINA - 1);
     if (error) throw new Error(`No se pudieron leer las unidades: ${error.message}`);
     if (!data?.length) break;
-    for (const f of data as { sku: string; descripcion: string; unidad: string }[]) {
+    for (const f of data as { sku: string; descripcion: string; unidad: string; fecha: string; cantidad: number }[]) {
       const clave = f.sku || f.descripcion;
       if (!clave) continue;
       if (!porSku.has(clave)) porSku.set(clave, []);
-      porSku.get(clave)!.push({ unidad: f.unidad });
+      porSku.get(clave)!.push({ unidad: f.unidad, fecha: f.fecha, cantidad: Number(f.cantidad) });
     }
     if (data.length < PAGINA) break;
   }

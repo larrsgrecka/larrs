@@ -141,13 +141,20 @@ function equivalenciasDe(compras: Compra[], unidadBase: string, porCajaConocido?
     }
     if (!razon) continue;
 
-    const precioOtra = razon;
-    const redondeada = Math.round(razon);
-    // Solo se acepta un múltiplo entero y con poco error: si la razón es 7,4 no
-    // hay una equivalencia real, hay dos productos distintos o un precio mal
-    // cargado, y adivinar sería peor que dejar esas líneas afuera.
-    if (redondeada >= 1 && redondeada <= 100 && Math.abs(razon - redondeada) / redondeada <= 0.08) {
-      mapa.set(otra, redondeada);
+    // La razón puede ir para cualquier lado. Mientras la bolsa fue la unidad
+    // base, la caja valía ocho; desde que Grecka factura el vaso por caja, la
+    // unidad base es la caja y la bolsa vale un octavo. Antes esas razones
+    // menores que 1 se descartaban, y con eso se iban de la proyección tres
+    // años de compras en bolsa del mismo producto.
+    const invertida = razon < 1;
+    const multiplo = invertida ? 1 / razon : razon;
+    const redondeado = Math.round(multiplo);
+    // Solo se acepta un múltiplo entero y con poco error, mirado siempre desde
+    // el lado grande: si la razón es 7,4 no hay una equivalencia real, hay dos
+    // productos distintos o un precio mal cargado, y adivinar sería peor que
+    // dejar esas líneas afuera.
+    if (redondeado >= 1 && redondeado <= 100 && Math.abs(multiplo - redondeado) / redondeado <= 0.08) {
+      mapa.set(otra, invertida ? 1 / redondeado : redondeado);
     }
   }
   return mapa;
